@@ -1,0 +1,35 @@
+[project]
+name = "tracker"
+version = "0.1.0"
+description = "Employee Performance Tracking Agent — backend service"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+    "pydantic-settings>=2.7.0",
+    "pandas>=2.2.0",
+    "openpyxl>=3.1.5",
+    "openai>=1.60.0",
+    "pydantic-ai-slim[openai]>=2.27.0",
+]
+
+[project.scripts]
+tracker = "app.main:run"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.2,<0.13.0"]
+build-backend = "uv_build"
+
+# Flat layout: the package is `app/` at the repo root, not `src/<name>/`.
+[tool.uv.build-backend]
+module-name = "app"
+module-root = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
