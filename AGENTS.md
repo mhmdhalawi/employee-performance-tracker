@@ -85,33 +85,13 @@ tracker/
 ├── AGENTS.md
 ├── pyproject.toml            # deps + build config
 ├── .env.example
-├── app/
-│   ├── main.py               # create_app(), middleware, exception handlers, run()
-│   ├── api/
-│   │   ├── router.py         # aggregates routers under /api/v1
-│   │   ├── upload.py         # POST /uploads  (file -> normalize -> KPI)
-│   │   ├── reports.py        # GET  /batches/... , POST /reports
-│   │   └── health.py
-│   ├── schemas/              # Pydantic request/response + internal models ONLY
-│   │   ├── common.py         # NormalizedRecord, RowIssue, ErrorResponse
-│   │   ├── upload.py
-│   │   ├── mapping.py        # ColumnPreview, AgentMappingProposal, ResolvedMapping
-│   │   ├── kpi.py            # KpiComponent, KpiFamilyScore, EmployeeKpiResult, BatchResult
-│   │   └── report.py
-│   ├── services/             # all business logic lives here
-│   │   ├── file_processor.py # bytes -> DataFrame -> NormalizedRecord[] + issues + previews
-│   │   ├── profiles.py       # per-role column aliases + KPI metric definitions (data, not code)
-│   │   ├── mapping_agent.py  # PydanticAI agent: unknown columns -> canonical metrics
-│   │   ├── ingestion.py      # orchestration: parse -> resolve mapping -> normalize -> score
-│   │   ├── kpi_engine.py     # deterministic scoring, fully traceable
-│   │   └── ai_report.py      # prompt building + OpenAI call + offline fallback
-│   ├── core/
-│   │   ├── config.py         # Settings (env-driven), get_settings()
-│   │   ├── errors.py         # AppError hierarchy + FastAPI handlers
-│   │   ├── openai_client.py  # cached AsyncOpenAI factory (returns None w/o key)
-│   │   └── store.py          # in-memory batch store (MVP persistence)
-│   └── utils/
-│       └── numbers.py        # safe_div, clamp, round_score, coerce_float
+└── app/
+    ├── main.py               # create_app(), middleware, exception handlers, run()
+    ├── api/                  # FastAPI routes — thin: parse, call one service, return
+    ├── schemas/              # Pydantic request/response + internal models ONLY
+    ├── services/             # all business logic lives here
+    ├── core/                 # config, errors, clients, storage
+    └── utils/                # small pure helpers
 ```
 
 ### Dependency direction
@@ -120,7 +100,7 @@ tracker/
 api  ->  services  ->  schemas / utils / core
 ```
 
-`api/` may not import pandas, may not call OpenAI, and may not do arithmetic on metrics.
+`api/` may not import pandas, may not call OpenAI, and may not do arithmetic.
 `services/` must not import FastAPI (`Request`, `UploadFile`, `HTTPException`, …) — services
 take plain `bytes`/models and raise `AppError` subclasses. That keeps them reusable from the
 future webhook path.
@@ -129,45 +109,19 @@ future webhook path.
 
 ## 5. Data model
 
-### Normalized representation
+**TODO — nothing is decided here yet.** The previous model (`NormalizedRecord`, role
+profiles, canonical metric names) was built for a fixed KPI catalogue and was removed
+along with the code that used it.
 
-Every input format collapses to `schemas/common.py::NormalizedRecord`:
+This is deliberately open until a real customer data file exists. Do not invent a schema
+to fill this section — inventing one is what produced the last model.
 
-```python
-employee_id: str
-employee_name: str | None
-profile: str                  # role profile key, e.g. "support" | "developer"
-period: str | None
-metrics: dict[str, float]     # canonical metric name -> numeric value
-source_row: int               # 1-based row number in the uploaded file
-raw: dict[str, Any]           # original row, kept for traceability
-```
+Three things belong here once decided:
 
-`metrics` keys are **canonical names** (`tickets_resolved`, `cycle_time_days`, …) — never raw
-header text. Mapping from messy headers to canonical names happens in `profiles.py` via
-`aliases`, and nowhere else.
-
-Column → canonical name resolution has two paths, selected by the `mapping_mode` form field:
-
-| Mode | Behavior |
-| --- | --- |
-| `aliases` | Declared alias tables only. Fully deterministic, no model call, no token cost. |
-| `hybrid` *(default)* | Aliases first; the agent is asked **only** about leftover columns. Skips the model entirely when nothing is left over. |
-| `ai` | Every column goes to the agent; alias tables are not consulted. |
-
-Both AI modes silently degrade to `aliases` when no model is configured, and the mode actually
-used comes back in the response — so a caller always knows whether a model was involved.
-
-### Role profiles
-
-`services/profiles.py` is intentionally **declarative data**. A profile declares:
-
-- `aliases`: canonical metric name → accepted header spellings (lowercased, normalized).
-- `metrics`: per metric — `family`, `direction` (`higher_better` / `lower_better`), `target`,
-  `weight`, `unit`, `description`.
-
-Adding a role or a customer-specific format should require **only** a new entry there. If it
-requires touching `kpi_engine.py`, the abstraction is wrong — fix the abstraction.
+1. **What the agent sees** — the compact description of an uploaded file that it reasons
+   over: column names, types, row count, value ranges, sample rows. Not the raw file.
+2. **The output envelope** — the fixed wrapper around the agent's free-form results.
+3. **The unit of analysis** — one result per file, or one per entity (employee, team, …).
 
 ---
 
