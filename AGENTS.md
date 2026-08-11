@@ -51,7 +51,6 @@ uv sync                              # install/refresh deps from uv.lock
 uv add <package>                     # add a dependency (updates pyproject + lock)
 
 uv run fastapi dev app/main.py       # dev server, http://127.0.0.1:8000/docs
-uv run tracker                       # same app via the console script
 ```
 
 Copy `.env.example` → `.env` and set `OPENAI_API_KEY` to enable the agent.
@@ -78,7 +77,7 @@ tracker/
 ├── pyproject.toml            # deps + build config
 ├── .env.example
 └── app/
-    ├── main.py               # create_app(), middleware, exception handlers, run()
+    ├── main.py               # app, middleware, exception handlers, routers
     ├── api/                  # FastAPI routes — thin: parse, call one service, return
     ├── schemas/              # Pydantic request/response + internal models ONLY
     ├── services/             # all business logic lives here

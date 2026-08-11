@@ -13,9 +13,6 @@ dependencies = [
     "pydantic-ai-slim[openai]>=2.27.0",
 ]
 
-[project.scripts]
-tracker = "app.main:run"
-
 [build-system]
 requires = ["uv_build>=0.12.2,<0.13.0"]
 build-backend = "uv_build"
