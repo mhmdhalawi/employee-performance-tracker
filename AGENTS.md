@@ -40,7 +40,7 @@ formats we imagine a customer might send.
 | Agent layer | PydanticAI (`pydantic-ai-slim[openai]`) |
 
 **Not allowed without a strong, stated reason:** LangChain, a database/ORM, Celery/Redis,
-Docker Compose stacks, auth systems. This is a 1–2 week MVP.
+Docker Compose stacks, auth systems.
 
 ---
 
@@ -68,8 +68,8 @@ module-name = "app"
 module-root = ""
 ```
 
-The distribution is still named `tracker` (that's the project name and the console script);
-the importable package is `app`. So every internal import reads `from app.services… import`.
+The distribution is still named `tracker` (the project name); the importable package is `app`.
+So every internal import reads `from app.services… import`.
 
 ```
 tracker/
@@ -79,10 +79,16 @@ tracker/
 └── app/
     ├── main.py               # app, middleware, exception handlers, routers
     ├── api/                  # FastAPI routes — thin: parse, call one service, return
+    │   ├── agent.py          # POST /ask
+    │   └── health.py         # GET /health
     ├── schemas/              # Pydantic request/response + internal models ONLY
+    │   └── agent.py          # AskRequest, AskResponse
     ├── services/             # all business logic lives here
+    │   └── agent.py          # PydanticAI agent + its tools
     ├── core/                 # config, errors, clients, storage
-    └── utils/                # small pure helpers
+    │   ├── config.py         # Settings (env-driven), get_settings()
+    │   └── errors.py         # AppError hierarchy + FastAPI handler
+    └── utils/                # small pure helpers (nothing here yet)
 ```
 
 ### Dependency direction
@@ -148,13 +154,15 @@ Current endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
+| `POST` | `/api/v1/ask` | send a prompt to the agent; returns its answer + token usage |
 
 ---
 
-## 9. Persistence (MVP)
+## 9. Persistence
 
-In-memory only; state is lost on restart. Accepted for now. Do not add a database without
-asking.
+**TODO — nothing is persisted yet.** Every request is independent; nothing survives it.
+Decide what actually needs storing (uploaded datasets? agent runs?) when something needs to
+outlive a single request. Do not add a database without asking.
 
 ---
 
