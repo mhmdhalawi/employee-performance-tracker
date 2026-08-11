@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.core.config import get_settings
 from app.schemas.agent import AskRequest, AskResponse
-from app.services.agent import ask
+from app.services.agent import analyze, ask, report
 
 router = APIRouter(tags=["agent"])
 
@@ -15,3 +15,15 @@ async def ask_agent(payload: AskRequest) -> AskResponse:
         model=get_settings().openai_model,
         total_tokens=total_tokens,
     )
+
+
+# TODO: request/response schema depends on the data shape decided in AGENTS.md §5.
+@router.post("/analyze")
+async def analyze_agent() -> None:
+    await analyze()
+
+
+# TODO: request/response schema depends on analyze()'s return shape (AGENTS.md §7).
+@router.post("/report")
+async def report_agent() -> None:
+    await report()

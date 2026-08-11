@@ -154,7 +154,8 @@ Current endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
-| `POST` | `/api/v1/ask` | send a prompt to the agent; returns its answer + token usage |
+| `POST` | `/api/v1/analyze` | inspect the data, decide what's worth calculating **(TODO — not yet implemented)** |
+| `POST` | `/api/v1/report` | explain what was chosen and why, alongside results **(TODO — not yet implemented)** |
 
 ---
 
