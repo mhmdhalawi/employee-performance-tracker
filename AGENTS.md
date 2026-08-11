@@ -43,7 +43,6 @@ model for a number that lands in a `score` field, stop.
 | Tabular data | pandas (+ openpyxl for `.xlsx`) |
 | LLM | `openai` SDK |
 | Agent layer | PydanticAI (`pydantic-ai-slim[openai]`) — column-mapping agent only |
-| Tests | pytest |
 
 **Not allowed without a strong, stated reason:** LangChain, a database/ORM, Celery/Redis,
 Docker Compose stacks, auth systems. This is a 1–2 week MVP.
@@ -59,9 +58,6 @@ uv add --dev <package>               # dev-only dependency
 
 uv run fastapi dev app/main.py       # dev server, http://127.0.0.1:8000/docs
 uv run tracker                       # same app via the console script
-
-uv run pytest                        # all tests
-uv run pytest tests/test_kpi_engine.py -q
 ```
 
 Copy `.env.example` → `.env` and set `OPENAI_API_KEY` to enable real AI reports.
@@ -87,7 +83,7 @@ the importable package is `app`. So every internal import reads `from app.servic
 ```
 tracker/
 ├── AGENTS.md
-├── pyproject.toml            # deps + build config + pytest config
+├── pyproject.toml            # deps + build config
 ├── .env.example
 ├── app/
 │   ├── main.py               # create_app(), middleware, exception handlers, run()
@@ -116,7 +112,6 @@ tracker/
 │   │   └── store.py          # in-memory batch store (MVP persistence)
 │   └── utils/
 │       └── numbers.py        # safe_div, clamp, round_score, coerce_float
-└── tests/
 ```
 
 ### Dependency direction
@@ -127,8 +122,8 @@ api  ->  services  ->  schemas / utils / core
 
 `api/` may not import pandas, may not call OpenAI, and may not do arithmetic on metrics.
 `services/` must not import FastAPI (`Request`, `UploadFile`, `HTTPException`, …) — services
-take plain `bytes`/models and raise `AppError` subclasses. That keeps them unit-testable and
-reusable from the future webhook path.
+take plain `bytes`/models and raise `AppError` subclasses. That keeps them reusable from the
+future webhook path.
 
 ---
 
@@ -171,8 +166,8 @@ used comes back in the response — so a caller always knows whether a model was
 - `metrics`: per metric — `family`, `direction` (`higher_better` / `lower_better`), `target`,
   `weight`, `unit`, `description`.
 
-Adding a role or a customer-specific format should require **only** a new entry there, plus a
-test. If it requires touching `kpi_engine.py`, the abstraction is wrong — fix the abstraction.
+Adding a role or a customer-specific format should require **only** a new entry there. If it
+requires touching `kpi_engine.py`, the abstraction is wrong — fix the abstraction.
 
 ---
 
@@ -199,8 +194,8 @@ Scoring lives in `services/kpi_engine.py` and obeys these rules:
    `reason` — do **not** emit `0.0`.
 6. Metric values are floats. Non-numeric cells are reported as `RowIssue`, not coerced to 0.
 
-When changing a formula, update the docstring, the `AGENTS.md` rule above if the rule itself
-changed, and the tests in `tests/test_kpi_engine.py` in the same commit.
+When changing a formula, update the docstring and the `AGENTS.md` rule above if the rule itself
+changed, in the same commit.
 
 ---
 
@@ -294,24 +289,7 @@ Do not add a database without asking.
 
 ---
 
-## 10. Testing
-
-- Business logic gets tests; glue does not need them.
-- **`kpi_engine` is the highest-value test target** — cover normalization direction, weighting,
-  missing-metric renormalization, and empty-family `None`.
-- `file_processor` tests build CSV/Excel bytes in-memory (`io.BytesIO`) — no fixture files on
-  disk, no network.
-- AI tests must not hit the network. For the report writer, test prompt construction and the
-  offline fallback. For the mapping agent, use `pydantic_ai.models.function.FunctionModel` to
-  script the model's responses (see `tests/test_mapping_agent.py::scripted_model`) and
-  monkeypatch `mapping_agent._build_model` so no real client is ever constructed.
-- Agent tests should cover the **guardrails**, not just the happy path: hallucinated metric
-  names, columns that do not exist, duplicate metrics, cross-profile metrics, retry exhaustion.
-  Those are the failure modes that would silently corrupt someone's score.
-
----
-
-## 11. Style
+## 10. Style
 
 - **No module-level docstrings or header comment blocks.** Files start directly with their
   first import or statement — no summary of what the file contains at the top. Architectural
@@ -326,18 +304,19 @@ Do not add a database without asking.
 
 ---
 
-## 12. Working agreements for coding tasks
+## 11. Working agreements for coding tasks
 
 1. Read the relevant service before editing; follow existing patterns over inventing new ones.
 2. New logic goes into a **service**, not a route handler.
 3. Reach for the simplest thing that satisfies the requirement; no speculative abstraction.
 4. Touch only what the task needs — no drive-by refactors, no reformatting unrelated files.
-5. New format/role support = a `profiles.py` entry + a test. Nothing else.
-6. Run `uv run pytest` before reporting done, and say plainly if anything fails.
+5. New format/role support = a `profiles.py` entry. Nothing else.
+6. Exercise the change against the running dev server before reporting done, and say plainly if
+   anything fails.
 
 ---
 
-## 13. Deliberately out of scope for now
+## 12. Deliberately out of scope for now
 
 Auth/multi-tenancy, database + migrations, background jobs, webhook ingestion (the service
 layer is already shaped for it — a webhook route will call the same `ingest_file`), historical

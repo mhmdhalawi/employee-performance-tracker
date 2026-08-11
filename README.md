@@ -33,12 +33,6 @@ deterministic template summary.
 | `GET` | `/api/v1/batches/{batch_id}` | full KPI results for a batch |
 | `POST` | `/api/v1/reports` | AI narrative for one employee in a batch |
 
-## Tests
-
-```bash
-uv run pytest
-```
-
 ## Development guide
 
 **Read [AGENTS.md](AGENTS.md) before writing code** — architecture, the KPI contract,
