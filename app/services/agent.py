@@ -19,40 +19,45 @@ Always explain what you chose to calculate and why.
 """
 
 
+agent: Agent[None, str] = Agent(instructions=INSTRUCTIONS)
+
+
+@agent.tool_plain
+def add(a: float, b: float) -> float:
+    """Add two numbers and return the total."""
+    return a + b
+
+
 @lru_cache
-def get_agent() -> Agent[None, str]:
-    """Build the agent once per process. Raises AIUnavailableError without an API key."""
+def get_model() -> OpenAIChatModel:
+    """The configured model. Raises AIUnavailableError without an API key."""
     settings = get_settings()
     if not settings.openai_api_key:
-        raise AIUnavailableError(
-            "OPENAI_API_KEY is not set, so the agent cannot run.",
-            {"hint": "Copy .env.example to .env and set OPENAI_API_KEY."},
-        )
+        raise AIUnavailableError("OPENAI_API_KEY is not set, so the agent cannot run.")
 
-    # The key comes from Settings (.env), not from the ambient environment, so the
-    # provider is constructed explicitly rather than by the "openai:<model>" shorthand.
-    model = OpenAIChatModel(
+    return OpenAIChatModel(
         settings.openai_model,
         provider=OpenAIProvider(api_key=settings.openai_api_key),
     )
-    agent: Agent[None, str] = Agent(model, instructions=INSTRUCTIONS)
-
-    # Placeholder tool: proves the tool loop works end to end. Real calculation tools
-    # replace this once we have seen an actual data file (see AGENTS.md sections 5-6).
-    @agent.tool_plain
-    def add(a: float, b: float) -> float:
-        """Add two numbers and return the total."""
-        return a + b
-
-    return agent
 
 
 async def ask(prompt: str) -> tuple[str, int]:
     """Run the agent against ``prompt``. Returns its answer and the tokens used."""
-    agent = get_agent()
     try:
-        result = await agent.run(prompt)
+        result = await agent.run(prompt, model=get_model())
     except (UnexpectedModelBehavior, UserError) as exc:
         raise AIError(f"The model call failed: {exc}") from exc
 
     return result.output, result.usage.total_tokens
+
+
+# TODO: inspects the data and decides what is worth calculating (AGENTS.md §7). Signature
+# depends on the data shape decided in AGENTS.md §5 — don't invent one ahead of that.
+async def analyze() -> None:
+    raise NotImplementedError
+
+
+# TODO: takes analyze()'s output and explains what was chosen and why, alongside the
+# results (AGENTS.md §7). Signature depends on analyze()'s return shape.
+async def report() -> None:
+    raise NotImplementedError

@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -10,10 +8,9 @@ class AppError(Exception):
     status_code: int = 400
     code: str = "app_error"
 
-    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
+    def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message
-        self.details = details or {}
 
 
 class AIUnavailableError(AppError):
@@ -39,7 +36,6 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "error": {
                     "code": exc.code,
                     "message": exc.message,
-                    "details": exc.details,
                 }
             },
         )

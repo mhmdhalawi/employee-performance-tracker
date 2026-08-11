@@ -143,7 +143,7 @@ No API key → the service still starts, and endpoints needing the agent say so 
 - Always declare `response_model`. Response models live in `schemas/`, never inline dicts.
 - Never `raise HTTPException` from a service. Raise an `AppError` subclass from
   `core/errors.py`; the registered handlers convert it to a consistent `ErrorResponse`
-  (`{"error": {"code", "message", "details"}}`).
+  (`{"error": {"code", "message"}}`).
 - Validation failures inside a *file* are **not** HTTP errors: a file with 3 bad rows out of
   100 returns `200` with those rows listed. Only an unusable file (wrong type, unparseable)
   is a `4xx`.
