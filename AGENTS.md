@@ -12,7 +12,6 @@ A FastAPI backend that:
 1. Ingests performance data from **CSV/Excel uploads** and, later, a **webhook**.
 2. Hands it to an **AI agent that decides what is worth calculating**.
 3. Gives that agent **tools** that do the actual arithmetic.
-4. Exposes the results for a **Vue dashboard**.
 
 ### The one rule that matters most
 

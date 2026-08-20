@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     debug: bool = False
 
-    # Vue dev server by default.
     cors_origins: list[str] = ["http://localhost:5173"]
 
     openai_api_key: str | None = None
