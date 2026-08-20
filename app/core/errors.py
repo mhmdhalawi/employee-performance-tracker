@@ -27,6 +27,18 @@ class AIError(AppError):
     code = "ai_error"
 
 
+class UnsupportedFileTypeError(AppError):
+    """The uploaded file type is not supported."""
+
+    status_code = 415
+    code = "unsupported_file_type"
+
+    def __init__(self, file_name: str) -> None:
+        super().__init__(
+            f"Unsupported file type for '{file_name}'. Upload a CSV or Excel file."
+        )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:
