@@ -16,7 +16,22 @@ uv run fastapi dev app/main.py
 
 Open http://127.0.0.1:8000/docs.
 
-## Endpoints
+## Agent skills setup
+
+After cloning the project, restore its coding-agent skills:
+
+```bash
+uv sync
+npx skills install
+uvx library-skills --all
+```
+
+`skills-lock.json` restores skills added from remote repositories. `uv.lock` pins Python
+dependencies, and `library-skills` discovers skills bundled by those installed packages.
+
+## Available endpoints
+
+The service is in an early stage. This table lists endpoints that are available now.
 
 | Method | Path | Purpose |
 | --- | --- | --- |

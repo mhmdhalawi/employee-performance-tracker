@@ -56,6 +56,19 @@ uv run fastapi dev app/main.py       # dev server, http://127.0.0.1:8000/docs
 Run `uvx library-skills --all` after adding or updating dependencies. It only adds skills
 for packages that bundle an official agent skill.
 
+### Agent skills setup
+
+On a fresh clone, restore project skills after installing dependencies:
+
+```bash
+uv sync
+npx skills install
+uvx library-skills --all
+```
+
+`skills-lock.json` pins skills added from remote repositories. `uv.lock` pins Python
+dependencies, and `library-skills` discovers any skills bundled by those dependencies.
+
 Copy `.env.example` → `.env` and set `OPENAI_API_KEY` to enable the agent.
 
 ---
