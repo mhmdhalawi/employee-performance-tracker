@@ -48,9 +48,13 @@ Docker Compose stacks, auth systems.
 ```bash
 uv sync                              # install/refresh deps from uv.lock
 uv add <package>                     # add a dependency (updates pyproject + lock)
+uvx library-skills --all             # discover/refresh AI skills bundled with installed dependencies
 
 uv run fastapi dev app/main.py       # dev server, http://127.0.0.1:8000/docs
 ```
+
+Run `uvx library-skills --all` after adding or updating dependencies. It only adds skills
+for packages that bundle an official agent skill.
 
 Copy `.env.example` → `.env` and set `OPENAI_API_KEY` to enable the agent.
 
