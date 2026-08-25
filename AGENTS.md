@@ -102,10 +102,10 @@ tracker/
     ├── schemas/              # Pydantic request/response + internal models ONLY
     │   ├── agent.py          # AskRequest, AskResponse
     │   ├── performance.py    # canonical performance records and tool results
-    │   └── uploads.py        # import inspection and mapping response models
+    │   └── uploads.py        # upload-inspection response models
     ├── services/             # all business logic lives here
     │   ├── agent.py          # PydanticAI agent + its tools
-    │   ├── imports.py        # upload inspection, mapping, and import validation
+    │   ├── imports.py        # mechanical upload parsing and inspection
     │   ├── performance.py    # validation and deterministic KPI calculations
     │   └── uploads.py        # extension and size validation
     ├── core/                 # config, errors, clients, storage
@@ -129,29 +129,34 @@ future webhook path.
 
 ## 5. Data model
 
-Analysis is per request and works from one canonical `PerformanceDataset`. It contains
-employees, KPI targets, projects, attendance records, reports, leave requests, and quality
-reviews. Employee IDs join employee-scoped records; project IDs join projects to quality
-reviews. Input mapping must preserve the original record IDs and evidence links so results
-and alerts remain traceable.
+Analysis is per request. Python parses an upload into a request-scoped catalog of tables,
+headers, inferred types, row counts, and raw records; it preserves the original file unchanged.
+It does not decide what a table means merely from its sheet name.
 
-The upload/mapping service accepts `.csv` and `.xlsx`, inspects their table structure, maps
-recognized sheet and column names into the canonical Pydantic models, and returns row-level
-mapping issues plus relationship findings. It normalizes column punctuation, spacing, and
-casing but does not guess unrecognized fields. Neither the agent nor calculation tools receive
-raw pandas frames.
+The agent explores that catalog progressively through data-access tools. It decides which
+tables and columns matter for the user’s request, and may propose a mapping to canonical
+performance concepts when that is useful. Python must validate any proposal before it becomes
+a `PerformanceDataset` or feeds a named KPI calculator. Preserve source record IDs and
+evidence links so results and alerts remain traceable.
+
+Never put every row from every sheet into one model prompt. The agent should first inspect the
+catalog, then request bounded samples, selected columns, or filtered rows. Python detects
+mechanical issues such as blank columns and duplicate rows; the agent decides what is
+analytically redundant. Neither the agent nor calculation tools receive raw pandas frames.
 
 ---
 
 ## 6. Calculations
 
-Use named, task-level tools—not generic arithmetic or dataframe operations:
+Give the agent two kinds of tools. Data-access tools expose the upload safely and progressively:
+`list_tables`, `describe_table`, `get_rows` with bounded columns/filters/limits, and
+`profile_data` for types, missing values, blank columns, and duplicates. Calculation tools
+perform arithmetic over explicitly selected data and return auditable results.
 
-1. `inspect_performance_dataset` returns population, date coverage, teams, and record counts.
-2. `validate_performance_data` returns scoring-relevant findings with record IDs.
-3. `calculate_performance_kpis` returns deterministic KPI scores, confidence, and status.
-4. `get_performance_evidence` returns source record IDs, evidence links, and related findings.
-5. `compare_performance_periods` compares deterministic results across two explicit periods.
+Named domain calculators remain useful after Python validates an agent-proposed canonical
+mapping: `validate_performance_data`, `calculate_performance_kpis`,
+`get_performance_evidence`, and `compare_performance_periods`. The agent chooses whether a
+named KPI, a generic safe aggregation, a trend comparison, or no calculation is appropriate.
 
 The deterministic scorer uses Productivity (35%), Compliance (30%), and Quality (35%).
 Productivity combines completion (60%) and time efficiency (40%); Compliance combines
@@ -173,15 +178,20 @@ Only the agent module may call a model. Nothing else, ever.
 The agent **may**: inspect the data, decide what is worth calculating, call tools.
 The agent **may not**: do arithmetic itself, or return a number it did not get from a tool.
 
+The agent may interpret unfamiliar sheet and column names, but it must return a structured
+mapping proposal with a confidence assessment. Python validates required fields, types,
+duplicate mappings, and ID relationships before using that mapping. The agent may say that a
+mapping is uncertain; it must not guess.
+
 Enforce this structurally — typed tool arguments, a typed output shape — rather than by
 asking nicely in the prompt. Report what the agent chose and why alongside the results;
 free-form output is not an excuse for an unexplained response.
 
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
-The agent tools take `PerformanceDataset` as request-scoped dependencies. Until the upload
-flow passes a dataset into an agent run, they must report that no uploaded data is available
-rather than fabricate a result.
+The agent tools take request-scoped upload data as dependencies. Until the upload flow passes
+that catalog into an agent run, they must report that no uploaded data is available rather than
+fabricate a result.
 
 ---
 
@@ -202,7 +212,7 @@ Current endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
-| `POST` | `/api/v1/analyze` | accept, inspect, map, and validate a CSV/Excel upload |
+| `POST` | `/api/v1/analyze` | accept and mechanically inspect a CSV/Excel upload; agent exploration is TODO |
 | `POST` | `/api/v1/report` | explain what was chosen and why, alongside results **(TODO — not yet implemented)** |
 
 ---

@@ -9,24 +9,34 @@ instruction: `AGENTS.md` remains the source of truth for architecture and coding
 The project should be built in dependency order. Each phase must meet its acceptance criteria
 before its dependent phases are considered complete.
 
-## Phase 1: Import and map uploaded data
+## Design decision: LLM-first analysis
 
-**Status: Complete (Day 1).** The `/api/v1/analyze` endpoint accepts CSV and Excel uploads,
-enforces the type and size safeguards, inspects tables and headers, maps recognized fields into
-the canonical dataset, and returns import issues and relationship findings without persisting
-the upload.
+Python is responsible for safe parsing, bounded data access, validation, and all arithmetic.
+The LLM is responsible for exploring an upload, deciding what is relevant to the user’s
+request, selecting calculations, and explaining tool results. It must explore data
+progressively through tools; never place an entire workbook into one prompt.
+
+For unfamiliar sheets or columns, the LLM may return a structured mapping proposal. Python
+must validate that proposal before a named performance calculator uses it. Static sheet-name
+mapping is only a convenience for known formats, not the app’s core decision-maker.
+
+## Phase 1: Parse and expose uploaded data
+
+**Status: In progress.** CSV/XLSX acceptance, size/type safeguards, and mechanical workbook
+inspection are complete. The existing eager canonical mapper must be refactored into
+request-scoped data-access tools for the LLM before this phase is complete.
 
 Build the upload path for supported CSV and Excel files. It should enforce the configured
 file-type and size limits, parse usable files, and produce a canonical representation that
 services can consume without depending on FastAPI types.
 
-Map source columns to the fields required by the performance model using the actual uploaded
-file and its data dictionary when available. Link records through stable identifiers, such as
-employee, project, attendance, report, leave, and review IDs. Detect orphaned relationships
-rather than silently dropping them.
+Expose table names, headers, inferred types, row counts, and bounded samples through tools.
+Add safe row retrieval with selected columns, filters, and limits, plus deterministic data
+profiling for missing values, blank columns, and duplicates. Keep the original upload
+unchanged and request-scoped.
 
-This phase is complete when uploaded records can be mapped and joined without unexplained
-orphan records, and an unusable file receives a clear client error.
+This phase is complete when the agent can progressively inspect an unfamiliar upload without
+receiving the entire workbook at once, and an unusable file receives a clear client error.
 
 ## Phase 2: Validate source data
 
@@ -73,8 +83,9 @@ relevant metrics and supporting records.
 ## Phase 5: Add AI explanations and recommendations
 
 Connect the Pydantic AI agent only after validation and calculation tools exist. The agent
-should inspect validated results, choose what is useful to explain, call tools for any values,
-and return evidence-backed observations and constructive next steps.
+should inspect the request-scoped upload catalog, choose which tables and calculations are
+useful, call tools for any values, and return evidence-backed observations and constructive
+next steps.
 
 Each alert must cite supporting record IDs and evidence links where available. The agent must
 not invent calculations, fill missing data with assumptions, or make high-impact employment
