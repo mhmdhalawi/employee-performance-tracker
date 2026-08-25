@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class Employee(BaseModel):
     employee_id: str = Field(min_length=1)
-    employee_name: str = Field(min_length=1)
+    employee_name: str | None = None
     team: str | None = None
     role: str | None = None
 
@@ -97,14 +97,28 @@ class DatasetOverview(BaseModel):
 
 class KpiResult(BaseModel):
     employee_id: str
-    employee_name: str
+    employee_name: str | None
     productivity_score: float
+    productivity_reason: str
     compliance_score: float
+    compliance_reason: str
     quality_score: float
+    quality_reason: str
     data_confidence: float
     overall_score: float | None
     result_status: str
     supporting_record_ids: list[str]
+
+
+class EmployeeKpiScores(BaseModel):
+    employee_id: str
+    employee_name: str | None
+    productivity_score: float
+    productivity_reason: str
+    compliance_score: float
+    compliance_reason: str
+    quality_score: float
+    quality_reason: str
 
 
 class EvidenceResult(BaseModel):

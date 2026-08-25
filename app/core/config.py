@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     upload_max_bytes: int = 10 * 1024 * 1024
 
     openai_api_key: str | None = None
-    openai_model: str = "gpt-4.1-mini"
+    openai_model: str = "gpt-5.6-luna"
 
     @property
     def ai_enabled(self) -> bool:

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import date
 from typing import Protocol
@@ -219,7 +220,37 @@ def calculate_kpis(
         overall = productivity * 0.35 + compliance * 0.30 + quality * 0.35 if confidence >= target.minimum_confidence * 100 else None
         status = _status(overall, confidence, target.minimum_confidence * 100)
         record_ids = [*(project.project_id for project in projects), *(record.attendance_id for record in attendance), *(report.report_id for report in reports), *(review.review_id for review in reviews)]
-        results.append(KpiResult(employee_id=employee.employee_id, employee_name=employee.employee_name, productivity_score=round(productivity, 2), compliance_score=round(compliance, 2), quality_score=round(quality, 2), data_confidence=round(confidence, 2), overall_score=round(overall, 2) if overall is not None else None, result_status=status, supporting_record_ids=record_ids))
+        results.append(
+            KpiResult(
+                employee_id=employee.employee_id,
+                employee_name=employee.employee_name,
+                productivity_score=round(productivity, 2),
+                productivity_reason=(
+                    f"Weighted 60% completion ({completion_score:.2f}) and 40% "
+                    f"time efficiency ({time_score:.2f}); {len(completed)} completed "
+                    f"projects against a target of {target.target_projects_90d:g}, "
+                    f"averaging {average_hours:.2f} hours against a target of "
+                    f"{target.target_avg_hours:g}."
+                ),
+                compliance_score=round(compliance, 2),
+                compliance_reason=(
+                    f"Weighted 50% attendance ({attendance_compliance:.2f}), "
+                    f"35% reporting ({report_compliance:.2f}), and 15% leave "
+                    f"compliance ({leave_compliance:.2f}) after excluding duplicate "
+                    "attendance records."
+                ),
+                quality_score=round(quality, 2),
+                quality_reason=(
+                    f"Weighted 60% accuracy ({accuracy:.2f}), 25% first-pass approval "
+                    f"({first_pass:.2f}), and 15% rework ({rework:.2f}) across "
+                    f"{len(reviews)} quality reviews."
+                ),
+                data_confidence=round(confidence, 2),
+                overall_score=round(overall, 2) if overall is not None else None,
+                result_status=status,
+                supporting_record_ids=record_ids,
+            )
+        )
     return results
 
 

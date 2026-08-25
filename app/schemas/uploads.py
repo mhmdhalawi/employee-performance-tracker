@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.performance import EmployeeKpiScores
+
 type CellValue = str | int | float | bool | None
 
 
@@ -104,8 +106,9 @@ class AnalyzeUploadResponse(BaseModel):
     file_name: str
     file_type: Literal["csv", "xlsx"]
     byte_size: int
-    tables: list[CatalogTable]
+    results: list[EmployeeKpiScores]
     import_issues: list[ImportIssue]
-    analysis: UploadAnalysis
+    selected_tables: list[str]
+    limitations: list[str]
     model: str
     total_tokens: int
