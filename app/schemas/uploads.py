@@ -2,21 +2,83 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.schemas.performance import ValidationFinding
+type CellValue = str | int | float | bool | None
 
 
 class TableInspection(BaseModel):
     source_name: str
-    header_row: int
+    header_row: int | None
     row_count: int
     columns: list[str]
 
 
-class FieldMapping(BaseModel):
+class CatalogTable(TableInspection):
+    rows: list[dict[str, CellValue]]
+
+
+class UploadCatalog(BaseModel):
+    file_name: str
+    file_type: Literal["csv", "xlsx"]
+    byte_size: int
+    tables: list[CatalogTable]
+
+
+class ColumnDescription(BaseModel):
+    name: str
+    inferred_type: str
+    missing_count: int
+    unique_count: int
+
+
+class TableDescription(BaseModel):
     source_name: str
-    entity: str | None
-    mapped_fields: list[str]
-    missing_fields: list[str]
+    header_row: int | None
+    row_count: int
+    columns: list[ColumnDescription]
+    sample_rows: list[dict[str, CellValue]]
+
+
+class TableProfile(BaseModel):
+    source_name: str
+    blank_columns: list[str]
+    duplicate_row_count: int
+    likely_id_columns: list[str]
+    date_like_columns: list[str]
+    numeric_columns: list[str]
+
+
+class RowPage(BaseModel):
+    source_name: str
+    columns: list[str]
+    rows: list[dict[str, CellValue]]
+    total_matching_rows: int
+    truncated: bool
+
+
+class DistinctValues(BaseModel):
+    source_name: str
+    column: str
+    values: list[CellValue]
+    total_distinct_values: int
+    truncated: bool
+
+
+class MappingProposal(BaseModel):
+    source_name: str
+    canonical_entity: str
+    field_mappings: dict[str, str]
+    confidence: Literal["low", "medium", "high"]
+    rationale: str
+
+
+class MappingValidation(BaseModel):
+    source_name: str
+    canonical_entity: str
+    valid: bool
+    unknown_source_columns: list[str]
+    duplicate_source_columns: list[str]
+    missing_required_fields: list[str]
+    message: str
 
 
 class ImportIssue(BaseModel):
@@ -31,7 +93,4 @@ class AnalyzeUploadResponse(BaseModel):
     file_type: Literal["csv", "xlsx"]
     byte_size: int
     tables: list[TableInspection]
-    mappings: list[FieldMapping]
     import_issues: list[ImportIssue]
-    validation_findings: list[ValidationFinding]
-    ready_to_score: bool

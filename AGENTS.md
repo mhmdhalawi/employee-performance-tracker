@@ -149,9 +149,11 @@ analytically redundant. Neither the agent nor calculation tools receive raw pand
 ## 6. Calculations
 
 Give the agent two kinds of tools. Data-access tools expose the upload safely and progressively:
-`list_tables`, `describe_table`, `get_rows` with bounded columns/filters/limits, and
-`profile_data` for types, missing values, blank columns, and duplicates. Calculation tools
-perform arithmetic over explicitly selected data and return auditable results.
+`list_tables`, `describe_table`, `get_rows` with bounded columns/filters/limits,
+`profile_data`, `search_rows`, and `get_distinct_values`. `propose_mapping` records the
+agent's semantic interpretation; `validate_mapping` checks it before any canonical dataset is
+created. Calculation tools perform arithmetic over explicitly selected data and return
+auditable results.
 
 Named domain calculators remain useful after Python validates an agent-proposed canonical
 mapping: `validate_performance_data`, `calculate_performance_kpis`,
@@ -212,8 +214,7 @@ Current endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
-| `POST` | `/api/v1/analyze` | accept and mechanically inspect a CSV/Excel upload; agent exploration is TODO |
-| `POST` | `/api/v1/report` | explain what was chosen and why, alongside results **(TODO — not yet implemented)** |
+| `POST` | `/api/v1/analyze` | accept and mechanically inspect a CSV/Excel upload |
 
 ---
 

@@ -22,9 +22,10 @@ mapping is only a convenience for known formats, not the app’s core decision-m
 
 ## Phase 1: Parse and expose uploaded data
 
-**Status: In progress.** CSV/XLSX acceptance, size/type safeguards, and mechanical workbook
-inspection are complete. The existing eager canonical mapper must be refactored into
-request-scoped data-access tools for the LLM before this phase is complete.
+**Status: In progress.** CSV/XLSX acceptance, size/type safeguards, mechanical workbook
+inspection, and the bounded LLM data-access tools are complete. The remaining work is to pass
+the request-scoped catalog into an agent run through the upload API before this phase is
+complete.
 
 Build the upload path for supported CSV and Excel files. It should enforce the configured
 file-type and size limits, parse usable files, and produce a canonical representation that
