@@ -90,6 +90,8 @@ So every internal import reads `from app.services… import`.
 ```
 tracker/
 ├── AGENTS.md
+├── docs/
+│   └── plan.md               # implementation phases and acceptance criteria
 ├── pyproject.toml            # deps + build config
 ├── .env.example
 └── app/
@@ -98,9 +100,11 @@ tracker/
     │   ├── agent.py          # POST /ask
     │   └── health.py         # GET /health
     ├── schemas/              # Pydantic request/response + internal models ONLY
-    │   └── agent.py          # AskRequest, AskResponse
+    │   ├── agent.py          # AskRequest, AskResponse
+    │   └── performance.py    # canonical performance records and tool results
     ├── services/             # all business logic lives here
-    │   └── agent.py          # PydanticAI agent + its tools
+    │   ├── agent.py          # PydanticAI agent + its tools
+    │   └── performance.py    # validation and deterministic KPI calculations
     ├── core/                 # config, errors, clients, storage
     │   ├── config.py         # Settings (env-driven), get_settings()
     │   └── errors.py         # AppError hierarchy + FastAPI handler
@@ -122,18 +126,37 @@ future webhook path.
 
 ## 5. Data model
 
-**TODO — decide against a real data file, don't invent one.** Open: what summary the agent
-sees of an uploaded file, the envelope wrapping its free-form results, and whether analysis
-is per file or per entity.
+Analysis is per request and works from one canonical `PerformanceDataset`. It contains
+employees, KPI targets, projects, attendance records, reports, leave requests, and quality
+reviews. Employee IDs join employee-scoped records; project IDs join projects to quality
+reviews. Input mapping must preserve the original record IDs and evidence links so results
+and alerts remain traceable.
+
+The upload/mapping service is still TODO. It must map a usable CSV or Excel workbook into the
+canonical Pydantic models before validation or scoring; neither the agent nor calculation
+tools should receive raw pandas frames.
 
 ---
 
 ## 6. Calculations
 
-**TODO — how granular the agent's tools should be is the central open decision.** Generic
-frame operations, or named calculators? Decide it against a real file.
+Use named, task-level tools—not generic arithmetic or dataframe operations:
 
-Whatever they turn out to be: tools own all arithmetic, and every number returned must be
+1. `inspect_performance_dataset` returns population, date coverage, teams, and record counts.
+2. `validate_performance_data` returns scoring-relevant findings with record IDs.
+3. `calculate_performance_kpis` returns deterministic KPI scores, confidence, and status.
+4. `get_performance_evidence` returns source record IDs, evidence links, and related findings.
+5. `compare_performance_periods` compares deterministic results across two explicit periods.
+
+The deterministic scorer uses Productivity (35%), Compliance (30%), and Quality (35%).
+Productivity combines completion (60%) and time efficiency (40%); Compliance combines
+attendance (50%), reports (35%), and leave compliance (15%); Quality combines accuracy (60%),
+first-pass rate (25%), and rework (15%). Score only when verified project evidence meets the
+employee's configured confidence threshold (70% by default); otherwise return
+`Insufficient data`.
+
+Exclude duplicate attendance before scoring. Approved annual and sick leave are neutral and
+must not reduce compliance. Tools own all arithmetic, and every number returned must be
 traceable to the tool call that produced it.
 
 ---
@@ -150,6 +173,10 @@ asking nicely in the prompt. Report what the agent chose and why alongside the r
 free-form output is not an excuse for an unexplained response.
 
 No API key → the service still starts, and endpoints needing the agent say so plainly.
+
+The agent tools take `PerformanceDataset` as request-scoped dependencies. Until the upload
+flow passes a dataset into an agent run, they must report that no uploaded data is available
+rather than fabricate a result.
 
 ---
 
@@ -211,5 +238,5 @@ outlive a single request. Do not add a database without asking.
 
 ## 12. Deliberately out of scope for now
 
-Auth/multi-tenancy, database + migrations, background jobs, historical trends, PDF export,
-streaming AI responses, rate limiting, tests.
+Auth/multi-tenancy, database + migrations, background jobs, persisted historical data, PDF
+export, streaming AI responses, rate limiting, tests.
