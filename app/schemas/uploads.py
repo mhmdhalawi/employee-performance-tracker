@@ -81,6 +81,18 @@ class MappingValidation(BaseModel):
     message: str
 
 
+class SelectedTable(BaseModel):
+    source_name: str
+    reason: str
+
+
+class UploadAnalysis(BaseModel):
+    selected_tables: list[SelectedTable]
+    ignored_tables: list[SelectedTable]
+    mapping_proposals: list[MappingProposal]
+    limitations: list[str]
+
+
 class ImportIssue(BaseModel):
     code: str
     message: str
@@ -92,5 +104,8 @@ class AnalyzeUploadResponse(BaseModel):
     file_name: str
     file_type: Literal["csv", "xlsx"]
     byte_size: int
-    tables: list[TableInspection]
+    tables: list[CatalogTable]
     import_issues: list[ImportIssue]
+    analysis: UploadAnalysis
+    model: str
+    total_tokens: int

@@ -9,11 +9,8 @@ import pandas as pd
 
 from app.core.errors import AppError
 from app.schemas.uploads import (
-    AnalyzeUploadResponse,
     CatalogTable,
     CellValue,
-    ImportIssue,
-    TableInspection,
     UploadCatalog,
 )
 from app.services.uploads import accept_upload
@@ -39,40 +36,6 @@ def parse_upload(
         file_type=receipt.file_type,
         byte_size=receipt.byte_size,
         tables=[_catalog_table(raw_table) for raw_table in raw_tables],
-    )
-
-
-def inspect_upload(
-    file_name: str | None,
-    contents: bytes,
-    maximum_bytes: int,
-) -> AnalyzeUploadResponse:
-    """Return mechanical inspection results for a CSV or Excel upload."""
-    catalog = parse_upload(file_name, contents, maximum_bytes)
-    tables = [
-        TableInspection(
-            source_name=table.source_name,
-            header_row=table.header_row,
-            row_count=table.row_count,
-            columns=table.columns,
-        )
-        for table in catalog.tables
-    ]
-    import_issues = [
-        ImportIssue(
-            code="header_not_found",
-            message="No row with at least two non-empty header values was found.",
-            source_name=table.source_name,
-        )
-        for table in catalog.tables
-        if table.header_row is None
-    ]
-    return AnalyzeUploadResponse(
-        file_name=catalog.file_name,
-        file_type=catalog.file_type,
-        byte_size=catalog.byte_size,
-        tables=tables,
-        import_issues=import_issues,
     )
 
 

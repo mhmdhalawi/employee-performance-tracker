@@ -9,9 +9,16 @@ If something here conflicts with a request, mention the conflict and follow the 
 
 A FastAPI backend that:
 
-1. Ingests performance data from **CSV/Excel uploads** and, later, a **webhook**.
-2. Hands it to an **AI agent that decides what is worth calculating**.
-3. Gives that agent **tools** that do the actual arithmetic.
+1. Lets a user upload a **CSV or Excel workbook** and press Submit once.
+2. Parses the upload into a request-scoped catalog without assigning business meaning.
+3. Gives that catalog to an **AI agent that selects relevant tables, proposes mappings, and
+   decides what is worth calculating**.
+4. Validates the agent's mappings and gives it **Python tools** that do the actual arithmetic.
+5. Returns structured employee results with employee ID/name when available, the three KPI
+   scores, overall performance, limitations, and supporting evidence.
+
+`POST /api/v1/analyze` owns that one-request workflow. `POST /api/v1/ask` is retained only as
+a small LLM connectivity test; it does not receive or analyze uploaded data.
 
 ### The one rule that matters most
 
@@ -97,7 +104,7 @@ tracker/
 └── app/
     ├── main.py               # app, middleware, exception handlers, routers
     ├── api/                  # FastAPI routes — thin: parse, call one service, return
-    │   ├── agent.py          # POST /ask
+    │   ├── agent.py          # POST /ask and POST /analyze
     │   └── health.py         # GET /health
     ├── schemas/              # Pydantic request/response + internal models ONLY
     │   ├── agent.py          # AskRequest, AskResponse
@@ -143,6 +150,28 @@ Never put every row from every sheet into one model prompt. The agent should fir
 catalog, then request bounded samples, selected columns, or filtered rows. Python detects
 mechanical issues such as blank columns and duplicate rows; the agent decides what is
 analytically redundant. Neither the agent nor calculation tools receive raw pandas frames.
+
+### Analyze request lifecycle
+
+The intended production lifecycle is:
+
+```
+upload -> validate/parse -> catalog -> agent table selection -> validated mappings
+       -> canonical performance dataset -> Python KPI tools -> structured response
+```
+
+The catalog is supplied to PydanticAI as a request dependency available to Python tools. Do
+not serialize the entire workbook into the initial model prompt. The agent starts with table
+metadata and progressively requests descriptions, profiles, distinct values, or bounded rows.
+Calculation tools may process complete selected datasets in Python without sending every
+source row to the model.
+
+**Current implementation boundary:** `/analyze` validates and parses the upload, passes its
+request-scoped catalog into the agent, and returns parsed tables plus the agent's structured
+table selection and mapping proposals. Canonical dataset construction and agent-accessible KPI
+calculation are not connected yet. Parsed rows are currently included in the response for
+development inspection; remove or bound them before production to avoid oversized responses
+and unnecessary exposure of employee data.
 
 ---
 
@@ -191,9 +220,9 @@ free-form output is not an excuse for an unexplained response.
 
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
-The agent tools take request-scoped upload data as dependencies. Until the upload flow passes
-that catalog into an agent run, they must report that no uploaded data is available rather than
-fabricate a result.
+The analysis-agent tools take request-scoped upload data as dependencies. The `/analyze` route
+must pass the catalog into every analysis run. The `/ask` connectivity-test agent has no upload
+dependency and no catalog exploration or calculation tools.
 
 ---
 
@@ -214,7 +243,8 @@ Current endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
-| `POST` | `/api/v1/analyze` | accept and mechanically inspect a CSV/Excel upload |
+| `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
+| `POST` | `/api/v1/analyze` | upload, parse, and let the agent select/map relevant tables; KPI integration is next |
 
 ---
 
