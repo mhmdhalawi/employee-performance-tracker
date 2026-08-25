@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -9,3 +11,10 @@ class AskResponse(BaseModel):
     answer: str
     model: str
     total_tokens: int
+
+
+class UploadReceipt(BaseModel):
+    file_name: str
+    file_type: Literal["csv", "xlsx"]
+    byte_size: int
+    message: str

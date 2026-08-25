@@ -101,10 +101,13 @@ tracker/
     │   └── health.py         # GET /health
     ├── schemas/              # Pydantic request/response + internal models ONLY
     │   ├── agent.py          # AskRequest, AskResponse
-    │   └── performance.py    # canonical performance records and tool results
+    │   ├── performance.py    # canonical performance records and tool results
+    │   └── uploads.py        # import inspection and mapping response models
     ├── services/             # all business logic lives here
     │   ├── agent.py          # PydanticAI agent + its tools
-    │   └── performance.py    # validation and deterministic KPI calculations
+    │   ├── imports.py        # upload inspection, mapping, and import validation
+    │   ├── performance.py    # validation and deterministic KPI calculations
+    │   └── uploads.py        # extension and size validation
     ├── core/                 # config, errors, clients, storage
     │   ├── config.py         # Settings (env-driven), get_settings()
     │   └── errors.py         # AppError hierarchy + FastAPI handler
@@ -132,9 +135,11 @@ reviews. Employee IDs join employee-scoped records; project IDs join projects to
 reviews. Input mapping must preserve the original record IDs and evidence links so results
 and alerts remain traceable.
 
-The upload/mapping service is still TODO. It must map a usable CSV or Excel workbook into the
-canonical Pydantic models before validation or scoring; neither the agent nor calculation
-tools should receive raw pandas frames.
+The upload/mapping service accepts `.csv` and `.xlsx`, inspects their table structure, maps
+recognized sheet and column names into the canonical Pydantic models, and returns row-level
+mapping issues plus relationship findings. It normalizes column punctuation, spacing, and
+casing but does not guess unrecognized fields. Neither the agent nor calculation tools receive
+raw pandas frames.
 
 ---
 
@@ -197,7 +202,7 @@ Current endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
-| `POST` | `/api/v1/analyze` | inspect the data, decide what's worth calculating **(TODO — not yet implemented)** |
+| `POST` | `/api/v1/analyze` | accept, inspect, map, and validate a CSV/Excel upload |
 | `POST` | `/api/v1/report` | explain what was chosen and why, alongside results **(TODO — not yet implemented)** |
 
 ---

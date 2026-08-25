@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     cors_origins: list[str] = ["http://localhost:5173"]
+    upload_max_bytes: int = 10 * 1024 * 1024
 
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"

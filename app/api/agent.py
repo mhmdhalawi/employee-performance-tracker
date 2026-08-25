@@ -1,8 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile
 
 from app.core.config import get_settings
 from app.schemas.agent import AskRequest, AskResponse
-from app.services.agent import analyze, ask, report
+from app.schemas.uploads import AnalyzeUploadResponse
+from app.services.agent import ask, report
+from app.services.imports import import_performance_upload
 
 router = APIRouter(tags=["agent"])
 
@@ -17,10 +19,11 @@ async def ask_agent(payload: AskRequest) -> AskResponse:
     )
 
 
-# TODO: request/response schema depends on the data shape decided in AGENTS.md §5.
-@router.post("/analyze")
-async def analyze_agent() -> None:
-    await analyze()
+@router.post("/analyze", response_model=AnalyzeUploadResponse)
+async def analyze_agent(file: UploadFile) -> AnalyzeUploadResponse:
+    settings = get_settings()
+    contents = await file.read(settings.upload_max_bytes + 1)
+    return import_performance_upload(file.filename, contents, settings.upload_max_bytes)
 
 
 # TODO: request/response schema depends on analyze()'s return shape (AGENTS.md §7).

@@ -11,6 +11,11 @@ before its dependent phases are considered complete.
 
 ## Phase 1: Import and map uploaded data
 
+**Status: Complete (Day 1).** The `/api/v1/analyze` endpoint accepts CSV and Excel uploads,
+enforces the type and size safeguards, inspects tables and headers, maps recognized fields into
+the canonical dataset, and returns import issues and relationship findings without persisting
+the upload.
+
 Build the upload path for supported CSV and Excel files. It should enforce the configured
 file-type and size limits, parse usable files, and produce a canonical representation that
 services can consume without depending on FastAPI types.

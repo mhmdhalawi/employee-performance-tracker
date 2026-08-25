@@ -39,6 +39,16 @@ class UnsupportedFileTypeError(AppError):
         )
 
 
+class FileTooLargeError(AppError):
+    """The uploaded file exceeds the configured size limit."""
+
+    status_code = 413
+    code = "file_too_large"
+
+    def __init__(self, maximum_bytes: int) -> None:
+        super().__init__(f"Upload exceeds the {maximum_bytes}-byte size limit.")
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:

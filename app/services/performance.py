@@ -55,6 +55,10 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
             )
         )
 
+    for target in dataset.kpi_targets:
+        if target.employee_id not in employee_ids:
+            findings.append(_orphan("KPI target", target.employee_id, target.employee_id))
+
     attendance_by_key: dict[tuple[str, date], list[str]] = defaultdict(list)
     for record in dataset.attendance:
         attendance_by_key[record.employee_id, record.work_date].append(record.attendance_id)
@@ -113,6 +117,12 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
                     employee_id=report.employee_id,
                     record_ids=[report.report_id],
                 )
+            )
+
+    for leave_request in dataset.leave_requests:
+        if leave_request.employee_id not in employee_ids:
+            findings.append(
+                _orphan("leave request", leave_request.leave_id, leave_request.employee_id)
             )
 
     for review in dataset.quality_reviews:
