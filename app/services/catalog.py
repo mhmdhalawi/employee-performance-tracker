@@ -21,6 +21,7 @@ from app.schemas.uploads import (
     MappingProposal,
     MappingValidation,
     RowPage,
+    TableAnalysis,
     TableDescription,
     TableInspection,
     TableProfile,
@@ -61,6 +62,41 @@ def describe_table(catalog: UploadCatalog, table_name: str) -> TableDescription:
         columns=[_describe_column(table, column) for column in table.columns],
         sample_rows=table.rows[:5],
     )
+
+
+def inspect_tables(
+    catalog: UploadCatalog,
+    table_names: list[str],
+) -> list[TableAnalysis]:
+    """Describe and profile several selected tables in one bounded operation."""
+    analyses: list[TableAnalysis] = []
+    for table_name in table_names:
+        description = describe_table(catalog, table_name)
+        analyses.append(
+            TableAnalysis(
+                description=description.model_copy(
+                    update={"sample_rows": description.sample_rows[:3]}
+                ),
+                profile=profile_data(catalog, table_name),
+            )
+        )
+    return analyses
+
+
+def validate_mappings(
+    catalog: UploadCatalog,
+    mappings: list[MappingProposal],
+) -> list[MappingValidation]:
+    """Validate several proposed canonical mappings in one operation."""
+    return [
+        validate_mapping(
+            catalog,
+            mapping.source_name,
+            mapping.canonical_entity,
+            mapping.field_mappings,
+        )
+        for mapping in mappings
+    ]
 
 
 def get_rows(

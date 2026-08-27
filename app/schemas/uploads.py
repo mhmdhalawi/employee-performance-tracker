@@ -2,7 +2,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.schemas.performance import EmployeeKpiScores
+from app.schemas.performance import (
+    EmployeeKpiScores,
+    ValidationFinding,
+    ValidationSummary,
+)
 
 type CellValue = str | int | float | bool | None
 
@@ -49,6 +53,11 @@ class TableProfile(BaseModel):
     numeric_columns: list[str]
 
 
+class TableAnalysis(BaseModel):
+    description: TableDescription
+    profile: TableProfile
+
+
 class RowPage(BaseModel):
     source_name: str
     columns: list[str]
@@ -92,7 +101,6 @@ class UploadAnalysis(BaseModel):
     selected_tables: list[SelectedTable]
     ignored_tables: list[SelectedTable]
     mapping_proposals: list[MappingProposal]
-    limitations: list[str]
 
 
 class ImportIssue(BaseModel):
@@ -108,6 +116,8 @@ class AnalyzeUploadResponse(BaseModel):
     byte_size: int
     results: list[EmployeeKpiScores]
     import_issues: list[ImportIssue]
+    validation_summary: ValidationSummary
+    global_validation_findings: list[ValidationFinding]
     selected_tables: list[str]
     limitations: list[str]
     model: str

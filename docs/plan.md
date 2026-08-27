@@ -22,10 +22,9 @@ mapping is only a convenience for known formats, not the app’s core decision-m
 
 ## Phase 1: Parse and expose uploaded data
 
-**Status: In progress.** CSV/XLSX acceptance, size/type safeguards, mechanical workbook
-inspection, and the bounded LLM data-access tools are complete. The remaining work is to pass
-the request-scoped catalog into an agent run through the upload API before this phase is
-complete.
+**Status: Complete.** CSV/XLSX acceptance, size/type safeguards, mechanical workbook
+inspection, bounded LLM data-access tools, and request-scoped catalog injection through the
+upload API are connected.
 
 Build the upload path for supported CSV and Excel files. It should enforce the configured
 file-type and size limits, parse usable files, and produce a canonical representation that
@@ -41,6 +40,16 @@ receiving the entire workbook at once, and an unusable file receives a clear cli
 
 ## Phase 2: Validate source data
 
+**Status: Complete.** Deterministic Python validation is connected after agent mapping and
+before scoring. The API returns severity, scoring impact, employee/source identifiers, and
+supporting record IDs for duplicates, missing exits, missing or unverified evidence, missing
+reports, overdue work, low accuracy, missing targets, and inconsistent relationships.
+Duplicate attendance and invalid quality-review relationships are excluded from scoring,
+while approved leave remains neutral. Validation is performed once in Python and is not sent
+back through the model. The Cedar acceptance run processed 30 employees with no import errors,
+flagged four duplicate-attendance cases and missing-evidence records, and completed in 34,904
+tokens after the bulk-tool optimization.
+
 Build a validation service that checks the mapped data before scoring. It should identify
 missing required values, invalid dates, duplicate attendance records, missing evidence, and
 inconsistent identifiers. Row-level issues should be returned as results rather than causing
@@ -54,6 +63,9 @@ This phase is complete when duplicate and missing-evidence cases are flagged wit
 supporting records.
 
 ## Phase 3: Implement deterministic KPI calculations
+
+**Status: Next.** The deterministic calculators are connected; benchmark parity against the
+workbook's `Expected_KPI` values within 0.1 remains to be verified.
 
 Build calculation tools for Productivity, Compliance, Quality, evidence confidence, overall
 score, and result status. The tools—not the model—own every numerical operation. Implement

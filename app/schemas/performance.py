@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -78,13 +79,32 @@ class PerformanceDataset(BaseModel):
     reports: list[Report]
     leave_requests: list[LeaveRequest]
     quality_reviews: list[QualityReview]
+    mapped_fields: dict[str, set[str]] = Field(default_factory=dict)
 
 
 class ValidationFinding(BaseModel):
     code: str
+    severity: Literal["error", "warning", "info"]
     message: str
     record_ids: list[str]
     employee_id: str | None = None
+    source_type: str | None = None
+    scoring_impact: Literal[
+        "blocks_score",
+        "excluded_from_scoring",
+        "lowers_confidence",
+        "affects_score",
+        "none",
+    ] = "none"
+
+
+class ValidationSummary(BaseModel):
+    total_findings: int
+    error_count: int
+    warning_count: int
+    info_count: int
+    excluded_record_count: int
+    affected_employee_count: int
 
 
 class DatasetOverview(BaseModel):
@@ -119,6 +139,7 @@ class EmployeeKpiScores(BaseModel):
     compliance_reason: str
     quality_score: float
     quality_reason: str
+    validation_findings: list[ValidationFinding] = Field(default_factory=list)
 
 
 class EvidenceResult(BaseModel):

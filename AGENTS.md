@@ -166,23 +166,25 @@ metadata and progressively requests descriptions, profiles, distinct values, or 
 Calculation tools may process complete selected datasets in Python without sending every
 source row to the model.
 
-**Current implementation boundary:** `/analyze` validates and parses the upload, passes its
-request-scoped catalog into the agent, and returns parsed tables plus the agent's structured
-table selection and mapping proposals. Canonical dataset construction and agent-accessible KPI
-calculation are not connected yet. Parsed rows are currently included in the response for
-development inspection; remove or bound them before production to avoid oversized responses
-and unnecessary exposure of employee data.
+**Current implementation boundary:** `/analyze` validates and parses the upload, gives the
+request-scoped catalog to the agent for bounded inspection and semantic mapping, validates the
+returned mappings in Python, builds the canonical dataset, runs deterministic source-data
+validation, and calculates the three KPI scores. The response contains employee-specific
+findings, a validation summary, unmatched/global findings, and KPI results; it does not return
+the parsed source rows. Phase 2 validation is complete. Phase 3 should verify the existing
+deterministic KPI engine against the workbook's `Expected_KPI` benchmark within 0.1.
 
 ---
 
 ## 6. Calculations
 
-Give the agent two kinds of tools. Data-access tools expose the upload safely and progressively:
-`list_tables`, `describe_table`, `get_rows` with bounded columns/filters/limits,
-`profile_data`, `search_rows`, and `get_distinct_values`. `propose_mapping` records the
-agent's semantic interpretation; `validate_mapping` checks it before any canonical dataset is
-created. Calculation tools perform arithmetic over explicitly selected data and return
-auditable results.
+Data-access tools expose the upload safely and progressively. The agent calls `list_tables`,
+then uses `inspect_tables` to retrieve bounded descriptions, profiles, and three-row samples
+for several relevant tables in one model round trip. `get_rows`, `search_rows`, and
+`get_distinct_values` remain available for specific ambiguities. The agent submits its complete
+mapping proposal to `validate_mappings` in one batch before returning it. Full record
+validation and calculations then run deterministically in Python without sending their
+row-level output back through the model.
 
 Named domain calculators remain useful after Python validates an agent-proposed canonical
 mapping: `validate_performance_data`, `calculate_performance_kpis`,
@@ -244,7 +246,7 @@ Current endpoints:
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
 | `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
-| `POST` | `/api/v1/analyze` | upload, parse, and let the agent select/map relevant tables; KPI integration is next |
+| `POST` | `/api/v1/analyze` | upload, map, validate, and return employee KPI results with findings |
 
 ---
 

@@ -1,5 +1,4 @@
 from collections import defaultdict
-from collections import defaultdict
 from collections.abc import Callable
 from datetime import date
 from typing import Protocol
@@ -13,6 +12,7 @@ from app.schemas.performance import (
     PerformanceDataset,
     Report,
     ValidationFinding,
+    ValidationSummary,
 )
 
 
@@ -50,9 +50,12 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
         findings.append(
             ValidationFinding(
                 code="missing_kpi_target",
+                severity="error",
                 message="The employee has no KPI target and cannot receive a deterministic score.",
                 employee_id=employee_id,
                 record_ids=[employee_id],
+                source_type="kpi_targets",
+                scoring_impact="blocks_score",
             )
         )
 
@@ -65,13 +68,20 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
         attendance_by_key[record.employee_id, record.work_date].append(record.attendance_id)
         if record.employee_id not in employee_ids:
             findings.append(_orphan("attendance", record.attendance_id, record.employee_id))
-        if not record.actual_end and record.arrival_status.casefold() not in {"annual leave", "sick leave"}:
+        if (
+            "actual_end" in dataset.mapped_fields.get("attendance", set())
+            and not record.actual_end
+            and record.arrival_status.casefold() not in {"annual leave", "sick leave"}
+        ):
             findings.append(
                 ValidationFinding(
                     code="missing_actual_end",
-                    message="Attendance record has no actual end time; confidence is reduced.",
+                    severity="warning",
+                    message="Attendance record has no actual end time and should be reviewed.",
                     employee_id=record.employee_id,
                     record_ids=[record.attendance_id],
+                    source_type="attendance",
+                    scoring_impact="none",
                 )
             )
     for (employee_id, _), record_ids in attendance_by_key.items():
@@ -79,9 +89,12 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
             findings.append(
                 ValidationFinding(
                     code="duplicate_attendance",
+                    severity="warning",
                     message="Multiple attendance records share the same employee and work date; exclude duplicates before scoring.",
                     employee_id=employee_id,
                     record_ids=record_ids,
+                    source_type="attendance",
+                    scoring_impact="excluded_from_scoring",
                 )
             )
 
@@ -92,18 +105,24 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
             findings.append(
                 ValidationFinding(
                     code="missing_project_evidence",
+                    severity="warning",
                     message="Project evidence is not verified and cannot support confidence.",
                     employee_id=project.employee_id,
                     record_ids=[project.project_id],
+                    source_type="projects",
+                    scoring_impact="lowers_confidence",
                 )
             )
         if project.project_status.casefold() == "overdue" and project.completed_date is None:
             findings.append(
                 ValidationFinding(
                     code="overdue_project",
+                    severity="info",
                     message="Project is overdue and uncompleted; show a productivity risk.",
                     employee_id=project.employee_id,
                     record_ids=[project.project_id],
+                    source_type="projects",
+                    scoring_impact="affects_score",
                 )
             )
 
@@ -114,9 +133,27 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
             findings.append(
                 ValidationFinding(
                     code="missing_report",
+                    severity="warning",
                     message="Required report has no submission date and counts against report compliance.",
                     employee_id=report.employee_id,
                     record_ids=[report.report_id],
+                    source_type="reports",
+                    scoring_impact="affects_score",
+                )
+            )
+        if (
+            report.submitted_date is not None
+            and report.evidence_status.casefold() != "verified"
+        ):
+            findings.append(
+                ValidationFinding(
+                    code="missing_report_evidence",
+                    severity="warning",
+                    message="Report evidence is not verified and should be reviewed.",
+                    employee_id=report.employee_id,
+                    record_ids=[report.report_id],
+                    source_type="reports",
+                    scoring_impact="none",
                 )
             )
 
@@ -133,21 +170,60 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
             findings.append(
                 ValidationFinding(
                     code="orphan_quality_review",
+                    severity="error",
                     message="Quality review references a project that is not in the dataset.",
                     employee_id=review.employee_id,
                     record_ids=[review.review_id, review.project_id],
+                    source_type="quality_reviews",
+                    scoring_impact="excluded_from_scoring",
                 )
             )
         if review.accuracy_pct < 0.75:
             findings.append(
                 ValidationFinding(
                     code="low_accuracy",
+                    severity="info",
                     message="Quality review accuracy is below 75%; recommend quality coaching.",
                     employee_id=review.employee_id,
                     record_ids=[review.review_id],
+                    source_type="quality_reviews",
+                    scoring_impact="affects_score",
+                )
+            )
+        if review.evidence_status.casefold() != "verified":
+            findings.append(
+                ValidationFinding(
+                    code="missing_quality_evidence",
+                    severity="warning",
+                    message="Quality-review evidence is not verified and should be reviewed.",
+                    employee_id=review.employee_id,
+                    record_ids=[review.review_id],
+                    source_type="quality_reviews",
+                    scoring_impact="none",
                 )
             )
     return findings
+
+
+def summarize_validation(findings: list[ValidationFinding]) -> ValidationSummary:
+    """Summarize validation severity, exclusions, and affected employees."""
+    excluded_record_count = sum(
+        max(0, len(finding.record_ids) - 1)
+        if finding.code == "duplicate_attendance"
+        else 1
+        for finding in findings
+        if finding.scoring_impact == "excluded_from_scoring"
+    )
+    return ValidationSummary(
+        total_findings=len(findings),
+        error_count=sum(finding.severity == "error" for finding in findings),
+        warning_count=sum(finding.severity == "warning" for finding in findings),
+        info_count=sum(finding.severity == "info" for finding in findings),
+        excluded_record_count=excluded_record_count,
+        affected_employee_count=len(
+            {finding.employee_id for finding in findings if finding.employee_id}
+        ),
+    )
 
 
 def calculate_kpis(
@@ -155,12 +231,18 @@ def calculate_kpis(
     employee_id: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    validation_findings: list[ValidationFinding] | None = None,
 ) -> list[KpiResult]:
     """Calculate deterministic KPI results for the requested employees and period."""
     target_by_employee = {target.employee_id: target for target in dataset.kpi_targets}
+    findings = (
+        validation_findings
+        if validation_findings is not None
+        else validate_dataset(dataset)
+    )
     duplicate_ids = {
         record_id
-        for finding in validate_dataset(dataset)
+        for finding in findings
         if finding.code == "duplicate_attendance"
         for record_id in finding.record_ids[1:]
     }
@@ -203,6 +285,10 @@ def calculate_kpis(
             start_date,
             end_date,
         )
+        known_project_ids = {project.project_id for project in dataset.projects}
+        reviews = [
+            review for review in reviews if review.project_id in known_project_ids
+        ]
         completed = [project for project in projects if project.project_status.casefold() in {"completed on time", "completed late"}]
         completion_score = min(100.0, len(completed) / target.target_projects_90d * 100)
         average_hours = sum(project.actual_hours or 0 for project in completed) / len(completed) if completed else 0
@@ -351,4 +437,12 @@ def _status(overall: float | None, confidence: float, minimum_confidence: float)
 
 
 def _orphan(record_type: str, record_id: str, employee_id: str) -> ValidationFinding:
-    return ValidationFinding(code="orphan_record", message=f"{record_type.capitalize()} references an employee that is not in the dataset.", employee_id=employee_id, record_ids=[record_id, employee_id])
+    return ValidationFinding(
+        code="orphan_record",
+        severity="error",
+        message=f"{record_type.capitalize()} references an employee that is not in the dataset.",
+        employee_id=employee_id,
+        record_ids=[record_id, employee_id],
+        source_type=record_type,
+        scoring_impact="excluded_from_scoring",
+    )

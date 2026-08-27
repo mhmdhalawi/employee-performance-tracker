@@ -38,6 +38,7 @@ def build_performance_dataset(
         for _, collection_name in _CANONICAL_COLLECTIONS.values()
     }
     issues: list[ImportIssue] = []
+    mapped_fields: dict[str, set[str]] = {}
 
     for proposal in proposals:
         target = _CANONICAL_COLLECTIONS.get(proposal.canonical_entity)
@@ -68,12 +69,21 @@ def build_performance_dataset(
             continue
 
         model, collection_name = target
+        mapped_fields.setdefault(collection_name, set()).update(
+            proposal.field_mappings
+        )
         table = next(
             table
             for table in upload_catalog.tables
             if table.source_name == proposal.source_name
         )
         for row in table.rows:
+            source_row = row.get("_source_row")
+            row_number = (
+                source_row
+                if isinstance(source_row, int) and not isinstance(source_row, bool)
+                else None
+            )
             mapped_row = {
                 canonical_field: _normalize_value(
                     model,
@@ -91,11 +101,15 @@ def build_performance_dataset(
                         code="invalid_row",
                         message=str(exc),
                         source_name=proposal.source_name,
-                        row_number=int(row["_source_row"]),
+                        row_number=row_number,
                     )
                 )
 
-    return PerformanceDataset.model_validate(collections), issues
+    dataset_data: dict[str, object] = {
+        **collections,
+        "mapped_fields": mapped_fields,
+    }
+    return PerformanceDataset.model_validate(dataset_data), issues
 
 
 def _normalize_value(
