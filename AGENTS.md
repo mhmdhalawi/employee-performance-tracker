@@ -31,6 +31,38 @@ the model's own output.
 The real shape of customer data has not been seen yet. Build for data that exists, not for
 formats we imagine a customer might send.
 
+### Benchmark workbook context
+
+The development benchmark is `Cedar Employee Performance Agent — Complete Project
+Dataset.xlsx`. Its `00_Start_Here` sheet defines the intended product and guardrails:
+
+- Build and validate a Productivity, Compliance, and Quality dashboard through the seven-day
+  delivery plan tracked in `docs/plan.md`.
+- The benchmark contains 30 employees over the 12-week period from 2026-05-25 through
+  2026-08-22.
+- Productivity is 35%, Compliance is 30%, and Quality is 35% of the overall result.
+- Below 70% evidence confidence, return `Insufficient data`; do not present a misleading low
+  score.
+- Productivity evidence comes from completed projects and actual hours. Compliance evidence
+  comes from attendance, reports, and leave. Quality evidence comes from accuracy,
+  first-pass approval, and rework.
+- Approved leave is neutral, duplicates are excluded before calculation, and alerts cite
+  supporting record IDs or evidence links.
+- Python owns deterministic validation and arithmetic. The agent interprets mappings and
+  explains tool results; it never invents scores.
+- `Expected_KPI` is the authoritative numerical benchmark for Phase 3, and `QA_Test_Cases` is
+  the minimum regression suite for Phase 6.
+
+The workbook also states that missing quality reviews lower confidence and that an overall
+result requires all three verified KPI scores. The current implementation gates overall
+performance primarily on verified project evidence. Do not resolve this discrepancy by
+assumption: compare the competing interpretations against `Expected_KPI` during Phase 3 and
+document the rule that reproduces the benchmark.
+
+Read `docs/benchmark.md` before work that changes KPI formulas, confidence, QA expectations,
+or evidence-backed explanations. The workbook normally lives outside the repository and may
+require the user to attach it or authorize its local path in a new session.
+
 ---
 
 ## 2. Stack
