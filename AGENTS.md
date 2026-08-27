@@ -16,7 +16,8 @@ A FastAPI backend that:
 4. Validates the agent's mappings, validates the mapped records, and performs all arithmetic
    deterministically in Python.
 5. Returns structured employee results with employee ID/name when available, the three KPI
-   scores, overall performance, limitations, and supporting evidence.
+   scores, evidence confidence, gated overall performance and tier, a deterministic summary,
+   limitations, and supporting evidence.
 
 `POST /api/v1/analyze` owns that one-request workflow. `POST /api/v1/ask` is retained only as
 a small LLM connectivity test; it does not receive or analyze uploaded data.
@@ -53,11 +54,16 @@ Dataset.xlsx`. Its `00_Start_Here` sheet defines the intended product and guardr
 - `Expected_KPI` is the authoritative numerical benchmark for Phase 3, and `QA_Test_Cases` is
   the minimum regression suite for Phase 6.
 
-The workbook also states that missing quality reviews lower confidence and that an overall
-result requires all three verified KPI scores. The current implementation gates overall
-performance primarily on verified project evidence. Do not resolve this discrepancy by
-assumption: compare the competing interpretations against `Expected_KPI` during Phase 3 and
-document the rule that reproduces the benchmark.
+Phase 3 comparison confirmed that employee data confidence is the lowest verified-evidence
+coverage across projects, submitted reports, and quality reviews. Missing attendance exits
+lower record confidence under QA-03 but do not change `Expected_KPI.data_confidence`.
+Component KPI calculations remain visible below the threshold for auditability, while the
+overall score and performance tier are withheld and the status is `Insufficient data`.
+
+QA-01 and QA-10 conflict for EMP-027 and EMP-029: QA-01 requires duplicate attendance
+exclusion, while a controlled API parity run confirmed that their `Expected_KPI` Compliance
+values include the duplicate rows. Production preserves QA-01. Treat those two values as a
+documented benchmark exception until the workbook owner corrects or confirms them.
 
 Read `docs/benchmark.md` before work that changes KPI formulas, confidence, QA expectations,
 or evidence-backed explanations. The workbook normally lives outside the repository and may
@@ -130,7 +136,10 @@ So every internal import reads `from app.services… import`.
 tracker/
 ├── AGENTS.md
 ├── docs/
-│   └── plan.md               # implementation phases and acceptance criteria
+│   ├── benchmark.md          # stable workbook context and confirmed benchmark exceptions
+│   ├── plan.md               # implementation phases and acceptance criteria
+│   └── team-feedback-checklist.md
+│                             # implementation status for received team feedback
 ├── pyproject.toml            # deps + build config
 ├── .env.example
 └── app/
@@ -200,10 +209,11 @@ the source rows to the model.
 **Current implementation boundary:** `/analyze` validates and parses the upload, gives the
 request-scoped catalog to the agent for bounded inspection and semantic mapping, validates the
 returned mappings in Python, builds the canonical dataset, runs deterministic source-data
-validation, and calculates the three KPI scores. The response contains employee-specific
-findings, a validation summary, unmatched/global findings, and KPI results; it does not return
-the parsed source rows. Phase 2 validation is complete. Phase 3 should verify the existing
-deterministic KPI engine against the workbook's `Expected_KPI` benchmark within 0.1.
+validation, and calculates KPI scores, evidence confidence, gated overall scores, and tiers.
+The response contains employee-specific findings, supporting record IDs, a validation
+summary, unmatched/global findings, KPI results, and a deterministic summary derived from the
+final results; it does not return parsed source rows. Phases 2 and 3 are complete, with the
+documented EMP-027/EMP-029 benchmark exception described in `docs/benchmark.md`.
 
 ---
 
@@ -219,17 +229,18 @@ recognized layouts can skip the model while the server process remains running. 
 validation and calculations run deterministically in Python without sending row-level output
 back through the model.
 
-Named domain calculators remain useful after Python validates an agent-proposed canonical
-mapping: `validate_performance_data`, `calculate_performance_kpis`,
-`get_performance_evidence`, and `compare_performance_periods`. The agent chooses whether a
-named KPI, a generic safe aggregation, a trend comparison, or no calculation is appropriate.
+After Python validates an agent-proposed canonical mapping, the deterministic service uses
+`validate_dataset`, `calculate_kpis`, `get_supporting_evidence`, and
+`calculate_kpi_trends`. The mapping agent does not choose formulas or execute calculations.
 
 The deterministic scorer uses Productivity (35%), Compliance (30%), and Quality (35%).
 Productivity combines completion (60%) and time efficiency (40%); Compliance combines
 attendance (50%), reports (35%), and leave compliance (15%); Quality combines accuracy (60%),
-first-pass rate (25%), and rework (15%). Score only when verified project evidence meets the
-employee's configured confidence threshold (70% by default); otherwise return
-`Insufficient data`.
+first-pass rate (25%), and rework (15%). Employee data confidence is the lowest verified
+coverage across project evidence, submitted-report evidence, and quality-review evidence.
+When confidence is below the employee's configured threshold (70% by default), retain the
+component KPI calculations for traceability but return `Insufficient data` with no overall
+score or performance tier.
 
 Exclude duplicate attendance before scoring. Approved annual and sick leave are neutral and
 must not reduce compliance. Python owns all arithmetic, and every number returned must be

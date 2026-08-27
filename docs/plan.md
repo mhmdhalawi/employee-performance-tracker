@@ -62,8 +62,16 @@ supporting records.
 
 ## Phase 3: Implement deterministic KPI calculations
 
-**Status: Next.** The deterministic calculators are connected; benchmark parity against the
-workbook's `Expected_KPI` values within 0.1 remains to be verified.
+**Status: Complete with a documented benchmark exception.** Deterministic Productivity,
+Compliance, Quality, evidence-confidence, overall-score, and performance-tier calculations
+are connected. The 70% confidence guardrail returns `Insufficient data` without an overall
+score or tier. All 30 employee confidence values and result statuses match `Expected_KPI`,
+and Productivity, Quality, and eligible Overall scores reproduce the benchmark within 0.1.
+
+EMP-027 and EMP-029 Compliance remain the documented exception: QA-01 requires duplicate
+attendance exclusion, while a controlled API parity run confirmed that their `Expected_KPI`
+values include the duplicate rows. Production preserves QA-01. See `docs/benchmark.md` for
+the reproduced values and conflict details.
 
 Build calculation tools for Productivity, Compliance, Quality, evidence confidence, overall
 score, and result status. The tools—not the model—own every numerical operation. Implement

@@ -21,10 +21,12 @@ from app.core.config import get_settings
 from app.core.errors import AIError, AIUnavailableError
 from app.schemas.performance import (
     EmployeeKpiScores,
+    KpiResult,
     PerformanceDataset,
     ValidationFinding,
 )
 from app.schemas.uploads import (
+    AnalysisSummary,
     AnalyzeUploadResponse,
     ImportIssue,
     MappingProposal,
@@ -162,6 +164,13 @@ async def analyze_upload(
                 compliance_reason=kpi.compliance_reason,
                 quality_score=kpi.quality_score,
                 quality_reason=kpi.quality_reason,
+                data_confidence=kpi.data_confidence,
+                confidence_threshold=kpi.confidence_threshold,
+                confidence_reason=kpi.confidence_reason,
+                overall_score=kpi.overall_score,
+                result_status=kpi.result_status,
+                performance_tier=kpi.performance_tier,
+                supporting_record_ids=kpi.supporting_record_ids,
                 validation_findings=[
                     finding
                     for finding in validation_findings
@@ -170,6 +179,7 @@ async def analyze_upload(
             )
             for kpi in kpi_results
         ],
+        summary=_build_analysis_summary(kpi_results),
         import_issues=import_issues,
         validation_summary=summarize_validation(validation_findings),
         global_validation_findings=[
@@ -188,6 +198,37 @@ async def analyze_upload(
         total_tokens=usage.total_tokens,
         model_requests=usage.requests,
         mapping_cache_hit=mapping_cache_hit,
+    )
+
+
+def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
+    insufficient_ids = [
+        result.employee_id
+        for result in kpi_results
+        if result.result_status == "Insufficient data"
+    ]
+    tier_counts: dict[str, int] = {}
+    for result in kpi_results:
+        if result.performance_tier is not None:
+            tier_counts[result.performance_tier] = (
+                tier_counts.get(result.performance_tier, 0) + 1
+            )
+
+    total_count = len(kpi_results)
+    insufficient_count = len(insufficient_ids)
+    scored_count = total_count - insufficient_count
+    narrative = (
+        f"Analyzed {total_count} employees. {scored_count} received an overall "
+        f"performance result; {insufficient_count} were marked Insufficient data "
+        "because their evidence confidence was below the configured threshold."
+    )
+    return AnalysisSummary(
+        total_employee_count=total_count,
+        scored_employee_count=scored_count,
+        insufficient_data_count=insufficient_count,
+        insufficient_data_employee_ids=insufficient_ids,
+        performance_tier_counts=dict(sorted(tier_counts.items())),
+        narrative=narrative,
     )
 
 

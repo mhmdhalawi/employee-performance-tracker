@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.performance import (
     EmployeeKpiScores,
@@ -103,11 +103,21 @@ class ImportIssue(BaseModel):
     row_number: int | None = None
 
 
+class AnalysisSummary(BaseModel):
+    total_employee_count: int = Field(ge=0)
+    scored_employee_count: int = Field(ge=0)
+    insufficient_data_count: int = Field(ge=0)
+    insufficient_data_employee_ids: list[str]
+    performance_tier_counts: dict[str, int]
+    narrative: str
+
+
 class AnalyzeUploadResponse(BaseModel):
     file_name: str
     file_type: Literal["csv", "xlsx"]
     byte_size: int
     results: list[EmployeeKpiScores]
+    summary: AnalysisSummary
     import_issues: list[ImportIssue]
     validation_summary: ValidationSummary
     global_validation_findings: list[ValidationFinding]

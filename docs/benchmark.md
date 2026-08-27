@@ -48,6 +48,26 @@ may explain them but may not create or alter numerical results.
 6. Pass all critical `QA_Test_Cases` scenarios.
 7. Produce a documented demo and handover package.
 
+## Minimum QA regression suite
+
+The workbook's `QA_Test_Cases` sheet defines the following minimum regression suite. The
+workbook remains authoritative if this copied context becomes inconsistent with it.
+
+| Test ID | Test name | Source tabs | Test condition | Expected result | Priority | Test status |
+| --- | --- | --- | --- | --- | --- | --- |
+| QA-01 | Duplicate attendance | Attendance | Two records share employee/date | Agent flags duplicate and excludes one | Critical | Not Run |
+| QA-02 | Approved leave neutrality | Attendance + Leave_Requests | Approved leave overlaps a workday | Compliance is not reduced | Critical | Not Run |
+| QA-03 | Missing exit | Attendance | `actual_end` is blank | Record confidence drops and alert cites row | Critical | Not Run |
+| QA-04 | Late report | Reports | Submission date is after due date | Report compliance decreases | High | Not Run |
+| QA-05 | Missing report | Reports | No submitted date | Missing report alert appears | High | Not Run |
+| QA-06 | Overdue project | Projects | Due date passed without completion | Productivity risk is shown | High | Not Run |
+| QA-07 | Low accuracy | Quality_Reviews | Accuracy below 75% | Quality coaching recommendation appears | Critical | Not Run |
+| QA-08 | Rework burden | Quality_Reviews | High rework with failed first pass | Quality score reflects both signals | High | Not Run |
+| QA-09 | Insufficient evidence | All | Verified evidence falls below 70% | Show `Insufficient data`, not low score | Critical | Not Run |
+| QA-10 | Calculation parity | Expected_KPI | Dashboard uses same inputs | Every employee score matches within 0.1 | Critical | Not Run |
+| QA-11 | Team filter | Employees + KPIs | Select one team | Only selected team records display | Medium | Not Run |
+| QA-12 | Evidence trace | All | Open an alert | Alert links to supporting record IDs | Critical | Not Run |
+
 ## Current verified state
 
 Phase 2 is complete. The Cedar acceptance run processed all 30 employees with no import
@@ -59,17 +79,26 @@ Validated mappings are cached in memory by schema fingerprint for repeated layou
 Phase 3 is next. The deterministic KPI calculators are connected, but their output has not yet
 been reconciled systematically against `Expected_KPI` within 0.1.
 
-## Phase 3 confidence question
+## Phase 3 benchmark findings
 
-The workbook says both that missing quality reviews lower confidence and that overall
-performance requires all three verified KPI scores. The current scorer calculates confidence
-from verified project evidence. During Phase 3:
+Comparison against `Expected_KPI` confirms that employee data confidence is the lowest
+verified-evidence coverage across projects, submitted reports, and quality reviews. A report
+without a submission date affects report compliance; among reports that were submitted, an
+unverified evidence status lowers report evidence coverage. Missing attendance exits lower
+record confidence and produce traceable findings under QA-03, but they do not change the
+employee-level `Expected_KPI.data_confidence` value.
 
-1. Compare current outputs with `Expected_KPI`.
-2. Inspect the benchmark rows where project, report, or quality evidence is missing.
-3. Determine which confidence interpretation reproduces the approved results.
-4. Encode that rule in deterministic Python and document it in `AGENTS.md`.
-5. Do not adjust formulas merely to fit a value without a traceable workbook rule.
+This rule reproduces all 30 benchmark confidence values and result statuses. EMP-027 through
+EMP-030 each have 60% data confidence, no overall score, and an `Insufficient data` status.
+Their component KPI values remain available in `Expected_KPI`; the confidence gate suppresses
+the overall performance result and tier, not the auditable component calculations.
+
+One workbook discrepancy remains unresolved. QA-01 requires duplicate attendance records to
+be excluded, while a controlled API parity run confirmed that the `Expected_KPI` attendance
+and compliance values for EMP-027 and EMP-029 include the duplicate rows. Excluding one record from each
+duplicate employee/date pair produces compliance differences of 0.2304 and 0.3789,
+respectively, so QA-01 and QA-10 cannot both pass within 0.1 without an authoritative ruling
+on which source controls those two expected values.
 
 ## New-session workflow
 

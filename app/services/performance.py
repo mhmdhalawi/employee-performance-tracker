@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import date
 from typing import Protocol
 
@@ -10,6 +10,8 @@ from app.schemas.performance import (
     KpiResult,
     KpiTrendResult,
     PerformanceDataset,
+    Project,
+    QualityReview,
     Report,
     ValidationFinding,
     ValidationSummary,
@@ -77,11 +79,11 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
                 ValidationFinding(
                     code="missing_actual_end",
                     severity="warning",
-                    message="Attendance record has no actual end time and should be reviewed.",
+                    message="Attendance record has no actual end time and lowers evidence confidence.",
                     employee_id=record.employee_id,
                     record_ids=[record.attendance_id],
                     source_type="attendance",
-                    scoring_impact="none",
+                    scoring_impact="lowers_confidence",
                 )
             )
     for (employee_id, _), record_ids in attendance_by_key.items():
@@ -149,11 +151,11 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
                 ValidationFinding(
                     code="missing_report_evidence",
                     severity="warning",
-                    message="Report evidence is not verified and should be reviewed.",
+                    message="Report evidence is not verified and cannot support confidence.",
                     employee_id=report.employee_id,
                     record_ids=[report.report_id],
                     source_type="reports",
-                    scoring_impact="none",
+                    scoring_impact="lowers_confidence",
                 )
             )
 
@@ -195,11 +197,11 @@ def validate_dataset(dataset: PerformanceDataset) -> list[ValidationFinding]:
                 ValidationFinding(
                     code="missing_quality_evidence",
                     severity="warning",
-                    message="Quality-review evidence is not verified and should be reviewed.",
+                    message="Quality-review evidence is not verified and cannot support confidence.",
                     employee_id=review.employee_id,
                     record_ids=[review.review_id],
                     source_type="quality_reviews",
-                    scoring_impact="none",
+                    scoring_impact="lowers_confidence",
                 )
             )
     return findings
@@ -302,9 +304,20 @@ def calculate_kpis(
         first_pass = sum(review.first_pass_approved for review in reviews) / len(reviews) * 100 if reviews else 0
         rework = max(0.0, 100 - (sum(review.rework_hours for review in reviews) / len(reviews) * 8)) if reviews else 0
         quality = accuracy * 0.60 + first_pass * 0.25 + rework * 0.15
-        confidence = sum(project.evidence_status.casefold() == "verified" for project in projects) / len(projects) * 100 if projects else 0
-        overall = productivity * 0.35 + compliance * 0.30 + quality * 0.35 if confidence >= target.minimum_confidence * 100 else None
-        status = _status(overall, confidence, target.minimum_confidence * 100)
+        confidence, confidence_reason = _evidence_confidence(
+            projects,
+            reports,
+            reviews,
+        )
+        confidence_threshold = target.minimum_confidence * 100
+        score_is_allowed = confidence >= confidence_threshold
+        overall = (
+            productivity * 0.35 + compliance * 0.30 + quality * 0.35
+            if score_is_allowed
+            else None
+        )
+        performance_tier = _performance_tier(overall) if score_is_allowed else None
+        status = performance_tier or "Insufficient data"
         record_ids = [*(project.project_id for project in projects), *(record.attendance_id for record in attendance), *(report.report_id for report in reports), *(review.review_id for review in reviews)]
         results.append(
             KpiResult(
@@ -332,8 +345,11 @@ def calculate_kpis(
                     f"{len(reviews)} quality reviews."
                 ),
                 data_confidence=round(confidence, 2),
+                confidence_threshold=round(confidence_threshold, 2),
+                confidence_reason=confidence_reason,
                 overall_score=round(overall, 2) if overall is not None else None,
                 result_status=status,
+                performance_tier=performance_tier,
                 supporting_record_ids=record_ids,
             )
         )
@@ -422,11 +438,9 @@ def _leave_compliance(dataset: PerformanceDataset, employee_id: str) -> float:
     return sum(request.request_status.casefold() == "approved" for request in requests) / len(requests) * 100 if requests else 100
 
 
-def _status(overall: float | None, confidence: float, minimum_confidence: float) -> str:
-    if confidence < minimum_confidence:
-        return "Insufficient data"
+def _performance_tier(overall: float | None) -> str | None:
     if overall is None:
-        return "Insufficient data"
+        return None
     if overall >= 90:
         return "Top performer"
     if overall >= 80:
@@ -434,6 +448,38 @@ def _status(overall: float | None, confidence: float, minimum_confidence: float)
     if overall >= 70:
         return "Solid"
     return "Needs support"
+
+
+def _evidence_confidence(
+    projects: list[Project],
+    reports: list[Report],
+    reviews: list[QualityReview],
+) -> tuple[float, str]:
+    project_confidence = _coverage(
+        project.evidence_status.casefold() == "verified" for project in projects
+    )
+    report_confidence = _coverage(
+        report.evidence_status.casefold() == "verified" for report in reports
+        if report.submitted_date is not None
+    )
+    quality_confidence = _coverage(
+        review.evidence_status.casefold() == "verified" for review in reviews
+    )
+    coverage = {
+        "projects": project_confidence,
+        "reports": report_confidence,
+        "quality": quality_confidence,
+    }
+    confidence = min(coverage.values())
+    reason = "Evidence coverage by required source: " + ", ".join(
+        f"{source} {value:.2f}%" for source, value in coverage.items()
+    ) + "; confidence is the lowest required-source coverage."
+    return confidence, reason
+
+
+def _coverage(checks: Iterable[bool]) -> float:
+    values = list(checks)
+    return sum(values) / len(values) * 100 if values else 0.0
 
 
 def _orphan(record_type: str, record_id: str, employee_id: str) -> ValidationFinding:

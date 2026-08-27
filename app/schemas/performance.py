@@ -125,8 +125,11 @@ class KpiResult(BaseModel):
     quality_score: float
     quality_reason: str
     data_confidence: float
+    confidence_threshold: float
+    confidence_reason: str
     overall_score: float | None
     result_status: str
+    performance_tier: str | None
     supporting_record_ids: list[str]
 
 
@@ -139,6 +142,13 @@ class EmployeeKpiScores(BaseModel):
     compliance_reason: str
     quality_score: float
     quality_reason: str
+    data_confidence: float
+    confidence_threshold: float
+    confidence_reason: str
+    overall_score: float | None
+    result_status: str
+    performance_tier: str | None
+    supporting_record_ids: list[str]
     validation_findings: list[ValidationFinding] = Field(default_factory=list)
 
 
