@@ -1,6 +1,5 @@
 from collections.abc import Iterable, Sequence
 from datetime import date
-from typing import Literal
 
 from pydantic import BaseModel
 
@@ -37,6 +36,23 @@ _CANONICAL_MODELS: dict[str, type[BaseModel]] = {
     "leave_requests": LeaveRequest,
     "quality_reviews": QualityReview,
 }
+
+
+def canonical_mapping_contract() -> dict[str, dict[str, list[str]]]:
+    """Return required and optional canonical fields for semantic mapping."""
+    return {
+        entity: {
+            "required_fields": [
+                name for name, field in model.model_fields.items() if field.is_required()
+            ],
+            "optional_fields": [
+                name
+                for name, field in model.model_fields.items()
+                if not field.is_required()
+            ],
+        }
+        for entity, model in _CANONICAL_MODELS.items()
+    }
 
 
 def list_tables(catalog: UploadCatalog) -> list[TableInspection]:
@@ -225,28 +241,6 @@ def get_distinct_values(
         values=values[:limit],
         total_distinct_values=len(values),
         truncated=len(values) > limit,
-    )
-
-
-def propose_mapping(
-    catalog: UploadCatalog,
-    source_name: str,
-    canonical_entity: str,
-    field_mappings: dict[str, str],
-    confidence: Literal["low", "medium", "high"],
-    rationale: str,
-) -> MappingProposal:
-    """Record the agent's tentative semantic mapping for later Python validation."""
-    table = _table(catalog, source_name)
-    _require_columns(table, list(field_mappings.values()))
-    if confidence not in {"low", "medium", "high"}:
-        raise ValueError("Confidence must be low, medium, or high.")
-    return MappingProposal(
-        source_name=table.source_name,
-        canonical_entity=canonical_entity,
-        field_mappings=field_mappings,
-        confidence=confidence,
-        rationale=rationale,
     )
 
 

@@ -1,10 +1,11 @@
 # Performance Tracking Agent — Backend
 
-FastAPI service that ingests performance data (CSV/Excel now, webhook later) and hands it to
-an AI agent that decides what is worth calculating. The agent interprets the data and calls
-Python tools to do the arithmetic — it never computes numbers itself.
+FastAPI service that ingests CSV or Excel performance data, gives a bounded workbook synopsis
+to an AI agent for semantic mapping, validates the mapped records, and calculates employee
+Productivity, Compliance, and Quality scores deterministically in Python.
 
-Early stage: right now this is a health endpoint and nothing else.
+`POST /api/v1/analyze` returns employee KPI results, validation findings, mapping limitations,
+token/request diagnostics, and whether a validated in-memory schema mapping was reused.
 
 ## Quick start
 

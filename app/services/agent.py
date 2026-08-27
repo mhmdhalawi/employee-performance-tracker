@@ -1,17 +1,21 @@
+import json
+from collections import OrderedDict
 from functools import lru_cache
-from typing import Annotated
+from hashlib import sha256
 
-from pydantic import Field
-from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai import Agent
 from pydantic_ai.exceptions import (
     ModelHTTPError,
     UnexpectedModelBehavior,
     UsageLimitExceeded,
     UserError,
 )
-from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.models.openai import (
+    OpenAIResponsesModel,
+    OpenAIResponsesModelSettings,
+)
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.core.config import get_settings
 from app.core.errors import AIError, AIUnavailableError
@@ -22,13 +26,9 @@ from app.schemas.performance import (
 )
 from app.schemas.uploads import (
     AnalyzeUploadResponse,
-    DistinctValues,
     ImportIssue,
     MappingProposal,
     MappingValidation,
-    RowPage,
-    TableAnalysis,
-    TableInspection,
     UploadAnalysis,
     UploadCatalog,
 )
@@ -42,117 +42,25 @@ from app.services.performance import (
 )
 
 INSTRUCTIONS = """
-You are the analysis agent for an Employee Performance Tracker.
+You map uploaded employee-performance tables to the supplied canonical schema.
 
-First understand the uploaded file before deciding what, if anything, should be calculated.
-Call `list_tables` exactly once. Then call `inspect_tables` once with all tables that may be
-relevant; it returns bounded descriptions, profiles, and samples together. Use
-`get_distinct_values`, `get_rows`, or `search_rows` only when a specific column remains
-ambiguous after bulk inspection. Never request the entire file.
-
-Do not infer meaning from a sheet name alone. Draft all mapping proposals, then call
-`validate_mappings` once with the complete list. Correct any structurally invalid mappings
-before returning them. Map optional fields that support validation, including attendance
-`actual_end`, whenever a matching source column exists. If a semantic mapping is uncertain,
-return a lower confidence instead of making additional broad inspections. Do not validate
-source records or calculate scores; Python does that after you return the mappings.
-
-The tools calculate and inspect; you interpret and explain. Do not calculate, count, average,
-score, or state a numeric result unless it was returned by a tool. Do not invent a metric,
-mapping, source record, evidence link, or missing-data value. If no upload catalog is
-available, explain that the request needs an uploaded CSV or Excel file.
+Use only the bounded workbook synopsis in the user prompt. Select tables and map columns by
+their headers, inferred types, missing-value counts, and sample values; do not rely on a sheet
+name alone. Return lower confidence when semantics are ambiguous. Map optional validation
+fields, especially attendance actual_end, whenever the source supports them. Do not calculate,
+validate source records, invent values, or explain scores. Return only the structured output.
 """
 
+_MAPPING_CACHE_MAX_SIZE = 64
+_mapping_cache: OrderedDict[str, UploadAnalysis] = OrderedDict()
 
-analysis_agent = Agent[UploadCatalog, UploadAnalysis](
+
+analysis_agent = Agent[None, UploadAnalysis](
     name="employee_performance_agent",
     instructions=INSTRUCTIONS,
-    deps_type=UploadCatalog,
+    deps_type=type(None),
     output_type=UploadAnalysis,
 )
-
-
-@analysis_agent.tool
-def list_tables(ctx: RunContext[UploadCatalog]) -> list[TableInspection]:
-    """List available tables with their headers, dimensions, and row counts. Use this first."""
-    return catalog.list_tables(ctx.deps)
-
-
-@analysis_agent.tool(retries=2)
-def inspect_tables(
-    ctx: RunContext[UploadCatalog],
-    table_names: Annotated[list[str], Field(min_length=1, max_length=20)],
-) -> list[TableAnalysis]:
-    """Describe and profile up to 20 selected tables with three sample rows each."""
-    try:
-        return catalog.inspect_tables(ctx.deps, table_names)
-    except ValueError as exc:
-        raise ModelRetry(str(exc)) from exc
-
-
-@analysis_agent.tool(retries=2)
-def get_rows(
-    ctx: RunContext[UploadCatalog],
-    table_name: str,
-    columns: list[str] | None = None,
-    filters: dict[str, str] | None = None,
-    sort_by: str | None = None,
-    descending: bool = False,
-    limit: Annotated[int, Field(ge=1, le=100)] = 20,
-) -> RowPage:
-    """Return up to 100 selected source rows, with optional exact-match filters and sorting."""
-    try:
-        return catalog.get_rows(
-            ctx.deps,
-            table_name,
-            columns,
-            filters,
-            sort_by,
-            descending,
-            limit,
-        )
-    except ValueError as exc:
-        raise ModelRetry(str(exc)) from exc
-
-
-@analysis_agent.tool(retries=2)
-def search_rows(
-    ctx: RunContext[UploadCatalog],
-    query: str,
-    table_name: str | None = None,
-    limit: Annotated[int, Field(ge=1, le=100)] = 20,
-) -> list[RowPage]:
-    """Find a text fragment across a chosen table or every table, returning bounded source rows."""
-    try:
-        return catalog.search_rows(ctx.deps, query, table_name, limit)
-    except ValueError as exc:
-        raise ModelRetry(str(exc)) from exc
-
-
-@analysis_agent.tool(retries=2)
-def get_distinct_values(
-    ctx: RunContext[UploadCatalog],
-    table_name: str,
-    column: str,
-    limit: Annotated[int, Field(ge=1, le=50)] = 20,
-) -> DistinctValues:
-    """Return up to 50 non-empty distinct values to understand a source column's categories."""
-    try:
-        return catalog.get_distinct_values(ctx.deps, table_name, column, limit)
-    except ValueError as exc:
-        raise ModelRetry(str(exc)) from exc
-
-
-@analysis_agent.tool(retries=2)
-def validate_mappings(
-    ctx: RunContext[UploadCatalog],
-    mappings: Annotated[list[MappingProposal], Field(min_length=1, max_length=20)],
-) -> list[MappingValidation]:
-    """Validate all proposed mappings together before returning the final analysis."""
-    try:
-        return catalog.validate_mappings(ctx.deps, mappings)
-    except ValueError as exc:
-        raise ModelRetry(str(exc)) from exc
 
 
 @lru_cache
@@ -175,28 +83,53 @@ async def analyze_upload(
 ) -> AnalyzeUploadResponse:
     """Parse an upload and let the agent select and map relevant source tables."""
     upload_catalog = parse_upload(file_name, contents, maximum_bytes)
-    try:
-        result = await analysis_agent.run(
-            "Inspect this upload and identify the tables and fields that can support employee performance calculations. Propose and validate the mappings Python needs to calculate the three KPI scores. Do not calculate scores yourself.",
-            model=get_model(),
-            deps=upload_catalog,
-            usage_limits=UsageLimits(
-                request_limit=35,
-                total_tokens_limit=60_000,
-                count_tokens_before_request=True,
-            ),
+    workbook_context = _build_workbook_context(upload_catalog)
+    schema_fingerprint = _schema_fingerprint(upload_catalog)
+    analysis = _get_cached_analysis(schema_fingerprint)
+    mapping_cache_hit = analysis is not None
+    usage = RunUsage()
+
+    if analysis is None:
+        try:
+            analysis = await _run_mapping_agent(
+                workbook_context,
+                usage,
+            )
+            invalid_mappings = [
+                validation
+                for validation in catalog.validate_mappings(
+                    upload_catalog,
+                    analysis.mapping_proposals,
+                )
+                if not validation.valid
+            ]
+            if invalid_mappings:
+                analysis = await _repair_mappings(
+                    workbook_context,
+                    analysis,
+                    invalid_mappings,
+                    usage,
+                )
+        except (
+            ModelHTTPError,
+            UnexpectedModelBehavior,
+            UsageLimitExceeded,
+            UserError,
+        ) as exc:
+            raise AIError(f"The model call failed: {exc}") from exc
+
+        final_validations = catalog.validate_mappings(
+            upload_catalog,
+            analysis.mapping_proposals,
         )
-    except (
-        ModelHTTPError,
-        UnexpectedModelBehavior,
-        UsageLimitExceeded,
-        UserError,
-    ) as exc:
-        raise AIError(f"The model call failed: {exc}") from exc
+        if final_validations and all(
+            validation.valid for validation in final_validations
+        ):
+            _cache_analysis(schema_fingerprint, analysis)
 
     performance_dataset, mapping_issues = build_performance_dataset(
         upload_catalog,
-        result.output.mapping_proposals,
+        analysis.mapping_proposals,
     )
     validation_findings = validate_dataset(performance_dataset)
     kpi_results = calculate_kpis(
@@ -244,15 +177,152 @@ async def analyze_upload(
             for finding in validation_findings
             if finding.employee_id not in result_employee_ids
         ],
-        selected_tables=[table.source_name for table in result.output.selected_tables],
+        selected_tables=analysis.selected_tables,
         limitations=_build_limitations(
             performance_dataset,
-            result.output.mapping_proposals,
+            analysis.mapping_proposals,
             import_issues,
             validation_findings,
         ),
         model=get_settings().openai_model,
-        total_tokens=result.usage.total_tokens,
+        total_tokens=usage.total_tokens,
+        model_requests=usage.requests,
+        mapping_cache_hit=mapping_cache_hit,
+    )
+
+
+async def _run_mapping_agent(
+    workbook_context: dict[str, object],
+    usage: RunUsage,
+) -> UploadAnalysis:
+    prompt = (
+        "Map the relevant source tables to the canonical employee-performance schema. "
+        "The synopsis is bounded and may include irrelevant benchmark or documentation "
+        "tables; ignore those.\n\n"
+        + json.dumps(workbook_context, ensure_ascii=False, separators=(",", ":"))
+    )
+    result = await analysis_agent.run(
+        prompt,
+        model=get_model(),
+        model_settings=_mapping_model_settings(),
+        usage=usage,
+        usage_limits=_mapping_usage_limits(),
+    )
+    return result.output
+
+
+async def _repair_mappings(
+    workbook_context: dict[str, object],
+    analysis: UploadAnalysis,
+    invalid_mappings: list[MappingValidation],
+    usage: RunUsage,
+) -> UploadAnalysis:
+    prompt = (
+        "Correct only the structurally invalid mappings and return the complete mapping "
+        "output again. Preserve mappings that already validate.\n\n"
+        "CURRENT_OUTPUT:\n"
+        + analysis.model_dump_json()
+        + "\n\nVALIDATION_ERRORS:\n"
+        + json.dumps(
+            [
+                validation.model_dump(mode="json")
+                for validation in invalid_mappings
+            ],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        + "\n\nWORKBOOK_SYNOPSIS:\n"
+        + json.dumps(workbook_context, ensure_ascii=False, separators=(",", ":"))
+    )
+    result = await analysis_agent.run(
+        prompt,
+        model=get_model(),
+        model_settings=_mapping_model_settings(),
+        usage=usage,
+        usage_limits=_mapping_usage_limits(),
+    )
+    return result.output
+
+
+def _build_workbook_context(upload_catalog: UploadCatalog) -> dict[str, object]:
+    analyses = catalog.inspect_tables(
+        upload_catalog,
+        [table.source_name for table in upload_catalog.tables],
+    )
+    return {
+        "canonical_schema": catalog.canonical_mapping_contract(),
+        "tables": [
+            {
+                "source_name": analysis.description.source_name,
+                "row_count": analysis.description.row_count,
+                "columns": [
+                    column.model_dump(mode="json")
+                    for column in analysis.description.columns
+                ],
+                "duplicate_row_count": analysis.profile.duplicate_row_count,
+                "sample_rows": analysis.description.sample_rows[:2],
+            }
+            for analysis in analyses
+        ],
+    }
+
+
+def _schema_fingerprint(
+    upload_catalog: UploadCatalog,
+) -> str:
+    schema_only = {
+        "file_type": upload_catalog.file_type,
+        "tables": [
+            {
+                "source_name": table.source_name,
+                "columns": table.columns,
+                "column_types": {
+                    column: sorted(
+                        {
+                            type(row.get(column)).__name__
+                            for row in table.rows
+                            if row.get(column) is not None
+                        }
+                    )
+                    for column in table.columns
+                },
+            }
+            for table in upload_catalog.tables
+        ],
+    }
+    encoded = json.dumps(schema_only, sort_keys=True, separators=(",", ":")).encode()
+    return sha256(encoded).hexdigest()
+
+
+def _get_cached_analysis(schema_fingerprint: str) -> UploadAnalysis | None:
+    analysis = _mapping_cache.get(schema_fingerprint)
+    if analysis is None:
+        return None
+    _mapping_cache.move_to_end(schema_fingerprint)
+    return analysis.model_copy(deep=True)
+
+
+def _cache_analysis(
+    schema_fingerprint: str,
+    analysis: UploadAnalysis,
+) -> None:
+    _mapping_cache[schema_fingerprint] = analysis.model_copy(deep=True)
+    _mapping_cache.move_to_end(schema_fingerprint)
+    while len(_mapping_cache) > _MAPPING_CACHE_MAX_SIZE:
+        _mapping_cache.popitem(last=False)
+
+
+def _mapping_model_settings() -> OpenAIResponsesModelSettings:
+    return OpenAIResponsesModelSettings(
+        openai_prompt_cache_key="employee-performance-mapping-v1",
+        openai_text_verbosity="low",
+    )
+
+
+def _mapping_usage_limits() -> UsageLimits:
+    return UsageLimits(
+        request_limit=3,
+        total_tokens_limit=60_000,
     )
 
 

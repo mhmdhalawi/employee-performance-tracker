@@ -52,8 +52,9 @@ may explain them but may not create or alter numerical results.
 
 Phase 2 is complete. The Cedar acceptance run processed all 30 employees with no import
 errors, flagged four duplicate-attendance cases, detected missing exits and missing evidence,
-and excluded four duplicate records from scoring. After bulk agent-tool optimization, the run
-completed in 34,904 tokens.
+and excluded four duplicate records from scoring. The verified one-shot mapping run reproduced
+the same scores and finding counts with one model request and 6,113 tokens, down from 34,904.
+Validated mappings are cached in memory by schema fingerprint for repeated layouts.
 
 Phase 3 is next. The deterministic KPI calculators are connected, but their output has not yet
 been reconciled systematically against `Expected_KPI` within 0.1.

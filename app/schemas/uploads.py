@@ -79,7 +79,6 @@ class MappingProposal(BaseModel):
     canonical_entity: str
     field_mappings: dict[str, str]
     confidence: Literal["low", "medium", "high"]
-    rationale: str
 
 
 class MappingValidation(BaseModel):
@@ -92,14 +91,8 @@ class MappingValidation(BaseModel):
     message: str
 
 
-class SelectedTable(BaseModel):
-    source_name: str
-    reason: str
-
-
 class UploadAnalysis(BaseModel):
-    selected_tables: list[SelectedTable]
-    ignored_tables: list[SelectedTable]
+    selected_tables: list[str]
     mapping_proposals: list[MappingProposal]
 
 
@@ -122,3 +115,5 @@ class AnalyzeUploadResponse(BaseModel):
     limitations: list[str]
     model: str
     total_tokens: int
+    model_requests: int
+    mapping_cache_hit: bool

@@ -11,9 +11,10 @@ A FastAPI backend that:
 
 1. Lets a user upload a **CSV or Excel workbook** and press Submit once.
 2. Parses the upload into a request-scoped catalog without assigning business meaning.
-3. Gives that catalog to an **AI agent that selects relevant tables, proposes mappings, and
-   decides what is worth calculating**.
-4. Validates the agent's mappings and gives it **Python tools** that do the actual arithmetic.
+3. Builds a bounded catalog synopsis for an **AI agent that selects relevant tables and
+   proposes semantic mappings**.
+4. Validates the agent's mappings, validates the mapped records, and performs all arithmetic
+   deterministically in Python.
 5. Returns structured employee results with employee ID/name when available, the three KPI
    scores, overall performance, limitations, and supporting evidence.
 
@@ -24,9 +25,8 @@ a small LLM connectivity test; it does not receive or analyze uploaded data.
 
 > **The AI decides *what* to calculate. Tools do the calculating.**
 
-The agent interprets and orchestrates: read the data, decide which numbers matter, call tools
-to compute them. Any number in a response should have come out of a Python tool, not out of
-the model's own output.
+The agent interprets source semantics and proposes mappings. Python validates those mappings,
+decides which deterministic calculators can run, and computes every number in the response.
 
 The real shape of customer data has not been seen yet. Build for data that exists, not for
 formats we imagine a customer might send.
@@ -143,7 +143,7 @@ tracker/
     │   ├── performance.py    # canonical performance records and tool results
     │   └── uploads.py        # upload-inspection response models
     ├── services/             # all business logic lives here
-    │   ├── agent.py          # PydanticAI agent + its tools
+    │   ├── agent.py          # PydanticAI mapping agent + analysis workflow
     │   ├── imports.py        # mechanical upload parsing and inspection
     │   ├── performance.py    # validation and deterministic KPI calculations
     │   └── uploads.py        # extension and size validation
@@ -172,16 +172,16 @@ Analysis is per request. Python parses an upload into a request-scoped catalog o
 headers, inferred types, row counts, and raw records; it preserves the original file unchanged.
 It does not decide what a table means merely from its sheet name.
 
-The agent explores that catalog progressively through data-access tools. It decides which
-tables and columns matter for the user’s request, and may propose a mapping to canonical
-performance concepts when that is useful. Python must validate any proposal before it becomes
-a `PerformanceDataset` or feeds a named KPI calculator. Preserve source record IDs and
-evidence links so results and alerts remain traceable.
+Python reduces the catalog to bounded table metadata, inferred column profiles, duplicate
+counts, and at most two sample rows per table. The agent uses that synopsis to decide which
+tables and columns map to canonical performance concepts. Python must validate every proposal
+before it becomes a `PerformanceDataset` or feeds a named KPI calculator. Preserve source
+record IDs and evidence links so results and alerts remain traceable.
 
-Never put every row from every sheet into one model prompt. The agent should first inspect the
-catalog, then request bounded samples, selected columns, or filtered rows. Python detects
-mechanical issues such as blank columns and duplicate rows; the agent decides what is
-analytically redundant. Neither the agent nor calculation tools receive raw pandas frames.
+Never put every row from every sheet into a model prompt. The current mapping request contains
+only the compact synopsis; the agent has no raw-row access tools. Python detects mechanical
+issues such as blank columns and duplicate rows. Neither the agent nor calculation services
+receive raw pandas frames.
 
 ### Analyze request lifecycle
 
@@ -192,11 +192,10 @@ upload -> validate/parse -> catalog -> agent table selection -> validated mappin
        -> canonical performance dataset -> Python KPI tools -> structured response
 ```
 
-The catalog is supplied to PydanticAI as a request dependency available to Python tools. Do
-not serialize the entire workbook into the initial model prompt. The agent starts with table
-metadata and progressively requests descriptions, profiles, distinct values, or bounded rows.
-Calculation tools may process complete selected datasets in Python without sending every
-source row to the model.
+The compact synopsis is serialized into one structured mapping request. Python validates the
+returned mappings and makes one targeted repair request only when structural validation
+fails. Calculation services may process complete selected datasets in Python without sending
+the source rows to the model.
 
 **Current implementation boundary:** `/analyze` validates and parses the upload, gives the
 request-scoped catalog to the agent for bounded inspection and semantic mapping, validates the
@@ -210,13 +209,15 @@ deterministic KPI engine against the workbook's `Expected_KPI` benchmark within 
 
 ## 6. Calculations
 
-Data-access tools expose the upload safely and progressively. The agent calls `list_tables`,
-then uses `inspect_tables` to retrieve bounded descriptions, profiles, and three-row samples
-for several relevant tables in one model round trip. `get_rows`, `search_rows`, and
-`get_distinct_values` remain available for specific ambiguities. The agent submits its complete
-mapping proposal to `validate_mappings` in one batch before returning it. Full record
-validation and calculations then run deterministically in Python without sending their
-row-level output back through the model.
+Python prepares a compact mapping synopsis containing table metadata, inferred column
+profiles, duplicate counts, and at most two sample rows per table. The agent receives that
+bounded synopsis in one structured-output request and returns selected tables plus semantic
+mappings; it has no row-access or calculation tools in this path. Python validates the
+returned mappings and makes one targeted repair request only when structural validation
+fails. Validated mappings are cached in memory by a schema-only fingerprint so repeated
+recognized layouts can skip the model while the server process remains running. Full record
+validation and calculations run deterministically in Python without sending row-level output
+back through the model.
 
 Named domain calculators remain useful after Python validates an agent-proposed canonical
 mapping: `validate_performance_data`, `calculate_performance_kpis`,
@@ -231,8 +232,8 @@ employee's configured confidence threshold (70% by default); otherwise return
 `Insufficient data`.
 
 Exclude duplicate attendance before scoring. Approved annual and sick leave are neutral and
-must not reduce compliance. Tools own all arithmetic, and every number returned must be
-traceable to the tool call that produced it.
+must not reduce compliance. Python owns all arithmetic, and every number returned must be
+traceable to its supporting source records.
 
 ---
 
@@ -240,23 +241,22 @@ traceable to the tool call that produced it.
 
 Only the agent module may call a model. Nothing else, ever.
 
-The agent **may**: inspect the data, decide what is worth calculating, call tools.
-The agent **may not**: do arithmetic itself, or return a number it did not get from a tool.
+The agent **may**: interpret the bounded synopsis, select relevant tables, and propose mappings.
+The agent **may not**: calculate or return KPI values, validate source records, or invent data.
 
 The agent may interpret unfamiliar sheet and column names, but it must return a structured
 mapping proposal with a confidence assessment. Python validates required fields, types,
 duplicate mappings, and ID relationships before using that mapping. The agent may say that a
 mapping is uncertain; it must not guess.
 
-Enforce this structurally — typed tool arguments, a typed output shape — rather than by
-asking nicely in the prompt. Report what the agent chose and why alongside the results;
-free-form output is not an excuse for an unexplained response.
+Enforce this structurally through a typed output shape and Python mapping validation rather
+than asking nicely in the prompt. Mapping confidence communicates semantic uncertainty.
 
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
-The analysis-agent tools take request-scoped upload data as dependencies. The `/analyze` route
-must pass the catalog into every analysis run. The `/ask` connectivity-test agent has no upload
-dependency and no catalog exploration or calculation tools.
+The `/analyze` workflow constructs a request-scoped synopsis and passes it directly to the
+mapping agent. The agent has no upload dependency or function tools. `/ask` remains a separate
+plain connectivity test with no upload data.
 
 ---
 
