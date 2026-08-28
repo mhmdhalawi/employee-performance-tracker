@@ -5,8 +5,18 @@ import { ArrowLeftIcon, FileSpreadsheetIcon, ShieldCheckIcon, TriangleAlertIcon 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationFirst,
+  PaginationItem,
+  PaginationLast,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
@@ -27,6 +37,8 @@ const emit = defineEmits<{
 const employee = ref('all')
 const team = ref('all')
 const period = ref('full')
+const currentPage = ref(1)
+const pageSize = ref('10')
 const employeeOptions = ref<EmployeeKpiResult[]>(props.analysis?.results ?? previewResults)
 let filterTimer: number | undefined
 
@@ -39,6 +51,18 @@ const filteredRows = computed(() => isPreview.value
       && (team.value === 'all' || previewTeams[row.employee_id] === team.value),
     )
   : sourceRows.value)
+const numericPageSize = computed(() => Number(pageSize.value))
+const paginatedRows = computed(() => {
+  const start = (currentPage.value - 1) * numericPageSize.value
+  return filteredRows.value.slice(start, start + numericPageSize.value)
+})
+const firstVisibleRow = computed(() => filteredRows.value.length
+  ? (currentPage.value - 1) * numericPageSize.value + 1
+  : 0)
+const lastVisibleRow = computed(() => Math.min(
+  currentPage.value * numericPageSize.value,
+  filteredRows.value.length,
+))
 const scoredRows = computed(() => filteredRows.value.filter(row => row.overall_score !== null))
 const averages = computed(() => ({
   overall: average(scoredRows.value.map(row => row.overall_score)),
@@ -106,6 +130,10 @@ watch([employee, team, period], () => {
   window.clearTimeout(filterTimer)
   filterTimer = window.setTimeout(() => emit('filtersChange', buildFilters()), 250)
 }, { flush: 'post' })
+
+watch([filteredRows, pageSize], () => {
+  currentPage.value = 1
+})
 
 function buildFilters(): DashboardFilters {
   const filters: DashboardFilters = {}
@@ -201,11 +229,33 @@ function formatIsoDate(value: Date): string {
           <Table>
             <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead class="min-w-36">Confidence</TableHead><TableHead class="text-right">Overall</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
             <TableBody>
-              <TableRow v-for="row in filteredRows" :key="row.employee_id"><TableCell><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell>{{ row.team ?? previewTeams[row.employee_id] ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell></TableRow>
+              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell>{{ row.team ?? previewTeams[row.employee_id] ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell></TableRow>
               <TableRow v-if="!filteredRows.length"><TableCell colspan="8" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
             </TableBody>
           </Table>
         </CardContent>
+        <CardFooter class="flex-col gap-4 border-t sm:flex-row sm:justify-between">
+          <div class="flex items-center gap-3 text-sm text-muted-foreground">
+            <span>{{ firstVisibleRow }}–{{ lastVisibleRow }} of {{ filteredRows.length }}</span>
+            <Select v-model="pageSize">
+              <SelectTrigger class="w-20" aria-label="Rows per page"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectGroup><SelectItem value="10">10</SelectItem><SelectItem value="25">25</SelectItem><SelectItem value="50">50</SelectItem></SelectGroup></SelectContent>
+            </Select>
+            <span>rows per page</span>
+          </div>
+          <Pagination v-model:page="currentPage" :items-per-page="numericPageSize" :total="filteredRows.length" :sibling-count="1" show-edges class="mx-0 w-auto">
+            <PaginationContent v-slot="{ items }">
+              <PaginationFirst />
+              <PaginationPrevious />
+              <template v-for="(item, index) in items" :key="index">
+                <PaginationItem v-if="item.type === 'page'" :value="item.value" :is-active="item.value === currentPage">{{ item.value }}</PaginationItem>
+                <PaginationEllipsis v-else :index="index" />
+              </template>
+              <PaginationNext />
+              <PaginationLast />
+            </PaginationContent>
+          </Pagination>
+        </CardFooter>
       </Card>
 
       <section class="grid gap-6 xl:grid-cols-[2fr_1fr]">
