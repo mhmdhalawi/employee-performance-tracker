@@ -1,6 +1,6 @@
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from datetime import date
+from datetime import date, timedelta
 from typing import Protocol
 
 from app.schemas.performance import (
@@ -8,7 +8,9 @@ from app.schemas.performance import (
     DatasetOverview,
     EvidenceResult,
     KpiResult,
+    KpiTrendPoint,
     KpiTrendResult,
+    PerformanceAlert,
     PerformanceDataset,
     Project,
     QualityReview,
@@ -231,6 +233,7 @@ def summarize_validation(findings: list[ValidationFinding]) -> ValidationSummary
 def calculate_kpis(
     dataset: PerformanceDataset,
     employee_id: str | None = None,
+    team: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     validation_findings: list[ValidationFinding] | None = None,
@@ -251,6 +254,8 @@ def calculate_kpis(
     results: list[KpiResult] = []
     for employee in dataset.employees:
         if employee_id and employee.employee_id != employee_id:
+            continue
+        if team and (employee.team or "").casefold() != team.casefold():
             continue
         target = target_by_employee.get(employee.employee_id)
         if target is None:
@@ -292,13 +297,22 @@ def calculate_kpis(
             review for review in reviews if review.project_id in known_project_ids
         ]
         completed = [project for project in projects if project.project_status.casefold() in {"completed on time", "completed late"}]
-        completion_score = min(100.0, len(completed) / target.target_projects_90d * 100)
+        project_target = target.target_projects_90d
+        if start_date is not None and end_date is not None:
+            period_days = (end_date - start_date).days + 1
+            project_target *= period_days / 90
+        completion_score = min(100.0, len(completed) / project_target * 100)
         average_hours = sum(project.actual_hours or 0 for project in completed) / len(completed) if completed else 0
         time_score = min(100.0, target.target_avg_hours / average_hours * 100) if average_hours else 0
         productivity = completion_score * 0.60 + time_score * 0.40
         attendance_compliance = _attendance_compliance(attendance)
         report_compliance = _report_compliance(reports)
-        leave_compliance = _leave_compliance(dataset, employee.employee_id)
+        leave_compliance = _leave_compliance(
+            dataset,
+            employee.employee_id,
+            start_date,
+            end_date,
+        )
         compliance = attendance_compliance * 0.50 + report_compliance * 0.35 + leave_compliance * 0.15
         accuracy = sum(review.accuracy_pct for review in reviews) / len(reviews) * 100 if reviews else 0
         first_pass = sum(review.first_pass_approved for review in reviews) / len(reviews) * 100 if reviews else 0
@@ -327,7 +341,7 @@ def calculate_kpis(
                 productivity_reason=(
                     f"Weighted 60% completion ({completion_score:.2f}) and 40% "
                     f"time efficiency ({time_score:.2f}); {len(completed)} completed "
-                    f"projects against a target of {target.target_projects_90d:g}, "
+                    f"projects against a target of {project_target:.2f}, "
                     f"averaging {average_hours:.2f} hours against a target of "
                     f"{target.target_avg_hours:g}."
                 ),
@@ -354,6 +368,205 @@ def calculate_kpis(
             )
         )
     return results
+
+
+def calculate_weekly_kpi_trends(
+    dataset: PerformanceDataset,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    employee_id: str | None = None,
+    team: str | None = None,
+) -> list[KpiTrendPoint]:
+    """Return cumulative weekly KPI points for one consistently filtered population."""
+    overview = inspect_dataset(dataset)
+    period_start = start_date or overview.date_start
+    period_end = end_date or overview.date_end
+    if period_start is None or period_end is None or period_start > period_end:
+        return []
+
+    periods: list[tuple[date, date]] = []
+    week_start = period_start
+    while week_start <= period_end:
+        week_end = min(week_start + timedelta(days=6), period_end)
+        periods.append((week_start, week_end))
+        week_start = week_end + timedelta(days=1)
+
+    findings = validate_dataset(dataset)
+    points: list[KpiTrendPoint] = []
+    for week_start, week_end in periods[-12:]:
+        results = calculate_kpis(
+            dataset,
+            employee_id=employee_id,
+            team=team,
+            start_date=week_start,
+            end_date=week_end,
+            validation_findings=findings,
+        )
+        result_ids = {result.employee_id for result in results}
+        productivity_ids = {
+            project.employee_id
+            for project in dataset.projects
+            if project.employee_id in result_ids
+            and week_start <= project.assigned_date <= week_end
+        }
+        compliance_ids = {
+            record.employee_id
+            for record in dataset.attendance
+            if record.employee_id in result_ids
+            and week_start <= record.work_date <= week_end
+        } | {
+            report.employee_id
+            for report in dataset.reports
+            if report.employee_id in result_ids
+            and week_start <= report.due_date <= week_end
+        } | {
+            request.employee_id
+            for request in dataset.leave_requests
+            if request.employee_id in result_ids
+            and request.end_date >= week_start
+            and request.start_date <= week_end
+        }
+        quality_ids = {
+            review.employee_id
+            for review in dataset.quality_reviews
+            if review.employee_id in result_ids
+            and week_start <= review.review_date <= week_end
+        }
+        scored = [result for result in results if result.overall_score is not None]
+        points.append(
+            KpiTrendPoint(
+                period_start=week_start,
+                period_end=week_end,
+                employee_count=len(results),
+                scored_employee_count=len(scored),
+                productivity_employee_count=len(productivity_ids),
+                compliance_employee_count=len(compliance_ids),
+                quality_employee_count=len(quality_ids),
+                productivity_score=_average(
+                    result.productivity_score
+                    for result in results
+                    if result.employee_id in productivity_ids
+                ),
+                compliance_score=_average(
+                    result.compliance_score
+                    for result in results
+                    if result.employee_id in compliance_ids
+                ),
+                quality_score=_average(
+                    result.quality_score
+                    for result in results
+                    if result.employee_id in quality_ids
+                ),
+                overall_score=_average(
+                    result.overall_score
+                    for result in scored
+                    if result.overall_score is not None
+                ),
+                data_confidence=_average(
+                    result.data_confidence for result in results
+                ),
+                record_count=len(
+                    {
+                        record_id
+                        for result in results
+                        for record_id in result.supporting_record_ids
+                    }
+                ),
+            )
+        )
+    return points
+
+
+def build_performance_alerts(
+    dataset: PerformanceDataset,
+    findings: list[ValidationFinding],
+    included_employee_ids: set[str],
+    included_record_ids: set[str],
+) -> list[PerformanceAlert]:
+    """Convert relevant validation findings into traceable dashboard alerts."""
+    employee_by_id = {
+        employee.employee_id: employee for employee in dataset.employees
+    }
+    project_links = {
+        project.project_id: project.evidence_link
+        for project in dataset.projects
+        if project.evidence_link
+    }
+    severity_order = {"error": 0, "warning": 1, "info": 2}
+    relevant = [
+        finding
+        for finding in findings
+        if finding.employee_id in included_employee_ids
+        and (
+            not finding.record_ids
+            or bool(set(finding.record_ids) & included_record_ids)
+        )
+    ]
+    grouped: dict[
+        tuple[str | None, str, str, str, str],
+        list[ValidationFinding],
+    ] = defaultdict(list)
+    for finding in relevant:
+        grouped[
+            (
+                finding.employee_id,
+                finding.code,
+                finding.severity,
+                finding.message,
+                finding.scoring_impact,
+            )
+        ].append(finding)
+
+    alerts = [
+        PerformanceAlert(
+            code=code,
+            severity=severity,
+            message=message,
+            employee_id=group_employee_id,
+            employee_name=(
+                employee_by_id[group_employee_id].employee_name
+                if group_employee_id in employee_by_id
+                else None
+            ),
+            team=(
+                employee_by_id[group_employee_id].team
+                if group_employee_id in employee_by_id
+                else None
+            ),
+            occurrence_count=len(group_findings),
+            record_ids=sorted(
+                {
+                    record_id
+                    for finding in group_findings
+                    for record_id in finding.record_ids
+                }
+            ),
+            evidence_links=sorted(
+                {
+                project_links[record_id]
+                for finding in group_findings
+                for record_id in finding.record_ids
+                if record_id in project_links
+                }
+            ),
+            scoring_impact=scoring_impact,
+        )
+        for (
+            group_employee_id,
+            code,
+            severity,
+            message,
+            scoring_impact,
+        ), group_findings in grouped.items()
+    ]
+    return sorted(
+        alerts,
+        key=lambda alert: (
+            severity_order[alert.severity],
+            alert.employee_id or "",
+            alert.code,
+        ),
+    )
 
 
 def get_supporting_evidence(dataset: PerformanceDataset, employee_id: str) -> EvidenceResult:
@@ -433,8 +646,19 @@ def _report_compliance(reports: list[Report]) -> float:
     return sum(report.submission_status.casefold() == "submitted on time" for report in reports) / len(reports) * 100 if reports else 0
 
 
-def _leave_compliance(dataset: PerformanceDataset, employee_id: str) -> float:
-    requests = [request for request in dataset.leave_requests if request.employee_id == employee_id]
+def _leave_compliance(
+    dataset: PerformanceDataset,
+    employee_id: str,
+    start_date: date | None,
+    end_date: date | None,
+) -> float:
+    requests = [
+        request
+        for request in dataset.leave_requests
+        if request.employee_id == employee_id
+        and (start_date is None or request.end_date >= start_date)
+        and (end_date is None or request.start_date <= end_date)
+    ]
     return sum(request.request_status.casefold() == "approved" for request in requests) / len(requests) * 100 if requests else 100
 
 
@@ -480,6 +704,11 @@ def _evidence_confidence(
 def _coverage(checks: Iterable[bool]) -> float:
     values = list(checks)
     return sum(values) / len(values) * 100 if values else 0.0
+
+
+def _average(values: Iterable[float]) -> float | None:
+    available = list(values)
+    return round(sum(available) / len(available), 2) if available else None
 
 
 def _orphan(record_type: str, record_id: str, employee_id: str) -> ValidationFinding:

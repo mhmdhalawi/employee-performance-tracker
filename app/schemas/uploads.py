@@ -1,9 +1,13 @@
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from app.schemas.performance import (
+    DatasetOverview,
     EmployeeKpiScores,
+    KpiTrendPoint,
+    PerformanceAlert,
     ValidationFinding,
     ValidationSummary,
 )
@@ -112,12 +116,24 @@ class AnalysisSummary(BaseModel):
     narrative: str
 
 
+class AnalysisFilters(BaseModel):
+    employee_id: str | None = None
+    team: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+
+
 class AnalyzeUploadResponse(BaseModel):
     file_name: str
     file_type: Literal["csv", "xlsx"]
     byte_size: int
     results: list[EmployeeKpiScores]
     summary: AnalysisSummary
+    dataset_overview: DatasetOverview
+    applied_filters: AnalysisFilters
+    available_teams: list[str]
+    trends: list[KpiTrendPoint]
+    alerts: list[PerformanceAlert]
     import_issues: list[ImportIssue]
     validation_summary: ValidationSummary
     global_validation_findings: list[ValidationFinding]

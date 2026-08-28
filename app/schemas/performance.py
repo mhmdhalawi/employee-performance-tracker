@@ -136,6 +136,8 @@ class KpiResult(BaseModel):
 class EmployeeKpiScores(BaseModel):
     employee_id: str
     employee_name: str | None
+    team: str | None
+    role: str | None
     productivity_score: float
     productivity_reason: str
     compliance_score: float
@@ -149,6 +151,7 @@ class EmployeeKpiScores(BaseModel):
     result_status: str
     performance_tier: str | None
     supporting_record_ids: list[str]
+    evidence_links: list[str] = Field(default_factory=list)
     validation_findings: list[ValidationFinding] = Field(default_factory=list)
 
 
@@ -167,3 +170,38 @@ class KpiTrendResult(BaseModel):
     overall_score_change: float | None
     baseline_status: str
     current_status: str
+
+
+class KpiTrendPoint(BaseModel):
+    period_start: date
+    period_end: date
+    employee_count: int = Field(ge=0)
+    scored_employee_count: int = Field(ge=0)
+    productivity_employee_count: int = Field(ge=0)
+    compliance_employee_count: int = Field(ge=0)
+    quality_employee_count: int = Field(ge=0)
+    productivity_score: float | None
+    compliance_score: float | None
+    quality_score: float | None
+    overall_score: float | None
+    data_confidence: float | None
+    record_count: int = Field(ge=0)
+
+
+class PerformanceAlert(BaseModel):
+    code: str
+    severity: Literal["error", "warning", "info"]
+    message: str
+    employee_id: str | None
+    employee_name: str | None
+    team: str | None
+    occurrence_count: int = Field(ge=1)
+    record_ids: list[str]
+    evidence_links: list[str] = Field(default_factory=list)
+    scoring_impact: Literal[
+        "blocks_score",
+        "excluded_from_scoring",
+        "lowers_confidence",
+        "affects_score",
+        "none",
+    ]

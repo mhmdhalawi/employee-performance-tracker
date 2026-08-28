@@ -1,5 +1,6 @@
 import json
 from collections import OrderedDict
+from datetime import date
 from functools import lru_cache
 from hashlib import sha256
 
@@ -18,7 +19,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.core.config import get_settings
-from app.core.errors import AIError, AIUnavailableError
+from app.core.errors import AIError, AIUnavailableError, InvalidAnalysisFilterError
 from app.schemas.performance import (
     EmployeeKpiScores,
     KpiResult,
@@ -26,6 +27,7 @@ from app.schemas.performance import (
     ValidationFinding,
 )
 from app.schemas.uploads import (
+    AnalysisFilters,
     AnalysisSummary,
     AnalyzeUploadResponse,
     ImportIssue,
@@ -38,7 +40,10 @@ from app.services import catalog
 from app.services.datasets import build_performance_dataset
 from app.services.imports import parse_upload
 from app.services.performance import (
+    build_performance_alerts,
     calculate_kpis,
+    calculate_weekly_kpi_trends,
+    inspect_dataset,
     summarize_validation,
     validate_dataset,
 )
@@ -82,8 +87,16 @@ async def analyze_upload(
     file_name: str | None,
     contents: bytes,
     maximum_bytes: int,
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> AnalyzeUploadResponse:
     """Parse an upload and let the agent select and map relevant source tables."""
+    if start_date and end_date and start_date > end_date:
+        raise InvalidAnalysisFilterError(
+            "start_date must be on or before end_date."
+        )
     upload_catalog = parse_upload(file_name, contents, maximum_bytes)
     workbook_context = _build_workbook_context(upload_catalog)
     schema_fingerprint = _schema_fingerprint(upload_catalog)
@@ -134,8 +147,26 @@ async def analyze_upload(
         analysis.mapping_proposals,
     )
     validation_findings = validate_dataset(performance_dataset)
+    overview = inspect_dataset(performance_dataset)
+    available_teams = overview.teams
+    if team and team.casefold() not in {value.casefold() for value in available_teams}:
+        raise InvalidAnalysisFilterError(f"Unknown team '{team}'.")
+    known_employee_ids = {
+        employee.employee_id for employee in performance_dataset.employees
+    }
+    if employee_id and employee_id not in known_employee_ids:
+        raise InvalidAnalysisFilterError(f"Unknown employee_id '{employee_id}'.")
+    effective_start: date | None = None
+    effective_end: date | None = None
+    if start_date or end_date:
+        effective_start = start_date or overview.date_start
+        effective_end = end_date or overview.date_end
     kpi_results = calculate_kpis(
         performance_dataset,
+        employee_id=employee_id,
+        team=team,
+        start_date=effective_start,
+        end_date=effective_end,
         validation_findings=validation_findings,
     )
     import_issues = [
@@ -149,6 +180,31 @@ async def analyze_upload(
     ]
     import_issues.extend(mapping_issues)
     result_employee_ids = {kpi.employee_id for kpi in kpi_results}
+    employee_by_id = {
+        employee.employee_id: employee for employee in performance_dataset.employees
+    }
+    included_record_ids = {
+        record_id
+        for result in kpi_results
+        for record_id in result.supporting_record_ids
+    }
+    scoped_findings = [
+        finding
+        for finding in validation_findings
+        if (
+            finding.employee_id in result_employee_ids
+            and (
+                not finding.record_ids
+                or bool(set(finding.record_ids) & included_record_ids)
+            )
+        )
+        or finding.employee_id not in known_employee_ids
+    ]
+    project_links = {
+        project.project_id: project.evidence_link
+        for project in performance_dataset.projects
+        if project.evidence_link
+    }
 
     return AnalyzeUploadResponse(
         file_name=upload_catalog.file_name,
@@ -158,6 +214,8 @@ async def analyze_upload(
             EmployeeKpiScores(
                 employee_id=kpi.employee_id,
                 employee_name=kpi.employee_name,
+                team=employee_by_id[kpi.employee_id].team,
+                role=employee_by_id[kpi.employee_id].role,
                 productivity_score=kpi.productivity_score,
                 productivity_reason=kpi.productivity_reason,
                 compliance_score=kpi.compliance_score,
@@ -171,28 +229,56 @@ async def analyze_upload(
                 result_status=kpi.result_status,
                 performance_tier=kpi.performance_tier,
                 supporting_record_ids=kpi.supporting_record_ids,
+                evidence_links=sorted(
+                    {
+                        project_links[record_id]
+                        for record_id in kpi.supporting_record_ids
+                        if record_id in project_links
+                    }
+                ),
                 validation_findings=[
                     finding
-                    for finding in validation_findings
+                    for finding in scoped_findings
                     if finding.employee_id == kpi.employee_id
                 ],
             )
             for kpi in kpi_results
         ],
         summary=_build_analysis_summary(kpi_results),
+        dataset_overview=overview,
+        applied_filters=AnalysisFilters(
+            employee_id=employee_id,
+            team=team,
+            start_date=start_date or overview.date_start,
+            end_date=end_date or overview.date_end,
+        ),
+        available_teams=available_teams,
+        trends=calculate_weekly_kpi_trends(
+            performance_dataset,
+            start_date=start_date,
+            end_date=end_date,
+            employee_id=employee_id,
+            team=team,
+        ),
+        alerts=build_performance_alerts(
+            performance_dataset,
+            scoped_findings,
+            result_employee_ids,
+            included_record_ids,
+        ),
         import_issues=import_issues,
-        validation_summary=summarize_validation(validation_findings),
+        validation_summary=summarize_validation(scoped_findings),
         global_validation_findings=[
             finding
-            for finding in validation_findings
-            if finding.employee_id not in result_employee_ids
+            for finding in scoped_findings
+            if finding.employee_id not in known_employee_ids
         ],
         selected_tables=analysis.selected_tables,
         limitations=_build_limitations(
             performance_dataset,
             analysis.mapping_proposals,
             import_issues,
-            validation_findings,
+            scoped_findings,
         ),
         model=get_settings().openai_model,
         total_tokens=usage.total_tokens,

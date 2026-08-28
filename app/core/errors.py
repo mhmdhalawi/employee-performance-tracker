@@ -49,6 +49,12 @@ class FileTooLargeError(AppError):
         super().__init__(f"Upload exceeds the {maximum_bytes}-byte size limit.")
 
 
+class InvalidAnalysisFilterError(AppError):
+    """The requested employee, team, or reporting period is invalid."""
+
+    code = "invalid_analysis_filter"
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:
