@@ -70,14 +70,18 @@ workbook remains authoritative if this copied context becomes inconsistent with 
 
 ## Current verified state
 
-Phase 2 is complete. The Cedar acceptance run processed all 30 employees with no import
-errors, flagged four duplicate-attendance cases, detected missing exits and missing evidence,
-and excluded four duplicate records from scoring. The verified one-shot mapping run reproduced
-the same scores and finding counts with one model request and 6,113 tokens, down from 34,904.
-Validated mappings are cached in memory by schema fingerprint for repeated layouts.
+Phases 2 through 4 are complete. The Cedar acceptance run processed all 30 employees with no
+import errors, flagged four duplicate-attendance cases, detected missing exits and missing
+evidence, and excluded four duplicate records from scoring. The verified one-shot mapping run
+reproduced the same scores and finding counts with one model request and 6,113 tokens, down
+from 34,904. Validated mappings are cached in memory by schema fingerprint for repeated
+layouts.
 
-Phase 3 is next. The deterministic KPI calculators are connected, but their output has not yet
-been reconciled systematically against `Expected_KPI` within 0.1.
+Phase 3 comparison reproduces Productivity, Quality, eligible Overall, confidence, and result
+status values within the accepted tolerance. EMP-027 and EMP-029 Compliance remain the
+documented QA-01/QA-10 benchmark exception. Phase 4 connects employee, team, and period
+filters to deterministic KPI results, weekly trends, and traceable alerts presented in the
+Vue dashboard.
 
 ## Phase 3 benchmark findings
 

@@ -5,12 +5,18 @@ It ingests CSV or Excel performance data, gives a bounded workbook synopsis to a
 for semantic mapping, validates the mapped records, and calculates employee Productivity,
 Compliance, and Quality scores deterministically in Python.
 
-`POST /api/v1/analyze` returns employee KPI results, validation findings, mapping limitations,
-token/request diagnostics, and whether a validated in-memory schema mapping was reused.
+`POST /api/v1/analyze` returns employee KPI results, validation findings, applied filters,
+weekly KPI trends, traceable alerts, mapping limitations, token/request diagnostics, and
+whether a validated in-memory schema mapping was reused.
 
 The frontend lives in `web/` and uses Vue 3, TypeScript, Vite, Tailwind CSS v4, and
 shadcn-vue. The backend remains authoritative for validation, KPI calculations, evidence
 confidence, and trend calculations.
+
+After an analysis, the browser client provides employee, team, and reporting-period filters;
+summary KPIs; paginated employee results; weekly KPI trends; priority-alert previews; and a
+dedicated filterable, paginated alerts view. Analysis state remains in browser memory and is
+not persisted across a page refresh.
 
 ## Prerequisites
 

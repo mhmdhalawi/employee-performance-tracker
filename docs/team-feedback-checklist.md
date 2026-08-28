@@ -111,37 +111,44 @@ Acceptance criteria: all narrative counts and claims match the structured respon
 
 ## 8. Provide dashboard and filters
 
-- [ ] Build a working dashboard consuming the analysis response.
-- [ ] Add employee filtering.
-- [ ] Add team filtering when team information is available and mapped.
-- [ ] Clearly distinguish scored employees from `Insufficient data` employees.
-- [ ] Display overall score and tier only for eligible employees.
+- [x] Build a working dashboard consuming the analysis response.
+- [x] Add employee filtering.
+- [x] Add team filtering when team information is available and mapped.
+- [x] Clearly distinguish scored employees from `Insufficient data` employees.
+- [x] Display overall score and tier only for eligible employees.
 
-Current gap: the latest deliverable is an API JSON response, not a working dashboard.
+Verified in code: the Vue dashboard consumes the analysis response, applies employee, team,
+and reporting-period filters through the API, distinguishes insufficient-data results, and
+withholds overall scores and tiers when the backend returns them as unavailable.
 
 Acceptance criteria: a user can filter and inspect employee and team performance through the working interface.
 
 ## 9. Add 12-week trends
 
-- [ ] Return or derive weekly KPI data covering the complete 12-week period.
-- [ ] Add employee-level trends.
-- [ ] Add team-level trends when team data is available.
-- [ ] Represent missing weekly evidence without treating it as a zero score.
+- [x] Return or derive weekly KPI data covering the complete 12-week period.
+- [x] Add employee-level trends.
+- [x] Add team-level trends when team data is available.
+- [x] Represent missing weekly evidence without treating it as a zero score.
 - [ ] Preserve traceability from trend points to supporting records.
 
-Current gap: no weekly series or trend fields are returned.
+Current state: deterministic weekly series are returned and respond to employee, team, and
+period filters. Missing component values remain unavailable rather than becoming zero. Trend
+points include record counts, but do not yet return the supporting record IDs directly.
 
 Acceptance criteria: the dashboard displays auditable 12-week trends without inventing values for missing evidence.
 
 ## 10. Add alerts
 
-- [ ] Convert relevant validation findings into explicit employee alerts.
-- [ ] Assign alert type and priority/severity.
-- [ ] Include supporting record IDs or evidence links.
+- [x] Convert relevant validation findings into explicit employee alerts.
+- [x] Assign alert type and priority/severity.
+- [x] Include supporting record IDs or evidence links.
 - [ ] Distinguish data-quality alerts from performance alerts.
-- [ ] Avoid duplicating the same issue in findings and alerts without a clear reason.
+- [x] Avoid duplicating the same issue in findings and alerts without a clear reason.
 
-Current state: detailed validation findings provide a partial alert mechanism, but there is no dedicated prioritized alert output.
+Current state: the response contains grouped, prioritized employee alerts with supporting
+record IDs and evidence links where available. The dashboard previews priority alerts and
+provides a dedicated filterable, paginated alerts view. An explicit data-quality versus
+performance-alert category is still outstanding.
 
 Acceptance criteria: actionable alerts are clearly presented and traceable to source evidence.
 
@@ -199,5 +206,5 @@ Acceptance criteria: users can see which deterministic and agent-assisted stages
 - [x] All required missing evidence lowers confidence consistently.
 - [x] Eligible employees have verified overall scores and tiers.
 - [x] The final narrative agrees with the structured results.
-- [ ] The dashboard supports employee/team filters and 12-week trends.
+- [x] The dashboard supports employee/team filters and 12-week trends.
 - [ ] Alerts, recommendations, evidence, validation, and workflow information are visible and traceable.

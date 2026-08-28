@@ -88,6 +88,14 @@ benchmark values within 0.1.
 
 ## Phase 4: Add filtering and trend analysis
 
+**Status: Complete.** Employee, team, and reporting-period filters are connected through the
+API and consistently update KPI results, summaries, trends, and supporting alerts. The
+response identifies the applied filters and date range, returns deterministic weekly trend
+points from Python, and preserves component scores as unavailable rather than treating
+missing evidence as zero. The Vue dashboard presents these results with employee-table
+pagination, a KPI trend chart, priority-alert previews, and a dedicated filterable alerts
+view.
+
 Support analysis by employee, team, and reporting period. Keep filtering and aggregation in
 services so routes remain thin. Make it clear which records and date range were included in
 each result.

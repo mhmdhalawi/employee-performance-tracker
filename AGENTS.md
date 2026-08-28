@@ -257,9 +257,11 @@ request-scoped catalog to the agent for bounded inspection and semantic mapping,
 returned mappings in Python, builds the canonical dataset, runs deterministic source-data
 validation, and calculates KPI scores, evidence confidence, gated overall scores, and tiers.
 The response contains employee-specific findings, supporting record IDs, a validation
-summary, unmatched/global findings, KPI results, and a deterministic summary derived from the
-final results; it does not return parsed source rows. Phases 2 and 3 are complete, with the
-documented EMP-027/EMP-029 benchmark exception described in `docs/benchmark.md`.
+summary, unmatched/global findings, KPI results, applied filters, deterministic weekly trends,
+and a deterministic summary derived from the final results; it does not return parsed source
+rows. The Vue client presents employee results, KPI trends, priority alerts, and a dedicated
+filterable alerts view. Phases 2 through 4 are complete, with the documented EMP-027/EMP-029
+benchmark exception described in `docs/benchmark.md`.
 
 ---
 
