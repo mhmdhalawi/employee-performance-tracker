@@ -1,6 +1,7 @@
-# AGENTS.md — Employee Performance Tracking Agent (Backend)
+# AGENTS.md — Employee Performance Tracking Agent
 
-This file is the primary development guide for the backend. Read it before writing code.
+This file is the primary development guide for the FastAPI backend and Vue web app. Read it
+before writing code.
 If something here conflicts with a request, mention the conflict and follow the request.
 
 ---
@@ -75,13 +76,16 @@ require the user to attach it or authorize its local path in a new session.
 
 | Concern | Choice |
 | --- | --- |
-| Language | Python 3.14 (`.python-version`) |
-| Web | FastAPI (`fastapi[standard]`) |
-| Deps / env | **uv** (never `pip install` into the venv) |
+| Backend language | Python 3.14 (`.python-version`) |
+| Backend web | FastAPI (`fastapi[standard]`) |
+| Backend deps / env | **uv** (never `pip install` into the venv) |
 | Validation | Pydantic v2 + pydantic-settings |
 | Tabular data | pandas (+ openpyxl for `.xlsx`) |
 | LLM | `openai` SDK |
 | Agent layer | PydanticAI (`pydantic-ai-slim[openai]`) |
+| Frontend | Vue 3 + TypeScript + Vite (`web/`) |
+| Frontend deps | **pnpm** (never npm or yarn) |
+| Frontend styling | Tailwind CSS v4 + shadcn-vue (Nova, neutral) |
 
 **Not allowed without a strong, stated reason:** LangChain, a database/ORM, Celery/Redis,
 Docker Compose stacks, auth systems.
@@ -96,6 +100,12 @@ uv add <package>                     # add a dependency (updates pyproject + loc
 uvx library-skills --all             # discover/refresh AI skills bundled with installed dependencies
 
 uv run fastapi dev app/main.py       # dev server, http://127.0.0.1:8000/docs
+
+cd web
+pnpm install                         # install/refresh deps from pnpm-lock.yaml
+pnpm dev                             # frontend dev server, http://127.0.0.1:5173
+pnpm build                           # type-check and create the production build
+pnpm dlx shadcn-vue@latest add <component>  # add a shadcn-vue component as source
 ```
 
 Run `uvx library-skills --all` after adding or updating dependencies. It only adds skills
@@ -120,8 +130,9 @@ Copy `.env.example` → `.env` and set `OPENAI_API_KEY` to enable the agent.
 
 ## 4. Layout
 
-**The repo root *is* the backend**, and the application package is `app/` at the root — a
-flat layout, not `src/`. The build backend is told this explicitly in `pyproject.toml`:
+The backend remains at the repository root, and the application package is `app/` — a flat
+Python layout, not `src/`. The independently managed browser client lives in `web/`. The
+Python build backend is told about the flat backend layout explicitly in `pyproject.toml`:
 
 ```toml
 [tool.uv.build-backend]
@@ -141,25 +152,37 @@ tracker/
 │   └── team-feedback-checklist.md
 │                             # implementation status for received team feedback
 ├── pyproject.toml            # deps + build config
+├── uv.lock                   # Python dependency lock
 ├── .env.example
-└── app/
-    ├── main.py               # app, middleware, exception handlers, routers
-    ├── api/                  # FastAPI routes — thin: parse, call one service, return
-    │   ├── agent.py          # POST /ask and POST /analyze
-    │   └── health.py         # GET /health
-    ├── schemas/              # Pydantic request/response + internal models ONLY
-    │   ├── agent.py          # AskRequest, AskResponse
-    │   ├── performance.py    # canonical performance records and tool results
-    │   └── uploads.py        # upload-inspection response models
-    ├── services/             # all business logic lives here
-    │   ├── agent.py          # PydanticAI mapping agent + analysis workflow
-    │   ├── imports.py        # mechanical upload parsing and inspection
-    │   ├── performance.py    # validation and deterministic KPI calculations
-    │   └── uploads.py        # extension and size validation
-    ├── core/                 # config, errors, clients, storage
-    │   ├── config.py         # Settings (env-driven), get_settings()
-    │   └── errors.py         # AppError hierarchy + FastAPI handler
-    └── utils/                # small pure helpers (nothing here yet)
+├── app/
+│   ├── main.py               # app, middleware, exception handlers, routers
+│   ├── api/                  # FastAPI routes — thin: parse, call one service, return
+│   │   ├── agent.py          # POST /ask and POST /analyze
+│   │   └── health.py         # GET /health
+│   ├── schemas/              # Pydantic request/response + internal models ONLY
+│   │   ├── agent.py          # AskRequest, AskResponse
+│   │   ├── performance.py    # canonical performance records and tool results
+│   │   └── uploads.py        # upload-inspection response models
+│   ├── services/             # all business logic lives here
+│   │   ├── agent.py          # PydanticAI mapping agent + analysis workflow
+│   │   ├── imports.py        # mechanical upload parsing and inspection
+│   │   ├── performance.py    # validation and deterministic KPI calculations
+│   │   └── uploads.py        # extension and size validation
+│   ├── core/                 # config, errors, clients, storage
+│   │   ├── config.py         # Settings (env-driven), get_settings()
+│   │   └── errors.py         # AppError hierarchy + FastAPI handler
+│   └── utils/                # small pure helpers (nothing here yet)
+└── web/                      # Vue 3 browser client
+    ├── components.json       # shadcn-vue project configuration
+    ├── package.json          # frontend scripts and dependencies
+    ├── pnpm-lock.yaml        # frontend dependency lock
+    ├── vite.config.ts        # Vite, Tailwind, and @ alias configuration
+    └── src/
+        ├── components/       # app and shadcn-vue components
+        ├── lib/utils.ts      # shared cn() class helper
+        ├── App.vue
+        ├── main.ts
+        └── style.css         # Tailwind import and global theme tokens
 ```
 
 ### Dependency direction
@@ -172,6 +195,29 @@ api  ->  services  ->  schemas / utils / core
 `services/` must not import FastAPI (`Request`, `UploadFile`, `HTTPException`, …) — services
 take plain `bytes`/models and raise `AppError` subclasses. That keeps them reusable from the
 future webhook path.
+
+### Frontend architecture
+
+The `web/` app is a separate Vite application in the same repository. It consumes the
+FastAPI `/api/v1` contract and must not import Python modules. Keep uploads, filters, view
+state, and presentation logic in Vue; keep source validation, KPI formulas, evidence
+confidence, trend calculation, and all other business arithmetic in Python.
+
+Use pnpm exclusively within `web/`. Do not commit `node_modules/`, `dist/`, `.pnpm-store/`,
+or other generated caches. The frontend may retain one request's structured analysis in
+browser memory for interactive filtering, but must not introduce backend persistence or
+recalculate authoritative KPI values in JavaScript.
+
+Use the configured `@/` alias for imports from `web/src`. Prefer existing shadcn-vue
+components over custom equivalents and add them through
+`pnpm dlx shadcn-vue@latest add <component>`. Before using or changing a shadcn-vue
+component, inspect its current CLI documentation and the installed component source.
+
+Use Tailwind semantic theme tokens such as `bg-background` and `text-muted-foreground`.
+Use utility classes primarily for layout, prefer `gap-*` over `space-x-*`/`space-y-*`, use
+`size-*` when width and height match, and use `cn()` for conditional classes. Preserve the
+accessibility composition required by shadcn-vue, including titles for dialogs/sheets and
+fallbacks for avatars.
 
 ---
 
@@ -303,6 +349,8 @@ outlive a single request. Do not add a database without asking.
 
 ## 10. Style
 
+### Backend
+
 - **No module-level docstrings or header comment blocks.** Files start directly with their
   first import or statement — no summary of what the file contains at the top. Architectural
   context belongs in this file, not repeated across source headers.
@@ -314,6 +362,17 @@ outlive a single request. Do not add a database without asking.
   deals in plain Pydantic models.
 - No `print` in library code.
 
+### Frontend
+
+- Use Vue Single-File Components with `<script setup lang="ts">` and fully typed props,
+  emits, API data, and composables.
+- Keep page-level orchestration in views/components and extract reusable stateful behaviour
+  into composables. Do not put backend business rules into components.
+- Use shadcn-vue components and variants before creating custom styled controls. Use Lucide
+  icons through the icon package configured by `components.json`.
+- Cover loading, empty, API-error, and `Insufficient data` states explicitly. Never turn a
+  missing overall score into zero or infer a performance tier in the browser.
+
 ---
 
 ## 11. Working agreements for coding tasks
@@ -324,6 +383,8 @@ outlive a single request. Do not add a database without asking.
 4. Touch only what the task needs — no drive-by refactors, no reformatting unrelated files.
 5. Exercise the change against the running dev server before reporting done, and say plainly
    if anything fails.
+6. For frontend changes, also run `pnpm build` from `web/` and inspect the rendered app in a
+   browser at the relevant desktop and mobile sizes.
 
 ---
 
