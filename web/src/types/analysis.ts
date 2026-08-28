@@ -5,9 +5,36 @@ export interface AnalysisSummary {
   narrative: string
 }
 
+export interface AnalysisFilters {
+  employee_id: string | null
+  team: string | null
+  start_date: string | null
+  end_date: string | null
+}
+
+export interface DatasetOverview {
+  employee_count: number
+  date_start: string | null
+  date_end: string | null
+  record_counts: Record<string, number>
+  teams: string[]
+}
+
+export interface ValidationFinding {
+  code: string
+  severity: 'error' | 'warning' | 'info'
+  message: string
+  record_ids: string[]
+  employee_id: string | null
+  source_type: string | null
+  scoring_impact: string
+}
+
 export interface EmployeeKpiResult {
   employee_id: string
   employee_name: string | null
+  team: string | null
+  role: string | null
   productivity_score: number | null
   productivity_reason: string
   compliance_score: number | null
@@ -21,7 +48,44 @@ export interface EmployeeKpiResult {
   result_status: string
   performance_tier: string | null
   supporting_record_ids: string[]
-  validation_findings: unknown[]
+  evidence_links: string[]
+  validation_findings: ValidationFinding[]
+}
+
+export interface KpiTrendPoint {
+  period_start: string
+  period_end: string
+  employee_count: number
+  scored_employee_count: number
+  productivity_employee_count: number
+  compliance_employee_count: number
+  quality_employee_count: number
+  productivity_score: number | null
+  compliance_score: number | null
+  quality_score: number | null
+  overall_score: number | null
+  data_confidence: number | null
+  record_count: number
+}
+
+export interface PerformanceAlert {
+  code: string
+  severity: 'error' | 'warning' | 'info'
+  message: string
+  employee_id: string | null
+  employee_name: string | null
+  team: string | null
+  occurrence_count: number
+  record_ids: string[]
+  evidence_links: string[]
+  scoring_impact: string
+}
+
+export interface DashboardFilters {
+  employee_id?: string
+  team?: string
+  start_date?: string
+  end_date?: string
 }
 
 export interface AnalyzeResponse {
@@ -30,6 +94,11 @@ export interface AnalyzeResponse {
   byte_size: number
   results: EmployeeKpiResult[]
   summary: AnalysisSummary
+  dataset_overview: DatasetOverview
+  applied_filters: AnalysisFilters
+  available_teams: string[]
+  trends: KpiTrendPoint[]
+  alerts: PerformanceAlert[]
   limitations: string[]
   selected_tables: string[]
   model: string | null

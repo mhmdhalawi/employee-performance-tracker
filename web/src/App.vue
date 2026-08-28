@@ -21,7 +21,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Spinner } from '@/components/ui/spinner'
 import PerformanceDashboard from '@/components/dashboard/PerformanceDashboard.vue'
 import { cn } from '@/lib/utils'
-import type { AnalyzeResponse, ErrorPayload } from '@/types/analysis'
+import type { AnalyzeResponse, DashboardFilters, ErrorPayload } from '@/types/analysis'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
@@ -34,6 +34,9 @@ const analysis = ref<AnalyzeResponse | null>(null)
 const isDragging = ref(false)
 const isSubmitting = ref(false)
 const showDashboard = ref(false)
+const isFiltering = ref(false)
+const filterError = ref('')
+let requestSequence = 0
 
 const selectedFileSize = computed(() => {
   if (!selectedFile.value)
@@ -102,21 +105,34 @@ async function readErrorMessage(response: Response): Promise<string> {
   }
 }
 
-async function submitAnalysis(): Promise<void> {
+async function requestAnalysis(filters: DashboardFilters = {}, filtering = false): Promise<void> {
   if (!selectedFile.value) {
     fileError.value = 'Select a CSV or XLSX file before submitting.'
     return
   }
 
-  isSubmitting.value = true
-  requestError.value = ''
-  analysis.value = null
+  const sequence = ++requestSequence
+  if (filtering) {
+    isFiltering.value = true
+    filterError.value = ''
+  }
+  else {
+    isSubmitting.value = true
+    requestError.value = ''
+    analysis.value = null
+  }
 
   const formData = new FormData()
   formData.append('file', selectedFile.value)
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/analyze`, {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) {
+      if (value)
+        query.set(key, value)
+    }
+    const endpoint = `${API_BASE_URL}/api/v1/analyze${query.size ? `?${query}` : ''}`
+    const response = await fetch(endpoint, {
       method: 'POST',
       body: formData,
     })
@@ -124,22 +140,43 @@ async function submitAnalysis(): Promise<void> {
     if (!response.ok)
       throw new Error(await readErrorMessage(response))
 
+    if (sequence !== requestSequence)
+      return
+
     analysis.value = await response.json() as AnalyzeResponse
     showDashboard.value = true
   }
   catch (error) {
-    requestError.value = error instanceof TypeError
+    const message = error instanceof TypeError
       ? 'The API could not be reached. Confirm the FastAPI server is running on port 8000.'
       : error instanceof Error ? error.message : 'The file could not be analyzed.'
+    if (filtering)
+      filterError.value = message
+    else
+      requestError.value = message
   }
   finally {
-    isSubmitting.value = false
+    if (sequence === requestSequence) {
+      isSubmitting.value = false
+      isFiltering.value = false
+    }
   }
+}
+
+async function submitAnalysis(): Promise<void> {
+  await requestAnalysis()
 }
 </script>
 
 <template>
-  <PerformanceDashboard v-if="showDashboard" :analysis="analysis" @back="showDashboard = false" />
+  <PerformanceDashboard
+    v-if="showDashboard"
+    :analysis="analysis"
+    :is-filtering="isFiltering"
+    :filter-error="filterError"
+    @back="showDashboard = false"
+    @filters-change="requestAnalysis($event, true)"
+  />
   <main v-else class="min-h-svh bg-muted/30 px-4 py-8 sm:px-6 sm:py-12">
     <div class="mx-auto flex w-full max-w-2xl flex-col gap-8">
       <header class="flex flex-col items-center gap-3 text-center">
@@ -263,8 +300,8 @@ async function submitAnalysis(): Promise<void> {
       </Card>
 
       <div class="flex flex-col items-center gap-2 text-center">
-        <p class="text-sm text-muted-foreground">Want to review the Day 4 dashboard before connecting backend fields?</p>
-        <Button variant="outline" @click="showDashboard = true">View dashboard preview</Button>
+        <p class="text-sm text-muted-foreground">Want to explore the dashboard before running an analysis?</p>
+        <Button variant="outline" @click="showDashboard = true">Preview with sample data</Button>
       </div>
     </div>
   </main>
