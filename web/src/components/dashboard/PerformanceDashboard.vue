@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
-import { ArrowLeftIcon, FileSpreadsheetIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
+import { ArrowLeftIcon, FileSpreadsheetIcon, ListFilterIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import PerformanceAlerts from '@/components/dashboard/PerformanceAlerts.vue'
 import { previewResults, previewTeams, previewTrends } from '@/data/dashboard-preview'
 import type { AnalyzeResponse, DashboardFilters, EmployeeKpiResult, PerformanceAlert } from '@/types/analysis'
 
@@ -39,6 +40,7 @@ const team = ref('all')
 const period = ref('full')
 const currentPage = ref(1)
 const pageSize = ref('10')
+const showAlerts = ref(false)
 const employeeOptions = ref<EmployeeKpiResult[]>(props.analysis?.results ?? previewResults)
 let filterTimer: number | undefined
 
@@ -97,7 +99,7 @@ const trendData = computed<DashboardTrendPoint[]>(() => props.analysis
       compliance: point.compliance,
       quality: point.quality,
     })))
-const visibleAlerts = computed(() => props.analysis?.alerts.slice(0, 6) ?? [])
+const visibleAlerts = computed(() => props.analysis?.alerts.slice(0, 3) ?? [])
 const appliedPeriod = computed(() => {
   const filters = props.analysis?.applied_filters
   return filters?.start_date && filters.end_date
@@ -170,7 +172,11 @@ function employeeLabel(row: EmployeeKpiResult): string {
 }
 
 function alertTitle(alert: PerformanceAlert): string {
-  return `${alert.employee_name || alert.employee_id || 'Dataset'} · ${alert.code.replaceAll('_', ' ')}`
+  return `${alert.employee_name || alert.employee_id || 'Dataset'} · ${alertCodeLabel(alert.code)}`
+}
+
+function alertCodeLabel(code: string): string {
+  return code.replaceAll('_', ' ')
 }
 
 function alertRecords(alert: PerformanceAlert): string {
@@ -193,7 +199,13 @@ function formatIsoDate(value: Date): string {
 </script>
 
 <template>
-  <main class="min-h-svh bg-muted/30">
+  <PerformanceAlerts
+    v-if="showAlerts && analysis"
+    :alerts="analysis.alerts"
+    :file-name="analysis.file_name"
+    @back="showAlerts = false"
+  />
+  <main v-else class="min-h-svh bg-muted/30">
     <header class="border-b bg-background">
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">
@@ -258,7 +270,7 @@ function formatIsoDate(value: Date): string {
         </CardFooter>
       </Card>
 
-      <section class="grid gap-6 xl:grid-cols-[2fr_1fr]">
+      <section class="grid items-start gap-6 xl:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Weekly KPI trend</CardTitle><CardDescription>Independent weekly component averages for the selected population.</CardDescription></div><Badge v-if="isPreview" variant="secondary">Preview data</Badge><Badge v-else variant="outline">{{ trendData.length }} periods</Badge></div></CardHeader>
           <CardContent>
@@ -268,13 +280,15 @@ function formatIsoDate(value: Date): string {
         </Card>
 
         <Card>
-          <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Attention needed</CardTitle><CardDescription>Grouped findings with supporting records.</CardDescription></div><Badge v-if="isPreview" variant="secondary">Preview data</Badge><Badge v-else variant="outline">{{ analysis?.alerts.length ?? 0 }} alerts</Badge></div></CardHeader>
+          <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Priority alerts</CardTitle><CardDescription>Highest-priority grouped findings.</CardDescription></div><Badge v-if="isPreview" variant="secondary">Preview data</Badge><Badge v-else variant="outline">{{ analysis?.alerts.length ?? 0 }} alerts</Badge></div></CardHeader>
           <CardContent class="flex flex-col gap-4">
             <template v-if="isPreview"><Alert variant="warning"><TriangleAlertIcon aria-hidden="true" /><AlertTitle>EMP-029 has insufficient evidence</AlertTitle><AlertDescription>Overall score and tier are withheld. Supporting records: PRJ-1237, QA-991.</AlertDescription></Alert><Alert><FileSpreadsheetIcon aria-hidden="true" /><AlertTitle>Reporting gap detected</AlertTitle><AlertDescription>One submitted-report period needs review for EMP-018.</AlertDescription></Alert></template>
             <Alert v-for="alert in visibleAlerts" v-else :key="`${alert.employee_id}-${alert.code}`" :variant="alert.severity === 'info' ? 'default' : 'warning'"><TriangleAlertIcon v-if="alert.severity !== 'info'" aria-hidden="true" /><FileSpreadsheetIcon v-else aria-hidden="true" /><AlertTitle class="capitalize">{{ alertTitle(alert) }} <Badge variant="outline">{{ alert.occurrence_count }}</Badge></AlertTitle><AlertDescription>{{ alert.message }}<span v-if="alert.record_ids.length" class="block">Records: {{ alertRecords(alert) }}</span><a v-if="alert.evidence_links[0]" class="text-primary underline-offset-4 hover:underline" :href="alert.evidence_links[0]" target="_blank" rel="noreferrer">Open evidence</a></AlertDescription></Alert>
             <p v-if="!isPreview && !visibleAlerts.length" class="py-8 text-center text-sm text-muted-foreground">No findings require attention for this filter.</p>
-            <p v-if="!isPreview && (analysis?.alerts.length ?? 0) > visibleAlerts.length" class="text-xs text-muted-foreground">Showing the first {{ visibleAlerts.length }} grouped alerts.</p>
           </CardContent>
+          <CardFooter v-if="!isPreview && (analysis?.alerts.length ?? 0) > 0" class="border-t">
+            <Button class="w-full" variant="outline" @click="showAlerts = true"><ListFilterIcon data-icon="inline-start" />View all {{ analysis?.alerts.length }} alerts</Button>
+          </CardFooter>
         </Card>
       </section>
     </div>
