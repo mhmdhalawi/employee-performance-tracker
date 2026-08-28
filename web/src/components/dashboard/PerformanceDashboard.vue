@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
 import { ArrowLeftIcon, FileSpreadsheetIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
@@ -38,6 +39,13 @@ const chartConfig = {
   compliance: { label: 'Compliance', color: 'var(--chart-2)' },
   quality: { label: 'Quality', color: 'var(--chart-3)' },
 } satisfies ChartConfig
+
+const summaryCards = computed(() => [
+  { label: 'Overall score', value: averages.value.overall, detail: 'Scored employees only', color: 'var(--primary)' },
+  { label: 'Productivity', value: averages.value.productivity, detail: '35% of overall', color: 'var(--chart-1)' },
+  { label: 'Compliance', value: averages.value.compliance, detail: '30% of overall', color: 'var(--chart-2)' },
+  { label: 'Quality', value: averages.value.quality, detail: '35% of overall', color: 'var(--chart-3)' },
+])
 
 type TrendPoint = (typeof previewTrends)[number]
 const trendX = (_point: TrendPoint, index: number) => index
@@ -112,14 +120,12 @@ function employeeLabel(row: EmployeeKpiResult): string {
       </p>
 
       <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card v-for="item in [
-          ['Overall score', averages.overall, 'Scored employees only'],
-          ['Productivity', averages.productivity, '35% of overall'],
-          ['Compliance', averages.compliance, '30% of overall'],
-          ['Quality', averages.quality, '35% of overall'],
-        ]" :key="item[0] as string">
-          <CardHeader class="pb-2"><CardDescription>{{ item[0] }}</CardDescription><CardTitle class="text-3xl">{{ score(item[1] as number | null) }}</CardTitle></CardHeader>
-          <CardContent class="text-xs text-muted-foreground">{{ item[2] }}</CardContent>
+        <Card v-for="item in summaryCards" :key="item.label">
+          <CardHeader class="pb-2">
+            <CardDescription class="flex items-center gap-2"><span class="size-2 rounded-full" :style="{ backgroundColor: item.color }" />{{ item.label }}</CardDescription>
+            <CardTitle class="text-3xl" :style="{ color: item.color }">{{ score(item.value) }}</CardTitle>
+          </CardHeader>
+          <CardContent class="text-xs text-muted-foreground">{{ item.detail }}</CardContent>
         </Card>
       </section>
 
@@ -142,7 +148,7 @@ function employeeLabel(row: EmployeeKpiResult): string {
                 <TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell>
                 <TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell>
                 <TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell>
-                <TableCell><Badge :variant="row.overall_score === null ? 'secondary' : 'outline'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell>
+                <TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell>
               </TableRow>
               <TableRow v-if="!filteredRows.length"><TableCell colspan="8" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
             </TableBody>
@@ -171,8 +177,8 @@ function employeeLabel(row: EmployeeKpiResult): string {
         <Card>
           <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Attention needed</CardTitle><CardDescription>Evidence-backed findings to review.</CardDescription></div><Badge variant="secondary">Preview data</Badge></div></CardHeader>
           <CardContent class="flex flex-col gap-4">
-            <div class="flex gap-3 rounded-lg border p-3"><TriangleAlertIcon class="mt-0.5 size-4 shrink-0 text-amber-600" /><div class="flex flex-col gap-1"><p class="text-sm font-medium">EMP-029 has insufficient evidence</p><p class="text-xs text-muted-foreground">Overall score and tier are withheld. Supporting records: PRJ-1237, QA-991.</p></div></div>
-            <div class="flex gap-3 rounded-lg border p-3"><FileSpreadsheetIcon class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div class="flex flex-col gap-1"><p class="text-sm font-medium">Reporting gap detected</p><p class="text-xs text-muted-foreground">One submitted-report period needs review for EMP-018.</p></div></div>
+            <Alert variant="warning"><TriangleAlertIcon aria-hidden="true" /><AlertTitle>EMP-029 has insufficient evidence</AlertTitle><AlertDescription>Overall score and tier are withheld. Supporting records: PRJ-1237, QA-991.</AlertDescription></Alert>
+            <Alert><FileSpreadsheetIcon aria-hidden="true" /><AlertTitle>Reporting gap detected</AlertTitle><AlertDescription>One submitted-report period needs review for EMP-018.</AlertDescription></Alert>
           </CardContent>
         </Card>
       </section>
