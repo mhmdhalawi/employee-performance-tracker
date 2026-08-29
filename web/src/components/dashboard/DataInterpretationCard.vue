@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { CSSProperties } from 'vue'
 import { computed } from 'vue'
 import { ArrowRightIcon, DatabaseIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Badge } from '@/components/ui/badge'
@@ -44,6 +45,8 @@ function confidenceVariant(confidence: TableClassification['confidence']): 'succ
 }
 
 function familyVariant(family: string): 'default' | 'secondary' | 'outline' | 'warning' {
+  if (['productivity', 'compliance', 'quality'].includes(family))
+    return 'outline'
   if (family === 'unsupported')
     return 'warning'
   if (family === 'irrelevant')
@@ -51,6 +54,22 @@ function familyVariant(family: string): 'default' | 'secondary' | 'outline' | 'w
   if (family === 'shared')
     return 'secondary'
   return 'default'
+}
+
+function familyStyle(family: string): CSSProperties | undefined {
+  const colors: Record<string, string> = {
+    productivity: 'var(--chart-1)',
+    compliance: 'var(--chart-2)',
+    quality: 'var(--chart-3)',
+  }
+  const color = colors[family]
+  if (!color)
+    return undefined
+  return {
+    color,
+    backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
+    borderColor: `color-mix(in oklab, ${color} 28%, transparent)`,
+  }
 }
 </script>
 
@@ -75,15 +94,15 @@ function familyVariant(family: string): 'default' | 'secondary' | 'outline' | 'w
               <ArrowRightIcon data-icon="inline-end" />
             </Button>
           </SheetTrigger>
-          <SheetContent class="w-full overflow-y-auto sm:max-w-2xl">
-            <SheetHeader>
+          <SheetContent class="w-full gap-0 sm:max-w-2xl">
+            <SheetHeader class="border-b border-primary/15 bg-primary/5 px-5 py-5 sm:px-6">
               <SheetTitle>Data interpretation details</SheetTitle>
               <SheetDescription>
                 Source tables, KPI classifications, approved calculators, and validated field bindings for this analysis.
               </SheetDescription>
             </SheetHeader>
 
-            <div class="flex flex-col gap-5 px-4 pb-6">
+            <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 sm:px-6">
               <div v-for="item in classifications" :key="item.source_name" class="flex flex-col gap-3 rounded-lg border p-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div class="flex flex-col gap-1">
@@ -91,7 +110,7 @@ function familyVariant(family: string): 'default' | 'secondary' | 'outline' | 'w
                     <p class="text-sm text-muted-foreground">{{ item.rationale }}</p>
                   </div>
                   <div class="flex flex-wrap gap-2">
-                    <Badge :variant="familyVariant(item.kpi_family)">{{ familyLabel(item.kpi_family) }}</Badge>
+                    <Badge :variant="familyVariant(item.kpi_family)" :style="familyStyle(item.kpi_family)">{{ familyLabel(item.kpi_family) }}</Badge>
                     <Badge :variant="confidenceVariant(item.confidence)">{{ familyLabel(item.confidence) }} confidence</Badge>
                   </div>
                 </div>
@@ -125,7 +144,7 @@ function familyVariant(family: string): 'default' | 'secondary' | 'outline' | 'w
 
     <CardContent class="flex flex-col gap-4">
       <div class="flex flex-wrap gap-2">
-        <Badge v-for="item in relevant" :key="item.source_name" :variant="familyVariant(item.kpi_family)">
+        <Badge v-for="item in relevant" :key="item.source_name" :variant="familyVariant(item.kpi_family)" :style="familyStyle(item.kpi_family)">
           {{ item.source_name }} · {{ familyLabel(item.kpi_family) }}
         </Badge>
       </div>
