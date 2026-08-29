@@ -50,6 +50,12 @@ uv run fastapi dev app/main.py
 
 The API documentation is available at http://127.0.0.1:8000/docs.
 
+Run the deterministic service regression suite from the repository root:
+
+```bash
+uv run python -m unittest discover -s tests -v
+```
+
 Run the frontend in a second terminal:
 
 ```bash

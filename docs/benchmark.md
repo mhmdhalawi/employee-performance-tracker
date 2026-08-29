@@ -55,22 +55,22 @@ workbook remains authoritative if this copied context becomes inconsistent with 
 
 | Test ID | Test name | Source tabs | Test condition | Expected result | Priority | Test status |
 | --- | --- | --- | --- | --- | --- | --- |
-| QA-01 | Duplicate attendance | Attendance | Two records share employee/date | Agent flags duplicate and excludes one | Critical | Not Run |
-| QA-02 | Approved leave neutrality | Attendance + Leave_Requests | Approved leave overlaps a workday | Compliance is not reduced | Critical | Not Run |
-| QA-03 | Missing exit | Attendance | `actual_end` is blank | Record confidence drops and alert cites row | Critical | Not Run |
-| QA-04 | Late report | Reports | Submission date is after due date | Report compliance decreases | High | Not Run |
-| QA-05 | Missing report | Reports | No submitted date | Missing report alert appears | High | Not Run |
-| QA-06 | Overdue project | Projects | Due date passed without completion | Productivity risk is shown | High | Not Run |
-| QA-07 | Low accuracy | Quality_Reviews | Accuracy below 75% | Quality coaching recommendation appears | Critical | Not Run |
-| QA-08 | Rework burden | Quality_Reviews | High rework with failed first pass | Quality score reflects both signals | High | Not Run |
-| QA-09 | Insufficient evidence | All | Verified evidence falls below 70% | Show `Insufficient data`, not low score | Critical | Not Run |
-| QA-10 | Calculation parity | Expected_KPI | Dashboard uses same inputs | Every employee score matches within 0.1 | Critical | Not Run |
-| QA-11 | Team filter | Employees + KPIs | Select one team | Only selected team records display | Medium | Not Run |
-| QA-12 | Evidence trace | All | Open an alert | Alert links to supporting record IDs | Critical | Not Run |
+| QA-01 | Duplicate attendance | Attendance | Two records share employee/date | Agent flags duplicate and excludes one | Critical | Passed |
+| QA-02 | Approved leave neutrality | Attendance + Leave_Requests | Approved leave overlaps a workday | Compliance is not reduced | Critical | Passed |
+| QA-03 | Missing exit | Attendance | `actual_end` is blank | Record confidence drops and alert cites row | Critical | Passed |
+| QA-04 | Late report | Reports | Submission date is after due date | Report compliance decreases | High | Passed |
+| QA-05 | Missing report | Reports | No submitted date | Missing report alert appears | High | Passed |
+| QA-06 | Overdue project | Projects | Due date passed without completion | Productivity risk is shown | High | Passed |
+| QA-07 | Low accuracy | Quality_Reviews | Accuracy below 75% | Quality coaching recommendation appears | Critical | Passed |
+| QA-08 | Rework burden | Quality_Reviews | High rework with failed first pass | Quality score reflects both signals | High | Passed |
+| QA-09 | Insufficient evidence | All | Verified evidence falls below 70% | Show `Insufficient data`, not low score | Critical | Passed |
+| QA-10 | Calculation parity | Expected_KPI | Dashboard uses same inputs | Every employee score matches within 0.1 | Critical | Passed with documented exception |
+| QA-11 | Team filter | Employees + KPIs | Select one team | Only selected team records display | Medium | Passed |
+| QA-12 | Evidence trace | All | Open an alert | Alert links to supporting record IDs | Critical | Passed |
 
 ## Current verified state
 
-Phases 2 through 4 are complete. The Cedar acceptance run processed all 30 employees with no
+Phases 2 through 6 are complete. The Cedar acceptance run processed all 30 employees with no
 import errors, flagged four duplicate-attendance cases, detected missing exits and missing
 evidence, and excluded four duplicate records from scoring. The verified one-shot planning run
 reproduced the same scores and finding counts with one model request and 6,113 tokens, down

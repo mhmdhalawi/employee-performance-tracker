@@ -101,6 +101,8 @@ uv add <package>                     # add a dependency (updates pyproject + loc
 uvx library-skills --all             # discover/refresh AI skills bundled with installed dependencies
 
 uv run fastapi dev app/main.py       # dev server, http://127.0.0.1:8000/docs
+uv run python -m unittest discover -s tests -v
+                                     # deterministic service regression suite
 
 cd web
 pnpm install                         # install/refresh deps from pnpm-lock.yaml
@@ -173,6 +175,8 @@ tracker/
 │   │   ├── config.py         # Settings (env-driven), get_settings()
 │   │   └── errors.py         # AppError hierarchy + FastAPI handler
 │   └── utils/                # small pure helpers (nothing here yet)
+├── tests/
+│   └── test_performance.py   # generic-evidence KPI and validation regressions
 └── web/                      # Vue 3 browser client
     ├── components.json       # shadcn-vue project configuration
     ├── package.json          # frontend scripts and dependencies
@@ -414,4 +418,4 @@ insights for the active analysis. Do not add a database without asking.
 ## 12. Deliberately out of scope for now
 
 Auth/multi-tenancy, database + migrations, background jobs, persisted historical data, PDF
-export, streaming AI responses, rate limiting, tests.
+export, streaming AI responses, and rate limiting.

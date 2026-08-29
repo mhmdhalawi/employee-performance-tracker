@@ -134,6 +134,14 @@ acceptance testing.
 
 ## Phase 6: Run the QA suite
 
+**Status: Complete.** Eight generic-evidence service tests cover the twelve benchmark QA
+expectations: deterministic calculation parity, duplicate-attendance exclusion and traceability,
+approved-leave neutrality, missing exits, late and missing submissions, overdue work, low
+accuracy and rework burden, insufficient-evidence gating, team filtering, and supporting
+evidence. The suite passes with `uv run python -m unittest discover -s tests -v`. The controlled
+30-employee acceptance response continues to reproduce the benchmark, subject to the documented
+EMP-027/EMP-029 duplicate-attendance exception.
+
 Turn the workbook's critical scenarios into automated tests. Cover duplicate attendance,
 approved-leave neutrality, missing exit records, late or missing reports, overdue projects,
 low accuracy, rework burden, insufficient evidence, calculation parity, filtering, and alert
