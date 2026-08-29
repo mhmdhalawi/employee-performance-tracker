@@ -95,7 +95,9 @@ response identifies the applied filters and date range, returns deterministic we
 points from Python, and preserves component scores as unavailable rather than treating
 missing evidence as zero. The Vue dashboard presents these results with sortable employee-table
 pagination, per-employee alert counts, a KPI trend chart, and a responsive employee detail
-sheet for traceable alerts and on-demand AI guidance.
+sheet for traceable alerts and on-demand AI guidance. It also presents a compact interpretation
+summary and a detail sheet containing table classifications, confidence, approved calculators,
+and validated field bindings.
 
 Support analysis by employee, team, and reporting period. Keep filtering and aggregation in
 services so routes remain thin. Make it clear which records and date range were included in

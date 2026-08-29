@@ -15,7 +15,9 @@ confidence, and trend calculations.
 
 After an analysis, the browser client provides employee, team, and reporting-period filters;
 summary KPIs; sortable, paginated employee results with alert counts; weekly KPI trends; and a
-responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
+responsive employee detail sheet containing traceable alerts and on-demand AI guidance. A
+data-interpretation card and detail sheet show each table's KPI classification, confidence,
+selected calculator, and validated source-column bindings.
 Analysis state remains in browser memory and is not persisted across a page refresh.
 
 ## Prerequisites

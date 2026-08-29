@@ -268,6 +268,9 @@ does not call the explanation model. A separate, optional `/insights` request ge
 guidance for one employee, and Python rejects employee or record citations that do not
 validate. The Vue client presents employee results with alert counts and sorting, KPI trends,
 and a responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
+The dashboard also exposes a compact data-interpretation summary and detail sheet for table
+classifications, confidence, approved calculator invocations, and field bindings. The upload
+screen sets the expectation that analysis may take a few seconds.
 Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark exception described in
 `docs/benchmark.md`.
 
@@ -353,7 +356,7 @@ Current endpoints:
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
 | `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
-| `POST` | `/api/v1/analyze` | upload, map, validate, and return employee KPI results with findings |
+| `POST` | `/api/v1/analyze` | upload, classify, validate, and return employee KPI results with findings |
 | `POST` | `/api/v1/insights` | generate on-demand guidance for one employee from a temporary analysis context |
 
 ---

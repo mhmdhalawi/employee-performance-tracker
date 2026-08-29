@@ -178,10 +178,14 @@ Acceptance criteria: every displayed result can be traced to record IDs and, whe
 
 - [x] Keep the validation summary and detailed findings.
 - [ ] Expose the important workflow stages: import, synopsis, classification/planning, plan validation/repair, evidence validation, KPI calculation, and response assembly.
-- [ ] Report classification confidence separately from employee data confidence.
+- [x] Report classification confidence separately from employee data confidence.
 - [ ] Record whether a calculation-plan repair request occurred.
 - [ ] Record calculator execution and exclusion counts without exposing raw source rows or private model reasoning.
 - [ ] Make the workflow suitable for display in the dashboard or an audit panel.
+
+The dashboard now exposes table-level KPI classifications, semantic confidence, selected
+calculator invocations, and validated bindings in a dedicated interpretation card and sheet.
+Full stage timing, repair diagnostics, and calculator execution counts remain future work.
 
 Current state: the response includes selected tables, model name, token count, model request count, cache status, a validation summary, and detailed findings. It does not provide a complete workflow trace or validation log.
 
