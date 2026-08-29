@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
-import { ArrowDownIcon, ArrowLeftIcon, ArrowUpDownIcon, ArrowUpIcon, FileSpreadsheetIcon, ListFilterIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
+import { ArrowDownIcon, ArrowLeftIcon, ArrowUpDownIcon, ArrowUpIcon, EyeIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,9 +21,8 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import AIInsights from '@/components/dashboard/AIInsights.vue'
-import PerformanceAlerts from '@/components/dashboard/PerformanceAlerts.vue'
-import type { AIInsightResponse, AnalyzeResponse, DashboardFilters, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload, PerformanceAlert } from '@/types/analysis'
+import EmployeeDetailSheet from '@/components/dashboard/EmployeeDetailSheet.vue'
+import type { AIInsightResponse, AnalyzeResponse, DashboardFilters, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload } from '@/types/analysis'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 
@@ -42,13 +41,13 @@ const team = ref('all')
 const period = ref('full')
 const currentPage = ref(1)
 const pageSize = ref('10')
-const showAlerts = ref(false)
 const sortKey = ref<'name' | 'performance' | null>(null)
 const sortDirection = ref<'asc' | 'desc'>('asc')
 const allEmployeeOptions = ref<EmployeeKpiResult[]>(props.analysis.results)
 const insightsByEmployee = ref<Record<string, EmployeeAIInsight>>({})
 const insightLoadingEmployeeId = ref<string | null>(null)
 const insightError = ref('')
+const selectedEmployee = ref<EmployeeKpiResult | null>(null)
 let filterTimer: number | undefined
 
 const employeeOptions = computed(() => allEmployeeOptions.value.filter(row =>
@@ -117,16 +116,20 @@ const trendData = computed<DashboardTrendPoint[]>(() => props.analysis.trends.ma
   compliance: point.compliance_score,
   quality: point.quality_score,
 })))
-const scopedAlerts = computed(() => props.analysis.alerts.filter(alert => {
-  const isGlobal = !alert.employee_id && !alert.team
-  const matchesEmployee = employee.value === 'all' || alert.employee_id === employee.value
-  const matchesTeam = team.value === 'all' || alert.team === team.value
-  return isGlobal || (matchesEmployee && matchesTeam)
-}))
-const visibleAlerts = computed(() => scopedAlerts.value.slice(0, 3))
-const insightEmployees = computed(() => filteredRows.value.filter(
-  row => row.validation_findings.some(finding => finding.record_ids.length > 0),
+const alertCountsByEmployee = computed(() => props.analysis.alerts.reduce<Record<string, number>>(
+  (counts, alert) => {
+    if (alert.employee_id)
+      counts[alert.employee_id] = (counts[alert.employee_id] ?? 0) + alert.occurrence_count
+    return counts
+  },
+  {},
 ))
+const selectedEmployeeAlerts = computed(() => selectedEmployee.value
+  ? props.analysis.alerts.filter(alert => alert.employee_id === selectedEmployee.value?.employee_id)
+  : [])
+const selectedEmployeeInsight = computed(() => selectedEmployee.value
+  ? insightsByEmployee.value[selectedEmployee.value.employee_id] ?? null
+  : null)
 const appliedPeriod = computed(() => {
   const filters = props.analysis.applied_filters
   return filters?.start_date && filters.end_date
@@ -165,6 +168,7 @@ watch(() => props.analysis.analysis_id, () => {
   insightsByEmployee.value = {}
   insightLoadingEmployeeId.value = null
   insightError.value = ''
+  selectedEmployee.value = null
 })
 
 function buildFilters(): DashboardFilters {
@@ -213,18 +217,13 @@ function ariaSort(key: 'name' | 'performance'): 'ascending' | 'descending' | 'no
   return sortDirection.value === 'asc' ? 'ascending' : 'descending'
 }
 
-function alertTitle(alert: PerformanceAlert): string {
-  return `${alert.employee_name || alert.employee_id || 'Dataset'} · ${alertCodeLabel(alert.code)}`
+function alertCount(employeeId: string): number {
+  return alertCountsByEmployee.value[employeeId] ?? 0
 }
 
-function alertCodeLabel(code: string): string {
-  return code.replaceAll('_', ' ')
-}
-
-function alertRecords(alert: PerformanceAlert): string {
-  const preview = alert.record_ids.slice(0, 4).join(', ')
-  const remaining = alert.record_ids.length - 4
-  return remaining > 0 ? `${preview} +${remaining} more` : preview
+function openEmployeeDetails(row: EmployeeKpiResult): void {
+  insightError.value = ''
+  selectedEmployee.value = row
 }
 
 async function generateInsight(employeeId: string): Promise<void> {
@@ -276,13 +275,7 @@ function formatIsoDate(value: Date): string {
 </script>
 
 <template>
-  <PerformanceAlerts
-    v-if="showAlerts && analysis"
-    :alerts="scopedAlerts"
-    :file-name="analysis.file_name"
-    @back="showAlerts = false"
-  />
-  <main v-else class="min-h-svh bg-muted/30">
+  <main class="min-h-svh bg-muted/30">
     <header class="border-b bg-background">
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">
@@ -316,10 +309,10 @@ function formatIsoDate(value: Date): string {
         <CardHeader><div class="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Employee results</CardTitle><CardDescription>Component scores remain visible when overall scoring is withheld.</CardDescription></div><Badge variant="outline">{{ filteredRows.length }} employees</Badge></div></CardHeader>
         <CardContent class="overflow-x-auto">
           <Table>
-            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead class="min-w-36">Confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead class="min-w-36">Confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead><TableHead class="text-center">Alerts</TableHead><TableHead class="text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
-              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell>{{ row.team ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell></TableRow>
-              <TableRow v-if="!filteredRows.length"><TableCell colspan="8" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
+              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell>{{ row.team ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id) ? 'warning' : 'outline'">{{ alertCount(row.employee_id) }}</Badge></TableCell><TableCell class="text-right"><Button variant="outline" size="sm" @click="openEmployeeDetails(row)"><EyeIcon data-icon="inline-start" />View details</Button></TableCell></TableRow>
+              <TableRow v-if="!filteredRows.length"><TableCell colspan="10" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
             </TableBody>
           </Table>
         </CardContent>
@@ -347,34 +340,24 @@ function formatIsoDate(value: Date): string {
         </CardFooter>
       </Card>
 
-      <section class="grid items-start gap-6 xl:grid-cols-[2fr_1fr]">
-        <Card>
-          <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Weekly KPI trend</CardTitle><CardDescription>All employees for the selected reporting period. Employee and team filters apply to results and alerts.</CardDescription></div><Badge variant="outline">{{ trendData.length }} periods</Badge></div></CardHeader>
-          <CardContent>
-            <ChartContainer v-if="trendData.length" :config="chartConfig" class="h-72 w-full"><VisXYContainer :data="trendData" :y-domain="[0, 100]"><VisAxis type="x" :x="trendX" :tick-format="weekTick" /><VisAxis type="y" :tick-format="percentTick" /><VisLine :x="trendX" :y="productivityY" :color="chartConfig.productivity.color" /><VisLine :x="trendX" :y="complianceY" :color="chartConfig.compliance.color" /><VisLine :x="trendX" :y="qualityY" :color="chartConfig.quality.color" /><ChartTooltip /></VisXYContainer><ChartTooltipContent /></ChartContainer>
-            <p v-else class="py-16 text-center text-sm text-muted-foreground">No trend data is available for this filter.</p>
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Weekly KPI trend</CardTitle><CardDescription>All employees for the selected reporting period. Employee and team filters apply to results.</CardDescription></div><Badge variant="outline">{{ trendData.length }} periods</Badge></div></CardHeader>
+        <CardContent>
+          <ChartContainer v-if="trendData.length" :config="chartConfig" class="h-72 w-full"><VisXYContainer :data="trendData" :y-domain="[0, 100]"><VisAxis type="x" :x="trendX" :tick-format="weekTick" /><VisAxis type="y" :tick-format="percentTick" /><VisLine :x="trendX" :y="productivityY" :color="chartConfig.productivity.color" /><VisLine :x="trendX" :y="complianceY" :color="chartConfig.compliance.color" /><VisLine :x="trendX" :y="qualityY" :color="chartConfig.quality.color" /><ChartTooltip /></VisXYContainer><ChartTooltipContent /></ChartContainer>
+          <p v-else class="py-16 text-center text-sm text-muted-foreground">No trend data is available for this filter.</p>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Priority alerts</CardTitle><CardDescription>Highest-priority grouped findings.</CardDescription></div><Badge variant="outline">{{ scopedAlerts.length }} alerts</Badge></div></CardHeader>
-          <CardContent class="flex flex-col gap-4">
-            <Alert v-for="alert in visibleAlerts" :key="`${alert.employee_id}-${alert.code}`" :variant="alert.severity === 'info' ? 'default' : 'warning'"><TriangleAlertIcon v-if="alert.severity !== 'info'" aria-hidden="true" /><FileSpreadsheetIcon v-else aria-hidden="true" /><AlertTitle class="capitalize">{{ alertTitle(alert) }} <Badge variant="outline">{{ alert.occurrence_count }}</Badge></AlertTitle><AlertDescription>{{ alert.message }}<span v-if="alert.record_ids.length" class="block">Records: {{ alertRecords(alert) }}</span><a v-if="alert.evidence_links[0]" class="text-primary underline-offset-4 hover:underline" :href="alert.evidence_links[0]" target="_blank" rel="noreferrer">Open evidence</a></AlertDescription></Alert>
-            <p v-if="!visibleAlerts.length" class="py-8 text-center text-sm text-muted-foreground">No findings require attention for this filter.</p>
-          </CardContent>
-          <CardFooter v-if="scopedAlerts.length > 0" class="border-t">
-            <Button class="w-full" variant="outline" @click="showAlerts = true"><ListFilterIcon data-icon="inline-start" />View all {{ scopedAlerts.length }} alerts</Button>
-          </CardFooter>
-        </Card>
-      </section>
-
-      <AIInsights
-        :employees="insightEmployees"
-        :insights="insightsByEmployee"
-        :loading-employee-id="insightLoadingEmployeeId"
-        :error="insightError"
-        @generate="generateInsight"
-      />
     </div>
+
+    <EmployeeDetailSheet
+      :employee="selectedEmployee"
+      :alerts="selectedEmployeeAlerts"
+      :insight="selectedEmployeeInsight"
+      :insight-loading="insightLoadingEmployeeId === selectedEmployee?.employee_id"
+      :insight-error="insightError"
+      @close="selectedEmployee = null"
+      @generate-insight="generateInsight"
+    />
   </main>
 </template>
