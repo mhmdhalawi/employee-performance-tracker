@@ -58,7 +58,7 @@ from app.services.performance import (
     validate_dataset,
 )
 
-INSTRUCTIONS = """
+MAPPING_AGENT_INSTRUCTIONS = """
 You map uploaded employee-performance tables to the supplied canonical schema.
 
 Use only the bounded workbook synopsis in the user prompt. Select tables and map columns by
@@ -66,6 +66,21 @@ their headers, inferred types, missing-value counts, and sample values; do not r
 name alone. Return lower confidence when semantics are ambiguous. Map optional validation
 fields, especially attendance actual_end, whenever the source supports them. Do not calculate,
 validate source records, invent values, or explain scores. Return only the structured output.
+"""
+
+INSIGHTS_AGENT_INSTRUCTIONS = """
+You explain validated employee-performance findings and suggest constructive, low-risk next
+steps. Use only the supplied calculated results and findings. Do not calculate, alter, or
+repeat KPI numbers. Do not infer causes, intent, personality, or protected characteristics.
+Do not recommend hiring, firing, promotion, compensation, discipline, or other high-impact
+employment decisions. For Insufficient data results, recommend improving evidence coverage,
+not performance action. Every explanation and recommendation must cite one or more record IDs
+listed for that employee. Return no insight for an employee without a supported finding.
+For a missing report submission date, tell the user to verify whether the report was submitted;
+do not assume a submission occurred or instruct them to invent a date. Focus directly on the
+findings and avoid generic statements about complete source coverage. Put citations only in
+the structured record_ids fields. Never write record IDs, citation lists, or parenthetical
+citations inside message text. Mention only findings supported by that statement's record_ids.
 """
 
 _MAPPING_CACHE_MAX_SIZE = 64
@@ -91,27 +106,14 @@ _insight_context_cache: OrderedDict[str, CachedInsightContext] = OrderedDict()
 
 analysis_agent = Agent[None, UploadAnalysis](
     name="employee_performance_agent",
-    instructions=INSTRUCTIONS,
+    instructions=MAPPING_AGENT_INSTRUCTIONS,
     deps_type=type(None),
     output_type=UploadAnalysis,
 )
 
 insights_agent = Agent[None, EmployeeAIInsight](
     name="employee_performance_insights_agent",
-    instructions="""
-You explain validated employee-performance findings and suggest constructive, low-risk next
-steps. Use only the supplied calculated results and findings. Do not calculate, alter, or
-repeat KPI numbers. Do not infer causes, intent, personality, or protected characteristics.
-Do not recommend hiring, firing, promotion, compensation, discipline, or other high-impact
-employment decisions. For Insufficient data results, recommend improving evidence coverage,
-not performance action. Every explanation and recommendation must cite one or more record IDs
-listed for that employee. Return no insight for an employee without a supported finding.
-For a missing report submission date, tell the user to verify whether the report was submitted;
-do not assume a submission occurred or instruct them to invent a date. Focus directly on the
-findings and avoid generic statements about complete source coverage. Put citations only in
-the structured record_ids fields. Never write record IDs, citation lists, or parenthetical
-citations inside message text. Mention only findings supported by that statement's record_ids.
-""",
+    instructions=INSIGHTS_AGENT_INSTRUCTIONS,
     deps_type=type(None),
     output_type=EmployeeAIInsight,
 )
