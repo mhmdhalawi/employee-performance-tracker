@@ -21,8 +21,11 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import AIInsights from '@/components/dashboard/AIInsights.vue'
 import PerformanceAlerts from '@/components/dashboard/PerformanceAlerts.vue'
-import type { AnalyzeResponse, DashboardFilters, EmployeeKpiResult, PerformanceAlert } from '@/types/analysis'
+import type { AIInsightResponse, AnalyzeResponse, DashboardFilters, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload, PerformanceAlert } from '@/types/analysis'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 
 const props = defineProps<{
   analysis: AnalyzeResponse
@@ -43,6 +46,9 @@ const showAlerts = ref(false)
 const sortKey = ref<'name' | 'performance' | null>(null)
 const sortDirection = ref<'asc' | 'desc'>('asc')
 const allEmployeeOptions = ref<EmployeeKpiResult[]>(props.analysis.results)
+const insightsByEmployee = ref<Record<string, EmployeeAIInsight>>({})
+const insightLoadingEmployeeId = ref<string | null>(null)
+const insightError = ref('')
 let filterTimer: number | undefined
 
 const employeeOptions = computed(() => allEmployeeOptions.value.filter(row =>
@@ -118,6 +124,9 @@ const scopedAlerts = computed(() => props.analysis.alerts.filter(alert => {
   return isGlobal || (matchesEmployee && matchesTeam)
 }))
 const visibleAlerts = computed(() => scopedAlerts.value.slice(0, 3))
+const insightEmployees = computed(() => filteredRows.value.filter(
+  row => row.validation_findings.some(finding => finding.record_ids.length > 0),
+))
 const appliedPeriod = computed(() => {
   const filters = props.analysis.applied_filters
   return filters?.start_date && filters.end_date
@@ -150,6 +159,12 @@ watch(period, () => {
 
 watch([filteredRows, pageSize], () => {
   currentPage.value = 1
+})
+
+watch(() => props.analysis.analysis_id, () => {
+  insightsByEmployee.value = {}
+  insightLoadingEmployeeId.value = null
+  insightError.value = ''
 })
 
 function buildFilters(): DashboardFilters {
@@ -210,6 +225,41 @@ function alertRecords(alert: PerformanceAlert): string {
   const preview = alert.record_ids.slice(0, 4).join(', ')
   const remaining = alert.record_ids.length - 4
   return remaining > 0 ? `${preview} +${remaining} more` : preview
+}
+
+async function generateInsight(employeeId: string): Promise<void> {
+  if (insightsByEmployee.value[employeeId])
+    return
+
+  insightLoadingEmployeeId.value = employeeId
+  insightError.value = ''
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/insights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        analysis_id: props.analysis.analysis_id,
+        employee_id: employeeId,
+      }),
+    })
+    if (!response.ok) {
+      const payload = await response.json() as ErrorPayload
+      throw new Error(payload.error?.message ?? 'AI guidance could not be generated.')
+    }
+    const payload = await response.json() as AIInsightResponse
+    insightsByEmployee.value = {
+      ...insightsByEmployee.value,
+      [employeeId]: payload.insight,
+    }
+  }
+  catch (error) {
+    insightError.value = error instanceof TypeError
+      ? 'The API could not be reached. Confirm the FastAPI server is running.'
+      : error instanceof Error ? error.message : 'AI guidance could not be generated.'
+  }
+  finally {
+    insightLoadingEmployeeId.value = null
+  }
 }
 
 function parseDate(value: string): Date {
@@ -317,6 +367,14 @@ function formatIsoDate(value: Date): string {
           </CardFooter>
         </Card>
       </section>
+
+      <AIInsights
+        :employees="insightEmployees"
+        :insights="insightsByEmployee"
+        :loading-employee-id="insightLoadingEmployeeId"
+        :error="insightError"
+        @generate="generateInsight"
+      />
     </div>
   </main>
 </template>

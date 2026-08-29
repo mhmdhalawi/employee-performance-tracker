@@ -1,8 +1,10 @@
 import json
 from collections import OrderedDict
-from datetime import date
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from hashlib import sha256
+from secrets import token_urlsafe
 
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import (
@@ -19,7 +21,13 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.core.config import get_settings
-from app.core.errors import AIError, AIUnavailableError, InvalidAnalysisFilterError
+from app.core.errors import (
+    AIError,
+    AIUnavailableError,
+    InsightContextExpiredError,
+    InsightUnavailableError,
+    InvalidAnalysisFilterError,
+)
 from app.schemas.performance import (
     EmployeeKpiScores,
     KpiResult,
@@ -27,9 +35,11 @@ from app.schemas.performance import (
     ValidationFinding,
 )
 from app.schemas.uploads import (
+    AIInsightResponse,
     AnalysisFilters,
     AnalysisSummary,
     AnalyzeUploadResponse,
+    EmployeeAIInsight,
     ImportIssue,
     MappingProposal,
     MappingValidation,
@@ -60,6 +70,23 @@ validate source records, invent values, or explain scores. Return only the struc
 
 _MAPPING_CACHE_MAX_SIZE = 64
 _mapping_cache: OrderedDict[str, UploadAnalysis] = OrderedDict()
+_INSIGHT_CONTEXT_CACHE_MAX_SIZE = 32
+_INSIGHT_CONTEXT_TTL = timedelta(minutes=15)
+
+
+@dataclass(frozen=True, slots=True)
+class InsightEmployeeContext:
+    prompt_context: dict[str, object]
+    allowed_record_ids: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
+class CachedInsightContext:
+    created_at: datetime
+    employees: dict[str, InsightEmployeeContext]
+
+
+_insight_context_cache: OrderedDict[str, CachedInsightContext] = OrderedDict()
 
 
 analysis_agent = Agent[None, UploadAnalysis](
@@ -67,6 +94,26 @@ analysis_agent = Agent[None, UploadAnalysis](
     instructions=INSTRUCTIONS,
     deps_type=type(None),
     output_type=UploadAnalysis,
+)
+
+insights_agent = Agent[None, EmployeeAIInsight](
+    name="employee_performance_insights_agent",
+    instructions="""
+You explain validated employee-performance findings and suggest constructive, low-risk next
+steps. Use only the supplied calculated results and findings. Do not calculate, alter, or
+repeat KPI numbers. Do not infer causes, intent, personality, or protected characteristics.
+Do not recommend hiring, firing, promotion, compensation, discipline, or other high-impact
+employment decisions. For Insufficient data results, recommend improving evidence coverage,
+not performance action. Every explanation and recommendation must cite one or more record IDs
+listed for that employee. Return no insight for an employee without a supported finding.
+For a missing report submission date, tell the user to verify whether the report was submitted;
+do not assume a submission occurred or instruct them to invent a date. Focus directly on the
+findings and avoid generic statements about complete source coverage. Put citations only in
+the structured record_ids fields. Never write record IDs, citation lists, or parenthetical
+citations inside message text. Mention only findings supported by that statement's record_ids.
+""",
+    deps_type=type(None),
+    output_type=EmployeeAIInsight,
 )
 
 
@@ -205,45 +252,60 @@ async def analyze_upload(
         for project in performance_dataset.projects
         if project.evidence_link
     }
+    employee_results = [
+        EmployeeKpiScores(
+            employee_id=kpi.employee_id,
+            employee_name=kpi.employee_name,
+            team=employee_by_id[kpi.employee_id].team,
+            role=employee_by_id[kpi.employee_id].role,
+            productivity_score=kpi.productivity_score,
+            productivity_reason=kpi.productivity_reason,
+            compliance_score=kpi.compliance_score,
+            compliance_reason=kpi.compliance_reason,
+            quality_score=kpi.quality_score,
+            quality_reason=kpi.quality_reason,
+            data_confidence=kpi.data_confidence,
+            confidence_threshold=kpi.confidence_threshold,
+            confidence_reason=kpi.confidence_reason,
+            overall_score=kpi.overall_score,
+            result_status=kpi.result_status,
+            performance_tier=kpi.performance_tier,
+            supporting_record_ids=kpi.supporting_record_ids,
+            evidence_links=sorted(
+                {
+                    project_links[record_id]
+                    for record_id in kpi.supporting_record_ids
+                    if record_id in project_links
+                }
+            ),
+            validation_findings=[
+                finding
+                for finding in scoped_findings
+                if finding.employee_id == kpi.employee_id
+            ],
+        )
+        for kpi in kpi_results
+    ]
+    alerts = build_performance_alerts(
+        performance_dataset,
+        scoped_findings,
+        result_employee_ids,
+        included_record_ids,
+    )
+    limitations = _build_limitations(
+        performance_dataset,
+        analysis.mapping_proposals,
+        import_issues,
+        scoped_findings,
+    )
+    analysis_id = _cache_insight_context(employee_results)
 
     return AnalyzeUploadResponse(
+        analysis_id=analysis_id,
         file_name=upload_catalog.file_name,
         file_type=upload_catalog.file_type,
         byte_size=upload_catalog.byte_size,
-        results=[
-            EmployeeKpiScores(
-                employee_id=kpi.employee_id,
-                employee_name=kpi.employee_name,
-                team=employee_by_id[kpi.employee_id].team,
-                role=employee_by_id[kpi.employee_id].role,
-                productivity_score=kpi.productivity_score,
-                productivity_reason=kpi.productivity_reason,
-                compliance_score=kpi.compliance_score,
-                compliance_reason=kpi.compliance_reason,
-                quality_score=kpi.quality_score,
-                quality_reason=kpi.quality_reason,
-                data_confidence=kpi.data_confidence,
-                confidence_threshold=kpi.confidence_threshold,
-                confidence_reason=kpi.confidence_reason,
-                overall_score=kpi.overall_score,
-                result_status=kpi.result_status,
-                performance_tier=kpi.performance_tier,
-                supporting_record_ids=kpi.supporting_record_ids,
-                evidence_links=sorted(
-                    {
-                        project_links[record_id]
-                        for record_id in kpi.supporting_record_ids
-                        if record_id in project_links
-                    }
-                ),
-                validation_findings=[
-                    finding
-                    for finding in scoped_findings
-                    if finding.employee_id == kpi.employee_id
-                ],
-            )
-            for kpi in kpi_results
-        ],
+        results=employee_results,
         summary=_build_analysis_summary(kpi_results),
         dataset_overview=overview,
         applied_filters=AnalysisFilters(
@@ -260,12 +322,7 @@ async def analyze_upload(
             employee_id=employee_id,
             team=team,
         ),
-        alerts=build_performance_alerts(
-            performance_dataset,
-            scoped_findings,
-            result_employee_ids,
-            included_record_ids,
-        ),
+        alerts=alerts,
         import_issues=import_issues,
         validation_summary=summarize_validation(scoped_findings),
         global_validation_findings=[
@@ -274,12 +331,7 @@ async def analyze_upload(
             if finding.employee_id not in known_employee_ids
         ],
         selected_tables=analysis.selected_tables,
-        limitations=_build_limitations(
-            performance_dataset,
-            analysis.mapping_proposals,
-            import_issues,
-            scoped_findings,
-        ),
+        limitations=limitations,
         model=get_settings().openai_model,
         total_tokens=usage.total_tokens,
         model_requests=usage.requests,
@@ -315,6 +367,153 @@ def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
         insufficient_data_employee_ids=insufficient_ids,
         performance_tier_counts=dict(sorted(tier_counts.items())),
         narrative=narrative,
+    )
+
+
+def _build_insight_context(
+    employee_results: list[EmployeeKpiScores],
+) -> dict[str, InsightEmployeeContext]:
+    context: dict[str, InsightEmployeeContext] = {}
+    for result in employee_results:
+        grouped: dict[tuple[str, str, str], list[str]] = {}
+        for finding in result.validation_findings:
+            if not finding.record_ids:
+                continue
+            key = (finding.code, finding.message, finding.scoring_impact)
+            grouped.setdefault(key, []).extend(finding.record_ids)
+        if not grouped:
+            continue
+        allowed_record_ids = frozenset(
+            record_id
+            for record_ids in grouped.values()
+            for record_id in record_ids
+        )
+        findings = [
+            {
+                "code": code,
+                "message": message,
+                "scoring_impact": scoring_impact,
+                "occurrence_count": len(set(record_ids)),
+                "record_ids": list(dict.fromkeys(record_ids))[:5],
+            }
+            for (code, message, scoring_impact), record_ids in grouped.items()
+        ]
+        context[result.employee_id] = InsightEmployeeContext(
+            prompt_context={
+                "employee_id": result.employee_id,
+                "employee_name": result.employee_name,
+                "result_status": result.result_status,
+                "performance_tier": result.performance_tier,
+                "findings": findings,
+            },
+            allowed_record_ids=allowed_record_ids,
+        )
+    return context
+
+
+def _cache_insight_context(employee_results: list[EmployeeKpiScores]) -> str:
+    _remove_expired_insight_contexts()
+    analysis_id = token_urlsafe(24)
+    _insight_context_cache[analysis_id] = CachedInsightContext(
+        created_at=datetime.now(UTC),
+        employees=_build_insight_context(employee_results),
+    )
+    while len(_insight_context_cache) > _INSIGHT_CONTEXT_CACHE_MAX_SIZE:
+        _insight_context_cache.popitem(last=False)
+    return analysis_id
+
+
+def _get_insight_context(analysis_id: str) -> CachedInsightContext | None:
+    _remove_expired_insight_contexts()
+    context = _insight_context_cache.get(analysis_id)
+    if context is not None:
+        _insight_context_cache.move_to_end(analysis_id)
+    return context
+
+
+def _remove_expired_insight_contexts() -> None:
+    cutoff = datetime.now(UTC) - _INSIGHT_CONTEXT_TTL
+    expired_ids = [
+        analysis_id
+        for analysis_id, context in _insight_context_cache.items()
+        if context.created_at < cutoff
+    ]
+    for analysis_id in expired_ids:
+        del _insight_context_cache[analysis_id]
+
+
+async def generate_employee_insight(
+    analysis_id: str,
+    employee_id: str,
+) -> AIInsightResponse:
+    """Generate validated guidance from a temporary deterministic analysis context."""
+    cached = _get_insight_context(analysis_id)
+    if cached is None:
+        raise InsightContextExpiredError(
+            "This analysis has expired. Run the file analysis again before requesting AI guidance."
+        )
+    employee_context = cached.employees.get(employee_id)
+    if employee_context is None:
+        raise InsightUnavailableError(
+            "This employee has no validated findings available for AI guidance."
+        )
+
+    usage = RunUsage()
+    try:
+        insight = await _run_insight_agent(employee_context.prompt_context, usage)
+    except AIUnavailableError:
+        raise
+    except (
+        ModelHTTPError,
+        UnexpectedModelBehavior,
+        UsageLimitExceeded,
+        UserError,
+    ) as exc:
+        raise AIError(f"The insight model call failed: {exc}") from exc
+
+    if not _validate_ai_insight(insight, employee_id, employee_context.allowed_record_ids):
+        raise AIError(
+            "The generated insight was omitted because its employee or record citations did not validate."
+        )
+    return AIInsightResponse(
+        insight=insight,
+        model=get_settings().openai_model,
+        total_tokens=usage.total_tokens,
+        model_requests=usage.requests,
+    )
+
+
+async def _run_insight_agent(
+    insight_context: dict[str, object],
+    usage: RunUsage,
+) -> EmployeeAIInsight:
+    prompt = (
+        "Write one concise evidence-backed explanation and at most two constructive next "
+        "steps for this employee.\n\n"
+        + json.dumps(insight_context, ensure_ascii=False, separators=(",", ":"))
+    )
+    result = await insights_agent.run(
+        prompt,
+        model=get_model(),
+        model_settings=OpenAIResponsesModelSettings(
+            openai_prompt_cache_key="employee-performance-insights-v1",
+            openai_text_verbosity="low",
+        ),
+        usage=usage,
+        usage_limits=UsageLimits(request_limit=2, total_tokens_limit=12_000),
+    )
+    return result.output
+
+
+def _validate_ai_insight(
+    insight: EmployeeAIInsight,
+    employee_id: str,
+    allowed_record_ids: frozenset[str],
+) -> bool:
+    statements = [insight.explanation, *insight.recommendations]
+    return insight.employee_id == employee_id and all(
+        set(statement.record_ids).issubset(allowed_record_ids)
+        for statement in statements
     )
 
 

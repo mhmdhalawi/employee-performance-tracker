@@ -3,10 +3,15 @@ from datetime import date
 from fastapi import APIRouter, UploadFile
 
 from app.core.config import get_settings
-from app.schemas.uploads import AnalyzeUploadResponse
-from app.services.agent import analyze_upload
+from app.schemas.uploads import AIInsightRequest, AIInsightResponse, AnalyzeUploadResponse
+from app.services.agent import analyze_upload, generate_employee_insight
 
 router = APIRouter(tags=["agent"])
+
+
+@router.post("/insights", response_model=AIInsightResponse)
+async def generate_insight(request: AIInsightRequest) -> AIInsightResponse:
+    return await generate_employee_insight(request.analysis_id, request.employee_id)
 
 
 @router.post("/analyze", response_model=AnalyzeUploadResponse)

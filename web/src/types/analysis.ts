@@ -81,6 +81,24 @@ export interface PerformanceAlert {
   scoring_impact: string
 }
 
+export interface AIInsightStatement {
+  message: string
+  record_ids: string[]
+}
+
+export interface EmployeeAIInsight {
+  employee_id: string
+  explanation: AIInsightStatement
+  recommendations: AIInsightStatement[]
+}
+
+export interface AIInsightResponse {
+  insight: EmployeeAIInsight
+  model: string
+  total_tokens: number
+  model_requests: number
+}
+
 export interface DashboardFilters {
   employee_id?: string
   team?: string
@@ -89,6 +107,7 @@ export interface DashboardFilters {
 }
 
 export interface AnalyzeResponse {
+  analysis_id: string
   file_name: string
   file_type: string
   byte_size: number

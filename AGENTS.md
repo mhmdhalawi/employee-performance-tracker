@@ -245,6 +245,7 @@ The intended production lifecycle is:
 ```
 upload -> validate/parse -> catalog -> agent table selection -> validated mappings
        -> canonical performance dataset -> Python KPI tools -> structured response
+       -> optional on-demand AI explanation -> Python citation validation
 ```
 
 The compact synopsis is serialized into one structured mapping request. Python validates the
@@ -259,9 +260,13 @@ validation, and calculates KPI scores, evidence confidence, gated overall scores
 The response contains employee-specific findings, supporting record IDs, a validation
 summary, unmatched/global findings, KPI results, applied filters, deterministic weekly trends,
 and a deterministic summary derived from the final results; it does not return parsed source
-rows. The Vue client presents employee results, KPI trends, priority alerts, and a dedicated
-filterable alerts view. Phases 2 through 4 are complete, with the documented EMP-027/EMP-029
-benchmark exception described in `docs/benchmark.md`.
+rows. `/analyze` retains a compact validated explanation context in memory for 15 minutes but
+does not call the explanation model. A separate, optional `/insights` request generates
+guidance for one employee, and Python rejects employee or record citations that do not
+validate. The Vue
+client presents employee results, KPI trends, priority alerts, AI insights, and a dedicated
+filterable alerts view. Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark exception described in
+`docs/benchmark.md`.
 
 ---
 
@@ -274,8 +279,9 @@ mappings; it has no row-access or calculation tools in this path. Python validat
 returned mappings and makes one targeted repair request only when structural validation
 fails. Validated mappings are cached in memory by a schema-only fingerprint so repeated
 recognized layouts can skip the model while the server process remains running. Full record
-validation and calculations run deterministically in Python without sending row-level output
-back through the model.
+validation and calculations run deterministically in Python. A bounded on-demand explanation
+request may receive one employee's result status and validated findings, but never raw source
+rows or complete KPI calculation inputs.
 
 After Python validates an agent-proposed canonical mapping, the deterministic service uses
 `validate_dataset`, `calculate_kpis`, `get_supporting_evidence`, and
@@ -300,8 +306,11 @@ traceable to its supporting source records.
 
 Only the agent module may call a model. Nothing else, ever.
 
-The agent **may**: interpret the bounded synopsis, select relevant tables, and propose mappings.
-The agent **may not**: calculate or return KPI values, validate source records, or invent data.
+The mapping agent **may** interpret the bounded synopsis, select relevant tables, and propose
+mappings. The explanation agent **may** explain final calculated results and recommend
+constructive, low-risk next steps from validated findings. Agents **may not** calculate or
+alter KPI values, validate source records, invent data or causes, or make high-impact
+employment recommendations.
 
 The agent may interpret unfamiliar sheet and column names, but it must return a structured
 mapping proposal with a confidence assessment. Python validates required fields, types,
@@ -314,8 +323,11 @@ than asking nicely in the prompt. Mapping confidence communicates semantic uncer
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
 The `/analyze` workflow constructs a request-scoped synopsis and passes it directly to the
-mapping agent. The agent has no upload dependency or function tools. `/ask` remains a separate
-plain connectivity test with no upload data.
+mapping agent. After Python calculates results, it caches a bounded explanation context without
+calling the explanation agent. `/insights` retrieves one employee from that temporary context,
+calls the explanation agent, and validates every citation before returning it. Neither agent
+has an upload dependency or function tools. `/ask` remains a separate plain connectivity test
+with no upload data.
 
 ---
 
@@ -338,14 +350,16 @@ Current endpoints:
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
 | `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
 | `POST` | `/api/v1/analyze` | upload, map, validate, and return employee KPI results with findings |
+| `POST` | `/api/v1/insights` | generate on-demand guidance for one employee from a temporary analysis context |
 
 ---
 
 ## 9. Persistence
 
-**TODO — nothing is persisted yet.** Every request is independent; nothing survives it.
-Decide what actually needs storing (uploaded datasets? agent runs?) when something needs to
-outlive a single request. Do not add a database without asking.
+**No durable persistence exists.** Uploaded datasets and source rows are not stored. `/analyze`
+keeps only compact validated insight contexts in a bounded in-memory LRU cache for 15 minutes;
+they disappear on expiry, eviction, or server restart. The browser may retain generated
+insights for the active analysis. Do not add a database without asking.
 
 ---
 

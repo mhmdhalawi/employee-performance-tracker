@@ -109,17 +109,25 @@ relevant metrics and supporting records.
 
 ## Phase 5: Add AI explanations and recommendations
 
+**Status: Complete.** `/analyze` stores a compact validated
+insight context in a 15-minute in-memory cache without calling the explanation model. The Vue
+dashboard requests typed guidance for one selected employee through `/insights` and caches the
+result in browser memory. Python rejects unknown employees and citations to records outside
+the employee's validated findings. Acceptance checks covered missing-report guidance,
+low-accuracy coaching, multi-finding explanations, and Insufficient-data evidence guidance.
+
 Connect the Pydantic AI agent only after validation and calculation tools exist. The agent
-should inspect the request-scoped upload catalog, choose which tables and calculations are
-useful, call tools for any values, and return evidence-backed observations and constructive
-next steps.
+should receive bounded, calculated results and validated findings and return evidence-backed
+observations and constructive next steps. It does not receive raw rows or call calculation
+tools.
 
 Each alert must cite supporting record IDs and evidence links where available. The agent must
 not invent calculations, fill missing data with assumptions, or make high-impact employment
 decisions.
 
-This phase is complete when every generated alert is traceable to supporting records and the
-agent follows the prompt in `app/services/agent.py`.
+This phase is complete when every generated insight is traceable to supporting records, the
+agent follows the prompt in `app/services/agent.py`, and the on-demand experience passes
+acceptance testing.
 
 ## Phase 6: Run the QA suite
 
