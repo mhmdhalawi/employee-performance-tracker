@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
-import { ArrowLeftIcon, FileSpreadsheetIcon, ListFilterIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
+import { ArrowDownIcon, ArrowLeftIcon, ArrowUpDownIcon, ArrowUpIcon, FileSpreadsheetIcon, ListFilterIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,11 +22,10 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import PerformanceAlerts from '@/components/dashboard/PerformanceAlerts.vue'
-import { previewResults, previewTeams, previewTrends } from '@/data/dashboard-preview'
 import type { AnalyzeResponse, DashboardFilters, EmployeeKpiResult, PerformanceAlert } from '@/types/analysis'
 
 const props = defineProps<{
-  analysis: AnalyzeResponse | null
+  analysis: AnalyzeResponse
   isFiltering?: boolean
   filterError?: string
 }>()
@@ -41,22 +40,42 @@ const period = ref('full')
 const currentPage = ref(1)
 const pageSize = ref('10')
 const showAlerts = ref(false)
-const employeeOptions = ref<EmployeeKpiResult[]>(props.analysis?.results ?? previewResults)
+const sortKey = ref<'name' | 'performance' | null>(null)
+const sortDirection = ref<'asc' | 'desc'>('asc')
+const allEmployeeOptions = ref<EmployeeKpiResult[]>(props.analysis.results)
 let filterTimer: number | undefined
 
-const isPreview = computed(() => !props.analysis)
-const sourceRows = computed(() => props.analysis?.results ?? previewResults)
-const teams = computed(() => props.analysis?.available_teams ?? [...new Set(Object.values(previewTeams))])
-const filteredRows = computed(() => isPreview.value
-  ? sourceRows.value.filter(row =>
-      (employee.value === 'all' || row.employee_id === employee.value)
-      && (team.value === 'all' || previewTeams[row.employee_id] === team.value),
-    )
-  : sourceRows.value)
+const employeeOptions = computed(() => allEmployeeOptions.value.filter(row =>
+  team.value === 'all' || row.team === team.value,
+))
+const filteredRows = computed(() => props.analysis.results.filter(row =>
+  (employee.value === 'all' || row.employee_id === employee.value)
+  && (team.value === 'all' || row.team === team.value),
+))
+const sortedRows = computed(() => {
+  if (!sortKey.value)
+    return filteredRows.value
+
+  return [...filteredRows.value].sort((left, right) => {
+    if (sortKey.value === 'name') {
+      const comparison = employeeLabel(left).localeCompare(employeeLabel(right), undefined, { sensitivity: 'base' })
+      return sortDirection.value === 'asc' ? comparison : -comparison
+    }
+
+    if (left.overall_score === null)
+      return right.overall_score === null ? 0 : 1
+    if (right.overall_score === null)
+      return -1
+
+    const comparison = left.overall_score - right.overall_score
+    return sortDirection.value === 'asc' ? comparison : -comparison
+  })
+})
+const teams = computed(() => props.analysis.available_teams)
 const numericPageSize = computed(() => Number(pageSize.value))
 const paginatedRows = computed(() => {
   const start = (currentPage.value - 1) * numericPageSize.value
-  return filteredRows.value.slice(start, start + numericPageSize.value)
+  return sortedRows.value.slice(start, start + numericPageSize.value)
 })
 const firstVisibleRow = computed(() => filteredRows.value.length
   ? (currentPage.value - 1) * numericPageSize.value + 1
@@ -86,22 +105,21 @@ interface DashboardTrendPoint {
   quality: number | null
 }
 
-const trendData = computed<DashboardTrendPoint[]>(() => props.analysis
-  ? props.analysis.trends.map(point => ({
-      label: formatDate(point.period_end),
-      productivity: point.productivity_score,
-      compliance: point.compliance_score,
-      quality: point.quality_score,
-    }))
-  : previewTrends.map(point => ({
-      label: point.week,
-      productivity: point.productivity,
-      compliance: point.compliance,
-      quality: point.quality,
-    })))
-const visibleAlerts = computed(() => props.analysis?.alerts.slice(0, 3) ?? [])
+const trendData = computed<DashboardTrendPoint[]>(() => props.analysis.trends.map(point => ({
+  label: formatDate(point.period_end),
+  productivity: point.productivity_score,
+  compliance: point.compliance_score,
+  quality: point.quality_score,
+})))
+const scopedAlerts = computed(() => props.analysis.alerts.filter(alert => {
+  const isGlobal = !alert.employee_id && !alert.team
+  const matchesEmployee = employee.value === 'all' || alert.employee_id === employee.value
+  const matchesTeam = team.value === 'all' || alert.team === team.value
+  return isGlobal || (matchesEmployee && matchesTeam)
+}))
+const visibleAlerts = computed(() => scopedAlerts.value.slice(0, 3))
 const appliedPeriod = computed(() => {
-  const filters = props.analysis?.applied_filters
+  const filters = props.analysis.applied_filters
   return filters?.start_date && filters.end_date
     ? `${formatDate(filters.start_date)} – ${formatDate(filters.end_date)}`
     : 'Full available period'
@@ -125,10 +143,7 @@ watch(team, () => {
     employee.value = 'all'
 })
 
-watch([employee, team, period], () => {
-  if (isPreview.value)
-    return
-
+watch(period, () => {
   window.clearTimeout(filterTimer)
   filterTimer = window.setTimeout(() => emit('filtersChange', buildFilters()), 250)
 }, { flush: 'post' })
@@ -139,12 +154,7 @@ watch([filteredRows, pageSize], () => {
 
 function buildFilters(): DashboardFilters {
   const filters: DashboardFilters = {}
-  if (employee.value !== 'all')
-    filters.employee_id = employee.value
-  if (team.value !== 'all')
-    filters.team = team.value
-
-  if (period.value !== 'full' && props.analysis?.dataset_overview.date_end) {
+  if (period.value !== 'full' && props.analysis.dataset_overview.date_end) {
     const weeks = Number.parseInt(period.value, 10)
     const end = parseDate(props.analysis.dataset_overview.date_end)
     const start = new Date(end)
@@ -169,6 +179,23 @@ function score(value: number | null): string {
 
 function employeeLabel(row: EmployeeKpiResult): string {
   return row.employee_name || row.employee_id
+}
+
+function toggleSort(key: 'name' | 'performance'): void {
+  if (sortKey.value === key) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  }
+  else {
+    sortKey.value = key
+    sortDirection.value = key === 'performance' ? 'desc' : 'asc'
+  }
+  currentPage.value = 1
+}
+
+function ariaSort(key: 'name' | 'performance'): 'ascending' | 'descending' | 'none' {
+  if (sortKey.value !== key)
+    return 'none'
+  return sortDirection.value === 'asc' ? 'ascending' : 'descending'
 }
 
 function alertTitle(alert: PerformanceAlert): string {
@@ -201,7 +228,7 @@ function formatIsoDate(value: Date): string {
 <template>
   <PerformanceAlerts
     v-if="showAlerts && analysis"
-    :alerts="analysis.alerts"
+    :alerts="scopedAlerts"
     :file-name="analysis.file_name"
     @back="showAlerts = false"
   />
@@ -210,7 +237,7 @@ function formatIsoDate(value: Date): string {
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">
           <div class="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ShieldCheckIcon class="size-4" aria-hidden="true" /></div>
-          <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis?.file_name ?? 'Dashboard design preview' }}</p></div>
+          <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis.file_name }}</p></div>
         </div>
         <Button variant="outline" @click="emit('back')"><ArrowLeftIcon data-icon="inline-start" />New analysis</Button>
       </div>
@@ -219,7 +246,7 @@ function formatIsoDate(value: Date): string {
     <div class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
       <section class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div class="flex flex-col gap-2">
-          <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Employee performance</h1><Badge v-if="isPreview" variant="secondary">Preview data</Badge><Badge v-else variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
+          <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Employee performance</h1><Badge variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
           <p class="text-sm text-muted-foreground">Review KPI scores, evidence confidence, trends, and findings.</p>
         </div>
         <div class="grid gap-3 sm:grid-cols-3">
@@ -239,9 +266,9 @@ function formatIsoDate(value: Date): string {
         <CardHeader><div class="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Employee results</CardTitle><CardDescription>Component scores remain visible when overall scoring is withheld.</CardDescription></div><Badge variant="outline">{{ filteredRows.length }} employees</Badge></div></CardHeader>
         <CardContent class="overflow-x-auto">
           <Table>
-            <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead class="min-w-36">Confidence</TableHead><TableHead class="text-right">Overall</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead class="min-w-36">Confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
             <TableBody>
-              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell>{{ row.team ?? previewTeams[row.employee_id] ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell></TableRow>
+              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell>{{ row.team ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell></TableRow>
               <TableRow v-if="!filteredRows.length"><TableCell colspan="8" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
             </TableBody>
           </Table>
@@ -272,7 +299,7 @@ function formatIsoDate(value: Date): string {
 
       <section class="grid items-start gap-6 xl:grid-cols-[2fr_1fr]">
         <Card>
-          <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Weekly KPI trend</CardTitle><CardDescription>Independent weekly component averages for the selected population.</CardDescription></div><Badge v-if="isPreview" variant="secondary">Preview data</Badge><Badge v-else variant="outline">{{ trendData.length }} periods</Badge></div></CardHeader>
+          <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Weekly KPI trend</CardTitle><CardDescription>All employees for the selected reporting period. Employee and team filters apply to results and alerts.</CardDescription></div><Badge variant="outline">{{ trendData.length }} periods</Badge></div></CardHeader>
           <CardContent>
             <ChartContainer v-if="trendData.length" :config="chartConfig" class="h-72 w-full"><VisXYContainer :data="trendData" :y-domain="[0, 100]"><VisAxis type="x" :x="trendX" :tick-format="weekTick" /><VisAxis type="y" :tick-format="percentTick" /><VisLine :x="trendX" :y="productivityY" :color="chartConfig.productivity.color" /><VisLine :x="trendX" :y="complianceY" :color="chartConfig.compliance.color" /><VisLine :x="trendX" :y="qualityY" :color="chartConfig.quality.color" /><ChartTooltip /></VisXYContainer><ChartTooltipContent /></ChartContainer>
             <p v-else class="py-16 text-center text-sm text-muted-foreground">No trend data is available for this filter.</p>
@@ -280,14 +307,13 @@ function formatIsoDate(value: Date): string {
         </Card>
 
         <Card>
-          <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Priority alerts</CardTitle><CardDescription>Highest-priority grouped findings.</CardDescription></div><Badge v-if="isPreview" variant="secondary">Preview data</Badge><Badge v-else variant="outline">{{ analysis?.alerts.length ?? 0 }} alerts</Badge></div></CardHeader>
+          <CardHeader><div class="flex items-start justify-between gap-3"><div><CardTitle>Priority alerts</CardTitle><CardDescription>Highest-priority grouped findings.</CardDescription></div><Badge variant="outline">{{ scopedAlerts.length }} alerts</Badge></div></CardHeader>
           <CardContent class="flex flex-col gap-4">
-            <template v-if="isPreview"><Alert variant="warning"><TriangleAlertIcon aria-hidden="true" /><AlertTitle>EMP-029 has insufficient evidence</AlertTitle><AlertDescription>Overall score and tier are withheld. Supporting records: PRJ-1237, QA-991.</AlertDescription></Alert><Alert><FileSpreadsheetIcon aria-hidden="true" /><AlertTitle>Reporting gap detected</AlertTitle><AlertDescription>One submitted-report period needs review for EMP-018.</AlertDescription></Alert></template>
-            <Alert v-for="alert in visibleAlerts" v-else :key="`${alert.employee_id}-${alert.code}`" :variant="alert.severity === 'info' ? 'default' : 'warning'"><TriangleAlertIcon v-if="alert.severity !== 'info'" aria-hidden="true" /><FileSpreadsheetIcon v-else aria-hidden="true" /><AlertTitle class="capitalize">{{ alertTitle(alert) }} <Badge variant="outline">{{ alert.occurrence_count }}</Badge></AlertTitle><AlertDescription>{{ alert.message }}<span v-if="alert.record_ids.length" class="block">Records: {{ alertRecords(alert) }}</span><a v-if="alert.evidence_links[0]" class="text-primary underline-offset-4 hover:underline" :href="alert.evidence_links[0]" target="_blank" rel="noreferrer">Open evidence</a></AlertDescription></Alert>
-            <p v-if="!isPreview && !visibleAlerts.length" class="py-8 text-center text-sm text-muted-foreground">No findings require attention for this filter.</p>
+            <Alert v-for="alert in visibleAlerts" :key="`${alert.employee_id}-${alert.code}`" :variant="alert.severity === 'info' ? 'default' : 'warning'"><TriangleAlertIcon v-if="alert.severity !== 'info'" aria-hidden="true" /><FileSpreadsheetIcon v-else aria-hidden="true" /><AlertTitle class="capitalize">{{ alertTitle(alert) }} <Badge variant="outline">{{ alert.occurrence_count }}</Badge></AlertTitle><AlertDescription>{{ alert.message }}<span v-if="alert.record_ids.length" class="block">Records: {{ alertRecords(alert) }}</span><a v-if="alert.evidence_links[0]" class="text-primary underline-offset-4 hover:underline" :href="alert.evidence_links[0]" target="_blank" rel="noreferrer">Open evidence</a></AlertDescription></Alert>
+            <p v-if="!visibleAlerts.length" class="py-8 text-center text-sm text-muted-foreground">No findings require attention for this filter.</p>
           </CardContent>
-          <CardFooter v-if="!isPreview && (analysis?.alerts.length ?? 0) > 0" class="border-t">
-            <Button class="w-full" variant="outline" @click="showAlerts = true"><ListFilterIcon data-icon="inline-start" />View all {{ analysis?.alerts.length }} alerts</Button>
+          <CardFooter v-if="scopedAlerts.length > 0" class="border-t">
+            <Button class="w-full" variant="outline" @click="showAlerts = true"><ListFilterIcon data-icon="inline-start" />View all {{ scopedAlerts.length }} alerts</Button>
           </CardFooter>
         </Card>
       </section>

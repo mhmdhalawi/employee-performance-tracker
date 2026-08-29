@@ -37,6 +37,7 @@ const showDashboard = ref(false)
 const isFiltering = ref(false)
 const filterError = ref('')
 let requestSequence = 0
+let requestController: AbortController | null = null
 
 const selectedFileSize = computed(() => {
   if (!selectedFile.value)
@@ -112,6 +113,8 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
   }
 
   const sequence = ++requestSequence
+  requestController?.abort()
+  requestController = new AbortController()
   if (filtering) {
     isFiltering.value = true
     filterError.value = ''
@@ -135,6 +138,7 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
     const response = await fetch(endpoint, {
       method: 'POST',
       body: formData,
+      signal: requestController.signal,
     })
 
     if (!response.ok)
@@ -147,6 +151,9 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
     showDashboard.value = true
   }
   catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError')
+      return
+
     const message = error instanceof TypeError
       ? 'The API could not be reached. Confirm the FastAPI server is running on port 8000.'
       : error instanceof Error ? error.message : 'The file could not be analyzed.'
@@ -159,6 +166,7 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
     if (sequence === requestSequence) {
       isSubmitting.value = false
       isFiltering.value = false
+      requestController = null
     }
   }
 }
@@ -170,7 +178,7 @@ async function submitAnalysis(): Promise<void> {
 
 <template>
   <PerformanceDashboard
-    v-if="showDashboard"
+    v-if="showDashboard && analysis"
     :analysis="analysis"
     :is-filtering="isFiltering"
     :filter-error="filterError"
@@ -286,10 +294,7 @@ async function submitAnalysis(): Promise<void> {
             </FieldGroup>
           </CardContent>
 
-          <CardFooter class="flex-col gap-3 sm:flex-row sm:justify-between">
-            <p class="text-center text-xs text-muted-foreground sm:text-left">
-              KPI calculations run in Python—not in the browser or AI model.
-            </p>
+          <CardFooter class="justify-end">
             <Button class="w-full sm:w-auto" type="submit" size="lg" :disabled="isSubmitting || !selectedFile">
               <Spinner v-if="isSubmitting" data-icon="inline-start" />
               <UploadCloudIcon v-else data-icon="inline-start" />
@@ -299,10 +304,6 @@ async function submitAnalysis(): Promise<void> {
         </form>
       </Card>
 
-      <div class="flex flex-col items-center gap-2 text-center">
-        <p class="text-sm text-muted-foreground">Want to explore the dashboard before running an analysis?</p>
-        <Button variant="outline" @click="showDashboard = true">Preview with sample data</Button>
-      </div>
     </div>
   </main>
 </template>
