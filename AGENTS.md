@@ -51,7 +51,7 @@ Dataset.xlsx`. Its `00_Start_Here` sheet defines the intended product and guardr
   first-pass approval, and rework.
 - Approved leave is neutral, duplicates are excluded before calculation, and alerts cite
   supporting record IDs or evidence links.
-- Python owns deterministic validation and arithmetic. The agent interprets mappings and
+- Python owns deterministic validation and arithmetic. The agent interprets classifications and calculator bindings and
   explains tool results; it never invents scores.
 - `Expected_KPI` is the authoritative numerical benchmark for Phase 3, and `QA_Test_Cases` is
   the minimum regression suite for Phase 6.
@@ -162,10 +162,10 @@ tracker/
 │   │   └── health.py         # GET /health
 │   ├── schemas/              # Pydantic request/response + internal models ONLY
 │   │   ├── agent.py          # AskRequest, AskResponse
-│   │   ├── performance.py    # canonical performance records and tool results
+│   │   ├── performance.py    # generic calculator evidence records and tool results
 │   │   └── uploads.py        # upload-inspection response models
 │   ├── services/             # all business logic lives here
-│   │   ├── agent.py          # PydanticAI mapping agent + analysis workflow
+│   │   ├── agent.py          # PydanticAI classification/planning agent + analysis workflow
 │   │   ├── imports.py        # mechanical upload parsing and inspection
 │   │   ├── performance.py    # validation and deterministic KPI calculations
 │   │   └── uploads.py        # extension and size validation
@@ -230,11 +230,12 @@ It does not decide what a table means merely from its sheet name.
 
 Python reduces the catalog to bounded table metadata, inferred column profiles, duplicate
 counts, and at most two sample rows per table. The agent uses that synopsis to decide which
-tables and columns map to canonical performance concepts. Python must validate every proposal
-before it becomes a `PerformanceDataset` or feeds a named KPI calculator. Preserve source
+tables support KPI families and which approved calculators their columns can feed. Python must
+validate every proposal before it becomes a `PerformanceEvidenceDataset` or feeds a named KPI
+calculator. Preserve source
 record IDs and evidence links so results and alerts remain traceable.
 
-Never put every row from every sheet into a model prompt. The current mapping request contains
+Never put every row from every sheet into a model prompt. The current planning request contains
 only the compact synopsis; the agent has no raw-row access tools. Python detects mechanical
 issues such as blank columns and duplicate rows. Neither the agent nor calculation services
 receive raw pandas frames.
@@ -245,18 +246,19 @@ The intended production lifecycle is:
 
 ```
 upload -> validate/parse -> catalog -> agent KPI classification -> validated calculation plan
-       -> canonical performance dataset -> Python KPI tools -> structured response
+       -> generic evidence dataset -> Python KPI tools -> structured response
        -> optional on-demand AI explanation -> Python citation validation
 ```
 
-The compact synopsis is serialized into one structured mapping request. Python validates the
-returned mappings and makes one targeted repair request only when structural validation
+The compact synopsis is serialized into one structured classification and calculator-planning
+request. Python validates the returned classifications and bindings and makes one targeted
+repair request only when structural validation
 fails. Calculation services may process complete selected datasets in Python without sending
 the source rows to the model.
 
 **Current implementation boundary:** `/analyze` validates and parses the upload, gives the
-request-scoped catalog to the agent for bounded inspection and semantic mapping, validates the
-returned mappings in Python, builds the canonical dataset, runs deterministic source-data
+request-scoped catalog to the agent for bounded inspection and KPI classification, validates the
+returned calculator plan in Python, builds the generic evidence dataset, runs deterministic source-data
 validation, and calculates KPI scores, evidence confidence, gated overall scores, and tiers.
 The response contains employee-specific findings, supporting record IDs, a validation
 summary, unmatched/global findings, KPI results, applied filters, deterministic weekly trends,
@@ -273,20 +275,21 @@ Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark e
 
 ## 6. Calculations
 
-Python prepares a compact mapping synopsis containing table metadata, inferred column
+Python prepares a compact classification synopsis containing table metadata, inferred column
 profiles, duplicate counts, and at most two sample rows per table. The agent receives that
 bounded synopsis in one structured-output request and returns selected tables plus semantic
-mappings; it has no row-access or calculation tools in this path. Python validates the
-returned mappings and makes one targeted repair request only when structural validation
-fails. Validated mappings are cached in memory by a schema-only fingerprint so repeated
+calculator invocations and bindings; it has no row-access or calculation tools in this path.
+Python validates the returned plan and makes one targeted repair request only when structural
+validation fails. Validated plans are cached in memory by a schema-only fingerprint so repeated
 recognized layouts can skip the model while the server process remains running. Full record
 validation and calculations run deterministically in Python. A bounded on-demand explanation
 request may receive one employee's result status and validated findings, but never raw source
 rows or complete KPI calculation inputs.
 
-After Python validates an agent-proposed canonical mapping, the deterministic service uses
+After Python validates an agent-proposed classification and calculator plan, the deterministic service uses
 `validate_dataset`, `calculate_kpis`, `get_supporting_evidence`, and
-`calculate_kpi_trends`. The mapping agent does not choose formulas or execute calculations.
+`calculate_kpi_trends`. The planning agent selects only approved calculators; it does not choose
+formulas or execute calculations.
 
 The deterministic scorer uses Productivity (35%), Compliance (30%), and Quality (35%).
 Productivity combines completion (60%) and time efficiency (40%); Compliance combines
@@ -307,24 +310,24 @@ traceable to its supporting source records.
 
 Only the agent module may call a model. Nothing else, ever.
 
-The mapping agent **may** interpret the bounded synopsis, select relevant tables, and propose
-mappings. The explanation agent **may** explain final calculated results and recommend
+The planning agent **may** interpret the bounded synopsis, classify tables by KPI family, select
+approved calculators, and propose field bindings. The explanation agent **may** explain final calculated results and recommend
 constructive, low-risk next steps from validated findings. Agents **may not** calculate or
 alter KPI values, validate source records, invent data or causes, or make high-impact
 employment recommendations.
 
 The agent may interpret unfamiliar sheet and column names, but it must return a structured
-mapping proposal with a confidence assessment. Python validates required fields, types,
-duplicate mappings, and ID relationships before using that mapping. The agent may say that a
-mapping is uncertain; it must not guess.
+calculation plan with a confidence assessment. Python validates required fields, types,
+duplicate bindings, and ID relationships before using that plan. The agent may say that a
+classification is uncertain; it must not guess.
 
-Enforce this structurally through a typed output shape and Python mapping validation rather
-than asking nicely in the prompt. Mapping confidence communicates semantic uncertainty.
+Enforce this structurally through a typed output shape and Python plan validation rather
+than asking nicely in the prompt. Classification confidence communicates semantic uncertainty.
 
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
 The `/analyze` workflow constructs a request-scoped synopsis and passes it directly to the
-mapping agent. After Python calculates results, it caches a bounded explanation context without
+planning agent. After Python calculates results, it caches a bounded explanation context without
 calling the explanation agent. `/insights` retrieves one employee from that temporary context,
 calls the explanation agent, and validates every citation before returning it. Neither agent
 has an upload dependency or function tools. `/ask` remains a separate plain connectivity test

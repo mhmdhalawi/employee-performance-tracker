@@ -113,7 +113,7 @@ Acceptance criteria: all narrative counts and claims match the structured respon
 
 - [x] Build a working dashboard consuming the analysis response.
 - [x] Add employee filtering.
-- [x] Add team filtering when team information is available and mapped.
+- [x] Add team filtering when team information is available through a validated binding.
 - [x] Clearly distinguish scored employees from `Insufficient data` employees.
 - [x] Display overall score and tier only for eligible employees.
 
@@ -177,9 +177,9 @@ Acceptance criteria: every displayed result can be traced to record IDs and, whe
 ## 13. Expose validation and agent workflow
 
 - [x] Keep the validation summary and detailed findings.
-- [ ] Expose the important workflow stages: import, synopsis, mapping, mapping validation/repair, canonical validation, KPI calculation, and response assembly.
-- [ ] Report mapping confidence separately from employee data confidence.
-- [ ] Record whether a mapping repair request occurred.
+- [ ] Expose the important workflow stages: import, synopsis, classification/planning, plan validation/repair, evidence validation, KPI calculation, and response assembly.
+- [ ] Report classification confidence separately from employee data confidence.
+- [ ] Record whether a calculation-plan repair request occurred.
 - [ ] Record calculator execution and exclusion counts without exposing raw source rows or private model reasoning.
 - [ ] Make the workflow suitable for display in the dashboard or an audit panel.
 

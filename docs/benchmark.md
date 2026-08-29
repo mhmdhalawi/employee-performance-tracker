@@ -36,7 +36,7 @@ may explain them but may not create or alter numerical results.
 - `00_Start_Here`: product scope, guardrails, delivery sequence, and acceptance checks
 - `Expected_KPI`: authoritative Phase 3 benchmark; reproduce values within 0.1
 - `QA_Test_Cases`: minimum Phase 6 regression scenarios
-- `Data_Dictionary`: source-field definitions to consult when mapping semantics are unclear
+- `Data_Dictionary`: source-field definitions to consult when classification or calculator bindings are unclear
 
 ## Delivery acceptance checks
 
@@ -72,9 +72,9 @@ workbook remains authoritative if this copied context becomes inconsistent with 
 
 Phases 2 through 4 are complete. The Cedar acceptance run processed all 30 employees with no
 import errors, flagged four duplicate-attendance cases, detected missing exits and missing
-evidence, and excluded four duplicate records from scoring. The verified one-shot mapping run
+evidence, and excluded four duplicate records from scoring. The verified one-shot planning run
 reproduced the same scores and finding counts with one model request and 6,113 tokens, down
-from 34,904. Validated mappings are cached in memory by schema fingerprint for repeated
+from 34,904. Validated calculation plans are cached in memory by schema fingerprint for repeated
 layouts.
 
 Phase 3 comparison reproduces Productivity, Quality, eligible Overall, confidence, and result

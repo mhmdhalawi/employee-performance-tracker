@@ -27,7 +27,7 @@ inspection, bounded synopsis generation, and one-shot classification through the
 connected.
 
 Build the upload path for supported CSV and Excel files. It should enforce the configured
-file-type and size limits, parse usable files, and produce a canonical representation that
+file-type and size limits, parse usable files, and produce a request-scoped catalog that
 services can consume without depending on FastAPI types.
 
 Build table names, headers, inferred types, row counts, duplicate counts, and at most two
@@ -39,7 +39,7 @@ without receiving the entire workbook, and an unusable file receives a clear cli
 
 ## Phase 2: Validate source data
 
-**Status: Complete.** Deterministic Python validation is connected after agent mapping and
+**Status: Complete.** Deterministic Python validation is connected after agent classification and calculator planning and
 before scoring. The API returns severity, scoring impact, employee/source identifiers, and
 supporting record IDs for duplicates, missing exits, missing or unverified evidence, missing
 reports, overdue work, low accuracy, missing targets, and inconsistent relationships.
@@ -49,7 +49,7 @@ back through the model. The Cedar acceptance run processed 30 employees with no 
 flagged four duplicate-attendance cases and missing-evidence records. The verified one-shot
 run preserved the same results while reducing usage from 34,904 to 6,113 tokens.
 
-Build a validation service that checks the mapped data before scoring. It should identify
+Build a validation service that checks the bound generic evidence before scoring. It should identify
 missing required values, invalid dates, duplicate attendance records, missing evidence, and
 inconsistent identifiers. Row-level issues should be returned as results rather than causing
 the entire usable upload to fail.
