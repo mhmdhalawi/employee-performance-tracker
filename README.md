@@ -14,9 +14,9 @@ shadcn-vue. The backend remains authoritative for validation, KPI calculations, 
 confidence, and trend calculations.
 
 After an analysis, the browser client provides employee, team, and reporting-period filters;
-summary KPIs; paginated employee results; weekly KPI trends; priority-alert previews; and a
-dedicated filterable, paginated alerts view. Analysis state remains in browser memory and is
-not persisted across a page refresh.
+summary KPIs; sortable, paginated employee results with alert counts; weekly KPI trends; and a
+responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
+Analysis state remains in browser memory and is not persisted across a page refresh.
 
 ## Prerequisites
 

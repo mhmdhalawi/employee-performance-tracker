@@ -263,9 +263,9 @@ and a deterministic summary derived from the final results; it does not return p
 rows. `/analyze` retains a compact validated explanation context in memory for 15 minutes but
 does not call the explanation model. A separate, optional `/insights` request generates
 guidance for one employee, and Python rejects employee or record citations that do not
-validate. The Vue
-client presents employee results, KPI trends, priority alerts, AI insights, and a dedicated
-filterable alerts view. Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark exception described in
+validate. The Vue client presents employee results with alert counts and sorting, KPI trends,
+and a responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
+Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark exception described in
 `docs/benchmark.md`.
 
 ---

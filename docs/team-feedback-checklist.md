@@ -146,9 +146,9 @@ Acceptance criteria: the dashboard displays auditable 12-week trends without inv
 - [x] Avoid duplicating the same issue in findings and alerts without a clear reason.
 
 Current state: the response contains grouped, prioritized employee alerts with supporting
-record IDs and evidence links where available. The dashboard previews priority alerts and
-provides a dedicated filterable, paginated alerts view. An explicit data-quality versus
-performance-alert category is still outstanding.
+record IDs and evidence links where available. The employee table shows per-employee alert
+counts, and its responsive detail sheet presents the employee's alerts alongside on-demand AI
+guidance. An explicit data-quality versus performance-alert category is still outstanding.
 
 Acceptance criteria: actionable alerts are clearly presented and traceable to source evidence.
 
