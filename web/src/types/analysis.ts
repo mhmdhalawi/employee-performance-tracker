@@ -129,9 +129,16 @@ export interface AnalyzeResponse {
 
 export interface TableClassification {
   source_name: string
-  kpi_family: string
+  kpi_family: 'productivity' | 'compliance' | 'quality' | 'shared' | 'irrelevant' | 'unsupported'
   calculator_invocations: Array<{
-    calculator: string
+    calculator:
+      | 'load_employees'
+      | 'load_performance_targets'
+      | 'calculate_productivity'
+      | 'calculate_attendance_compliance'
+      | 'calculate_submission_compliance'
+      | 'calculate_leave_compliance'
+      | 'calculate_quality'
     field_bindings: Record<string, string>
   }>
   confidence: 'low' | 'medium' | 'high'

@@ -199,8 +199,8 @@ async function submitAnalysis(): Promise<void> {
             Turn performance data into a clear, evidence-backed view
           </h1>
           <p class="mx-auto max-w-xl text-pretty text-sm leading-6 text-muted-foreground sm:text-base">
-            Upload one CSV or Excel workbook. The service maps the data, validates its evidence,
-            and calculates every KPI deterministically.
+            Upload one CSV or Excel workbook. The service classifies its evidence, validates
+            calculator inputs, and calculates every KPI deterministically.
           </p>
         </div>
       </header>
@@ -294,8 +294,11 @@ async function submitAnalysis(): Promise<void> {
             </FieldGroup>
           </CardContent>
 
-          <CardFooter class="justify-end">
-            <Button class="w-full sm:w-auto" type="submit" size="lg" :disabled="isSubmitting || !selectedFile">
+          <CardFooter class="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-center text-xs text-muted-foreground sm:text-left">
+              Analysis may take a few seconds while we identify relevant data and validate the evidence.
+            </p>
+            <Button class="w-full shrink-0 sm:w-auto" type="submit" size="lg" :disabled="isSubmitting || !selectedFile">
               <Spinner v-if="isSubmitting" data-icon="inline-start" />
               <UploadCloudIcon v-else data-icon="inline-start" />
               {{ isSubmitting ? 'Analyzing file…' : 'Submit for analysis' }}
