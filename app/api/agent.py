@@ -3,7 +3,11 @@ from datetime import date
 from fastapi import APIRouter, UploadFile
 
 from app.core.config import get_settings
-from app.schemas.uploads import AIInsightRequest, AIInsightResponse, AnalyzeUploadResponse
+from app.schemas.uploads import (
+    AIInsightRequest,
+    AIInsightResponse,
+    AnalyzeUploadResponse,
+)
 from app.services.agent import analyze_upload, generate_employee_insight
 
 router = APIRouter(tags=["agent"])

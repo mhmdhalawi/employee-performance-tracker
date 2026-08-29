@@ -4,54 +4,60 @@ from datetime import date
 from pydantic import BaseModel
 
 from app.schemas.performance import (
-    AttendanceRecord,
+    AttendanceComplianceEvidence,
     Employee,
-    KpiTarget,
-    LeaveRequest,
-    Project,
-    QualityReview,
-    Report,
+    LeaveComplianceEvidence,
+    PerformanceTarget,
+    QualityEvidence,
+    SubmissionComplianceEvidence,
+    WorkOutputEvidence,
 )
 from app.schemas.uploads import (
     CatalogTable,
     CellValue,
+    ClassificationValidation,
     ColumnDescription,
     DistinctValues,
-    MappingProposal,
-    MappingValidation,
     RowPage,
     TableAnalysis,
+    TableClassification,
     TableDescription,
     TableInspection,
     TableProfile,
     UploadCatalog,
 )
 
-_CANONICAL_MODELS: dict[str, type[BaseModel]] = {
-    "employees": Employee,
-    "kpi_targets": KpiTarget,
-    "projects": Project,
-    "attendance": AttendanceRecord,
-    "reports": Report,
-    "leave_requests": LeaveRequest,
-    "quality_reviews": QualityReview,
+_CALCULATOR_CONTRACTS: dict[str, tuple[type[BaseModel], str]] = {
+    "load_employees": (Employee, "shared"),
+    "load_performance_targets": (PerformanceTarget, "shared"),
+    "calculate_productivity": (WorkOutputEvidence, "productivity"),
+    "calculate_attendance_compliance": (AttendanceComplianceEvidence, "compliance"),
+    "calculate_submission_compliance": (SubmissionComplianceEvidence, "compliance"),
+    "calculate_leave_compliance": (LeaveComplianceEvidence, "compliance"),
+    "calculate_quality": (QualityEvidence, "quality"),
 }
 
 
-def canonical_mapping_contract() -> dict[str, dict[str, list[str]]]:
-    """Return required and optional canonical fields for semantic mapping."""
+def classification_contract() -> dict[str, object]:
+    """Return approved calculators and their KPI-family input contracts."""
     return {
-        entity: {
-            "required_fields": [
-                name for name, field in model.model_fields.items() if field.is_required()
-            ],
-            "optional_fields": [
-                name
-                for name, field in model.model_fields.items()
-                if not field.is_required()
-            ],
-        }
-        for entity, model in _CANONICAL_MODELS.items()
+        "approved_calculators": {
+            calculator: {
+                "required_fields": [
+                    name
+                    for name, field in model.model_fields.items()
+                    if field.is_required()
+                ],
+                "optional_fields": [
+                    name
+                    for name, field in model.model_fields.items()
+                    if not field.is_required()
+                ],
+                "kpi_family": kpi_family,
+            }
+            for calculator, (model, kpi_family) in _CALCULATOR_CONTRACTS.items()
+        },
+        "non_evidence_classifications": ["irrelevant", "unsupported"],
     }
 
 
@@ -99,20 +105,51 @@ def inspect_tables(
     return analyses
 
 
-def validate_mappings(
+def validate_classifications(
     catalog: UploadCatalog,
-    mappings: list[MappingProposal],
-) -> list[MappingValidation]:
-    """Validate several proposed canonical mappings in one operation."""
-    return [
-        validate_mapping(
-            catalog,
-            mapping.source_name,
-            mapping.canonical_entity,
-            mapping.field_mappings,
+    classifications: list[TableClassification],
+) -> list[ClassificationValidation]:
+    """Validate the complete table classification and execution plan."""
+    validations: list[ClassificationValidation] = []
+    known_sources = {table.source_name for table in catalog.tables}
+    classified_sources = [item.source_name for item in classifications]
+    for classification in classifications:
+        if classification.source_name not in known_sources:
+            validations.append(
+                ClassificationValidation(
+                    source_name=classification.source_name,
+                    kpi_family=classification.kpi_family,
+                    valid=False,
+                    unknown_source_columns=[],
+                    duplicate_source_columns=[],
+                    missing_required_fields=[],
+                    invalid_calculators=[],
+                    message="The classified source table does not exist.",
+                )
+            )
+            continue
+        validations.append(validate_classification(catalog, classification))
+    for source_name in sorted(known_sources):
+        count = classified_sources.count(source_name)
+        if count == 1:
+            continue
+        validations.append(
+            ClassificationValidation(
+                source_name=source_name,
+                kpi_family="unclassified" if count == 0 else "duplicate",
+                valid=False,
+                unknown_source_columns=[],
+                duplicate_source_columns=[],
+                missing_required_fields=[],
+                invalid_calculators=[],
+                message=(
+                    "Every source table must be classified exactly once."
+                    if count == 0
+                    else "A source table cannot have multiple classifications."
+                ),
+            )
         )
-        for mapping in mappings
-    ]
+    return validations
 
 
 def get_rows(
@@ -244,46 +281,75 @@ def get_distinct_values(
     )
 
 
-def validate_mapping(
+def validate_classification(
     catalog: UploadCatalog,
-    source_name: str,
-    canonical_entity: str,
-    field_mappings: dict[str, str],
-) -> MappingValidation:
-    """Validate a proposed canonical mapping without creating a performance dataset."""
-    table = _table(catalog, source_name)
-    model = _CANONICAL_MODELS.get(canonical_entity)
-    if model is None:
-        return MappingValidation(
+    classification: TableClassification,
+) -> ClassificationValidation:
+    """Validate a classification and its calculator-specific field bindings."""
+    table = _table(catalog, classification.source_name)
+    if classification.kpi_family in {"irrelevant", "unsupported"}:
+        valid = (
+            not classification.calculator_invocations
+        )
+        return ClassificationValidation(
             source_name=table.source_name,
-            canonical_entity=canonical_entity,
-            valid=False,
+            kpi_family=classification.kpi_family,
+            valid=valid,
             unknown_source_columns=[],
             duplicate_source_columns=[],
             missing_required_fields=[],
-            message=f"Unknown canonical entity. Choose one of: {', '.join(_CANONICAL_MODELS)}.",
+            invalid_calculators=([] if valid else [
+                invocation.calculator
+                for invocation in classification.calculator_invocations
+            ]),
+            message=(
+                "Non-evidence table classification is valid."
+                if valid
+                else "Irrelevant and unsupported tables cannot invoke calculators."
+            ),
         )
-    unknown_source_columns = sorted(set(field_mappings.values()) - set(table.columns))
-    duplicate_source_columns = sorted(
-        source_column
-        for source_column in set(field_mappings.values())
-        if list(field_mappings.values()).count(source_column) > 1
-    )
-    required_fields = {
-        name for name, field in model.model_fields.items() if field.is_required()
-    }
-    missing_required_fields = sorted(required_fields - set(field_mappings))
+    unknown_source_columns: set[str] = set()
+    duplicate_source_columns: set[str] = set()
+    missing_required_fields: set[str] = set()
+    invalid_calculators: list[str] = []
+    for invocation in classification.calculator_invocations:
+        contract = _CALCULATOR_CONTRACTS.get(invocation.calculator)
+        if contract is None or contract[1] != classification.kpi_family:
+            invalid_calculators.append(invocation.calculator)
+            continue
+        model, _ = contract
+        bindings = invocation.field_bindings
+        unknown_source_columns.update(set(bindings.values()) - set(table.columns))
+        duplicate_source_columns.update(
+            source_column
+            for source_column in set(bindings.values())
+            if list(bindings.values()).count(source_column) > 1
+        )
+        required_fields = {
+            name for name, field in model.model_fields.items() if field.is_required()
+        }
+        missing_required_fields.update(required_fields - set(bindings))
+    if not classification.calculator_invocations:
+        invalid_calculators.append("missing_calculator")
     valid = not (
-        unknown_source_columns or duplicate_source_columns or missing_required_fields
+        unknown_source_columns
+        or duplicate_source_columns
+        or missing_required_fields
+        or invalid_calculators
     )
-    return MappingValidation(
+    return ClassificationValidation(
         source_name=table.source_name,
-        canonical_entity=canonical_entity,
+        kpi_family=classification.kpi_family,
         valid=valid,
-        unknown_source_columns=unknown_source_columns,
-        duplicate_source_columns=duplicate_source_columns,
-        missing_required_fields=missing_required_fields,
-        message="Mapping is structurally valid." if valid else "Mapping needs correction.",
+        unknown_source_columns=sorted(unknown_source_columns),
+        duplicate_source_columns=sorted(duplicate_source_columns),
+        missing_required_fields=sorted(missing_required_fields),
+        invalid_calculators=invalid_calculators,
+        message=(
+            "Classification and calculator bindings are structurally valid."
+            if valid
+            else "Classification or calculator bindings need correction."
+        ),
     )
 
 

@@ -31,7 +31,7 @@ from app.core.errors import (
 from app.schemas.performance import (
     EmployeeKpiScores,
     KpiResult,
-    PerformanceDataset,
+    PerformanceEvidenceDataset,
     ValidationFinding,
 )
 from app.schemas.uploads import (
@@ -39,11 +39,11 @@ from app.schemas.uploads import (
     AnalysisFilters,
     AnalysisSummary,
     AnalyzeUploadResponse,
+    CalculationPlan,
+    ClassificationValidation,
     EmployeeAIInsight,
     ImportIssue,
-    MappingProposal,
-    MappingValidation,
-    UploadAnalysis,
+    TableClassification,
     UploadCatalog,
 )
 from app.services import catalog
@@ -59,12 +59,16 @@ from app.services.performance import (
 )
 
 MAPPING_AGENT_INSTRUCTIONS = """
-You map uploaded employee-performance tables to the supplied canonical schema.
+You classify uploaded employee-performance tables and create a deterministic calculation plan.
 
-Use only the bounded workbook synopsis in the user prompt. Select tables and map columns by
-their headers, inferred types, missing-value counts, and sample values; do not rely on a sheet
-name alone. Return lower confidence when semantics are ambiguous. Map optional validation
-fields, especially attendance actual_end, whenever the source supports them. Do not calculate,
+Use only the bounded workbook synopsis in the user prompt. Classify every table by its data,
+not its name alone. A relevant table receives a KPI family and one or more approved calculator
+invocations with the field bindings required by each calculator. Shared employee and target
+tables use their approved loader invocations. Documentation,
+benchmark, and unrelated tables must be classified as irrelevant. Potential KPI evidence that
+does not satisfy an approved calculator contract must be classified as unsupported rather than
+forced into a role. Return lower confidence when semantics are ambiguous. Bind optional
+validation fields, especially attendance actual_end, whenever supported. Do not calculate,
 validate source records, invent values, or explain scores. Return only the structured output.
 """
 
@@ -76,7 +80,7 @@ Do not recommend hiring, firing, promotion, compensation, discipline, or other h
 employment decisions. For Insufficient data results, recommend improving evidence coverage,
 not performance action. Every explanation and recommendation must cite one or more record IDs
 listed for that employee. Return no insight for an employee without a supported finding.
-For a missing report submission date, tell the user to verify whether the report was submitted;
+For a missing required-submission date, tell the user to verify whether it was submitted;
 do not assume a submission occurred or instruct them to invent a date. Focus directly on the
 findings and avoid generic statements about complete source coverage. Put citations only in
 the structured record_ids fields. Never write record IDs, citation lists, or parenthetical
@@ -84,7 +88,7 @@ citations inside message text. Mention only findings supported by that statement
 """
 
 _MAPPING_CACHE_MAX_SIZE = 64
-_mapping_cache: OrderedDict[str, UploadAnalysis] = OrderedDict()
+_mapping_cache: OrderedDict[str, CalculationPlan] = OrderedDict()
 _INSIGHT_CONTEXT_CACHE_MAX_SIZE = 32
 _INSIGHT_CONTEXT_TTL = timedelta(minutes=15)
 
@@ -104,11 +108,11 @@ class CachedInsightContext:
 _insight_context_cache: OrderedDict[str, CachedInsightContext] = OrderedDict()
 
 
-analysis_agent = Agent[None, UploadAnalysis](
+analysis_agent = Agent[None, CalculationPlan](
     name="employee_performance_agent",
     instructions=MAPPING_AGENT_INSTRUCTIONS,
     deps_type=type(None),
-    output_type=UploadAnalysis,
+    output_type=CalculationPlan,
 )
 
 insights_agent = Agent[None, EmployeeAIInsight](
@@ -159,19 +163,19 @@ async def analyze_upload(
                 workbook_context,
                 usage,
             )
-            invalid_mappings = [
+            invalid_classifications = [
                 validation
-                for validation in catalog.validate_mappings(
+                for validation in catalog.validate_classifications(
                     upload_catalog,
-                    analysis.mapping_proposals,
+                    analysis.table_classifications,
                 )
                 if not validation.valid
             ]
-            if invalid_mappings:
+            if invalid_classifications:
                 analysis = await _repair_mappings(
                     workbook_context,
                     analysis,
-                    invalid_mappings,
+                    invalid_classifications,
                     usage,
                 )
         except (
@@ -182,9 +186,9 @@ async def analyze_upload(
         ) as exc:
             raise AIError(f"The model call failed: {exc}") from exc
 
-        final_validations = catalog.validate_mappings(
+        final_validations = catalog.validate_classifications(
             upload_catalog,
-            analysis.mapping_proposals,
+            analysis.table_classifications,
         )
         if final_validations and all(
             validation.valid for validation in final_validations
@@ -193,7 +197,7 @@ async def analyze_upload(
 
     performance_dataset, mapping_issues = build_performance_dataset(
         upload_catalog,
-        analysis.mapping_proposals,
+        analysis.table_classifications,
     )
     validation_findings = validate_dataset(performance_dataset)
     overview = inspect_dataset(performance_dataset)
@@ -250,9 +254,9 @@ async def analyze_upload(
         or finding.employee_id not in known_employee_ids
     ]
     project_links = {
-        project.project_id: project.evidence_link
-        for project in performance_dataset.projects
-        if project.evidence_link
+        record.record_id: record.evidence_link
+        for record in performance_dataset.work_outputs
+        if record.evidence_link
     }
     employee_results = [
         EmployeeKpiScores(
@@ -296,7 +300,7 @@ async def analyze_upload(
     )
     limitations = _build_limitations(
         performance_dataset,
-        analysis.mapping_proposals,
+        analysis.table_classifications,
         import_issues,
         scoped_findings,
     )
@@ -333,6 +337,7 @@ async def analyze_upload(
             if finding.employee_id not in known_employee_ids
         ],
         selected_tables=analysis.selected_tables,
+        table_classifications=analysis.table_classifications,
         limitations=limitations,
         model=get_settings().openai_model,
         total_tokens=usage.total_tokens,
@@ -522,9 +527,9 @@ def _validate_ai_insight(
 async def _run_mapping_agent(
     workbook_context: dict[str, object],
     usage: RunUsage,
-) -> UploadAnalysis:
+) -> CalculationPlan:
     prompt = (
-        "Map the relevant source tables to the canonical employee-performance schema. "
+        "Classify every source table and create one complete calculation plan. "
         "The synopsis is bounded and may include irrelevant benchmark or documentation "
         "tables; ignore those.\n\n"
         + json.dumps(workbook_context, ensure_ascii=False, separators=(",", ":"))
@@ -541,20 +546,20 @@ async def _run_mapping_agent(
 
 async def _repair_mappings(
     workbook_context: dict[str, object],
-    analysis: UploadAnalysis,
-    invalid_mappings: list[MappingValidation],
+    analysis: CalculationPlan,
+    invalid_classifications: list[ClassificationValidation],
     usage: RunUsage,
-) -> UploadAnalysis:
+) -> CalculationPlan:
     prompt = (
-        "Correct only the structurally invalid mappings and return the complete mapping "
-        "output again. Preserve mappings that already validate.\n\n"
+        "Correct only the structurally invalid classifications or calculation bindings and "
+        "return the complete plan again. Preserve classifications that already validate.\n\n"
         "CURRENT_OUTPUT:\n"
         + analysis.model_dump_json()
         + "\n\nVALIDATION_ERRORS:\n"
         + json.dumps(
             [
                 validation.model_dump(mode="json")
-                for validation in invalid_mappings
+                for validation in invalid_classifications
             ],
             ensure_ascii=False,
             separators=(",", ":"),
@@ -578,7 +583,7 @@ def _build_workbook_context(upload_catalog: UploadCatalog) -> dict[str, object]:
         [table.source_name for table in upload_catalog.tables],
     )
     return {
-        "canonical_schema": catalog.canonical_mapping_contract(),
+        "classification_and_calculator_contract": catalog.classification_contract(),
         "tables": [
             {
                 "source_name": analysis.description.source_name,
@@ -622,7 +627,7 @@ def _schema_fingerprint(
     return sha256(encoded).hexdigest()
 
 
-def _get_cached_analysis(schema_fingerprint: str) -> UploadAnalysis | None:
+def _get_cached_analysis(schema_fingerprint: str) -> CalculationPlan | None:
     analysis = _mapping_cache.get(schema_fingerprint)
     if analysis is None:
         return None
@@ -632,7 +637,7 @@ def _get_cached_analysis(schema_fingerprint: str) -> UploadAnalysis | None:
 
 def _cache_analysis(
     schema_fingerprint: str,
-    analysis: UploadAnalysis,
+    analysis: CalculationPlan,
 ) -> None:
     _mapping_cache[schema_fingerprint] = analysis.model_copy(deep=True)
     _mapping_cache.move_to_end(schema_fingerprint)
@@ -655,27 +660,29 @@ def _mapping_usage_limits() -> UsageLimits:
 
 
 def _build_limitations(
-    dataset: PerformanceDataset,
-    mappings: list[MappingProposal],
+    dataset: PerformanceEvidenceDataset,
+    classifications: list[TableClassification],
     import_issues: list[ImportIssue],
     validation_findings: list[ValidationFinding],
 ) -> list[str]:
     limitations: list[str] = []
     uncertain_sources = sorted(
-        proposal.source_name
-        for proposal in mappings
-        if proposal.confidence != "high"
+        classification.source_name
+        for classification in classifications
+        if classification.confidence != "high"
     )
     if uncertain_sources:
         limitations.append(
-            "Mapping confidence was below high for: " + ", ".join(uncertain_sources) + "."
+            "Classification confidence was below high for: "
+            + ", ".join(uncertain_sources)
+            + "."
         )
     if import_issues:
         limitations.append(
-            f"{len(import_issues)} source rows or mappings could not be imported."
+            f"{len(import_issues)} source rows or calculator bindings could not be imported."
         )
-    if dataset.attendance and "actual_end" not in dataset.mapped_fields.get(
-        "attendance", set()
+    if dataset.attendance_events and "actual_end" not in dataset.mapped_fields.get(
+        "attendance_events", set()
     ):
         limitations.append(
             "Attendance end-time validation was unavailable because actual_end was not mapped."

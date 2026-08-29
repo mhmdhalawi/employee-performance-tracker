@@ -11,74 +11,74 @@ class Employee(BaseModel):
     role: str | None = None
 
 
-class KpiTarget(BaseModel):
+class PerformanceTarget(BaseModel):
     employee_id: str = Field(min_length=1)
-    target_projects_90d: float = Field(gt=0)
-    target_avg_hours: float = Field(gt=0)
+    target_outputs_90d: float = Field(gt=0)
+    target_avg_effort_hours: float = Field(gt=0)
     minimum_confidence: float = Field(default=0.70, ge=0, le=1)
 
 
-class Project(BaseModel):
-    project_id: str = Field(min_length=1)
+class WorkOutputEvidence(BaseModel):
+    record_id: str = Field(min_length=1)
     employee_id: str = Field(min_length=1)
     assigned_date: date
     due_date: date
     completed_date: date | None = None
-    project_status: str
-    actual_hours: float | None = Field(default=None, gt=0)
-    evidence_status: str
+    completion_status: str
+    actual_effort_hours: float | None = Field(default=None, gt=0)
+    verification_status: str
     evidence_link: str | None = None
 
 
-class AttendanceRecord(BaseModel):
-    attendance_id: str = Field(min_length=1)
+class AttendanceComplianceEvidence(BaseModel):
+    record_id: str = Field(min_length=1)
     employee_id: str = Field(min_length=1)
-    work_date: date
-    arrival_status: str
+    occurred_on: date
+    outcome: str
     record_status: str
     actual_end: str | None = None
     confidence_score: float = Field(ge=0, le=1)
 
 
-class Report(BaseModel):
-    report_id: str = Field(min_length=1)
+class SubmissionComplianceEvidence(BaseModel):
+    record_id: str = Field(min_length=1)
     employee_id: str = Field(min_length=1)
     due_date: date
     submitted_date: date | None = None
-    submission_status: str
-    completeness_pct: float = Field(ge=0, le=1)
-    evidence_status: str
+    outcome: str
+    completeness_ratio: float = Field(ge=0, le=1)
+    verification_status: str
 
 
-class LeaveRequest(BaseModel):
-    leave_id: str = Field(min_length=1)
+class LeaveComplianceEvidence(BaseModel):
+    record_id: str = Field(min_length=1)
     employee_id: str = Field(min_length=1)
-    leave_type: str
+    category: str
     start_date: date
     end_date: date
-    request_status: str
+    outcome: str
     documentation_complete: bool
 
 
-class QualityReview(BaseModel):
-    review_id: str = Field(min_length=1)
-    project_id: str = Field(min_length=1)
+class QualityEvidence(BaseModel):
+    record_id: str = Field(min_length=1)
+    related_output_id: str = Field(min_length=1)
     employee_id: str = Field(min_length=1)
-    review_date: date
-    accuracy_pct: float = Field(ge=0, le=1)
+    occurred_on: date
+    accuracy_ratio: float = Field(ge=0, le=1)
     first_pass_approved: bool
     rework_hours: float = Field(ge=0)
-    evidence_status: str
+    verification_status: str
 
 
-class PerformanceDataset(BaseModel):
+class PerformanceEvidenceDataset(BaseModel):
     employees: list[Employee]
-    kpi_targets: list[KpiTarget]
-    projects: list[Project]
-    attendance: list[AttendanceRecord]
-    reports: list[Report]
-    leave_requests: list[LeaveRequest]
-    quality_reviews: list[QualityReview]
+    performance_targets: list[PerformanceTarget]
+    work_outputs: list[WorkOutputEvidence]
+    attendance_events: list[AttendanceComplianceEvidence]
+    submission_events: list[SubmissionComplianceEvidence]
+    leave_events: list[LeaveComplianceEvidence]
+    quality_events: list[QualityEvidence]
     mapped_fields: dict[str, set[str]] = Field(default_factory=dict)
 
 

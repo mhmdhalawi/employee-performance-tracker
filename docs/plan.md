@@ -13,16 +13,17 @@ before its dependent phases are considered complete.
 
 Python is responsible for safe parsing, bounded data access, validation, and all arithmetic.
 The LLM is responsible for interpreting a bounded workbook synopsis, selecting relevant
-tables, and proposing semantic mappings. Never place an entire workbook into a prompt.
+tables, classifying KPI families, and proposing approved calculator plans. Never place an entire workbook into a prompt.
 
-For unfamiliar sheets or columns, the LLM may return a structured mapping proposal. Python
-must validate that proposal before a named performance calculator uses it. Static sheet-name
-mapping is only a convenience for known formats, not the app’s core decision-maker.
+For unfamiliar sheets or columns, the LLM returns a structured classification and calculation
+plan. Python validates table roles, calculator-specific bindings, types, and relationships
+before a named performance calculator uses them. Cached plans are only a convenience for
+known structures, not the app’s core decision-maker.
 
 ## Phase 1: Parse and expose uploaded data
 
 **Status: Complete.** CSV/XLSX acceptance, size/type safeguards, mechanical workbook
-inspection, bounded synopsis generation, and one-shot mapping through the upload API are
+inspection, bounded synopsis generation, and one-shot classification through the upload API are
 connected.
 
 Build the upload path for supported CSV and Excel files. It should enforce the configured
@@ -33,7 +34,7 @@ Build table names, headers, inferred types, row counts, duplicate counts, and at
 sample rows per table into a compact synopsis. Keep the original upload unchanged and
 request-scoped.
 
-This phase is complete when the agent can map an unfamiliar upload from bounded context
+This phase is complete when the agent can classify an unfamiliar upload and bind approved calculators from bounded context
 without receiving the entire workbook, and an unusable file receives a clear client error.
 
 ## Phase 2: Validate source data

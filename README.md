@@ -2,12 +2,12 @@
 
 Employee performance analysis application with a FastAPI backend and a Vue 3 browser client.
 It ingests CSV or Excel performance data, gives a bounded workbook synopsis to an AI agent
-for semantic mapping, validates the mapped records, and calculates employee Productivity,
+for KPI-family classification and calculator planning, validates the bound records, and calculates employee Productivity,
 Compliance, and Quality scores deterministically in Python.
 
 `POST /api/v1/analyze` returns employee KPI results, validation findings, applied filters,
-weekly KPI trends, traceable alerts, mapping limitations, token/request diagnostics, and
-whether a validated in-memory schema mapping was reused.
+weekly KPI trends, traceable alerts, classification limitations, token/request diagnostics, and
+whether a validated in-memory calculation plan was reused.
 
 The frontend lives in `web/` and uses Vue 3, TypeScript, Vite, Tailwind CSS v4, and
 shadcn-vue. The backend remains authoritative for validation, KPI calculations, evidence
@@ -91,7 +91,7 @@ dependencies, and `library-skills` discovers skills bundled by those installed p
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | Liveness and whether AI is configured |
 | `POST` | `/api/v1/ask` | Test the configured model with a plain prompt |
-| `POST` | `/api/v1/analyze` | Upload, map, validate, and analyze CSV/XLSX performance data |
+| `POST` | `/api/v1/analyze` | Upload, classify, validate, and analyze CSV/XLSX performance data |
 
 ## Development guide
 

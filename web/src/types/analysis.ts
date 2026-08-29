@@ -120,10 +120,22 @@ export interface AnalyzeResponse {
   alerts: PerformanceAlert[]
   limitations: string[]
   selected_tables: string[]
+  table_classifications: TableClassification[]
   model: string | null
   total_tokens: number
   model_requests: number
   mapping_cache_hit: boolean
+}
+
+export interface TableClassification {
+  source_name: string
+  kpi_family: string
+  calculator_invocations: Array<{
+    calculator: string
+    field_bindings: Record<string, string>
+  }>
+  confidence: 'low' | 'medium' | 'high'
+  rationale: string
 }
 
 export interface ErrorPayload {

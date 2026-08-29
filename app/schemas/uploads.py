@@ -1,7 +1,7 @@
 from datetime import date
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.performance import (
     DatasetOverview,
@@ -78,26 +78,77 @@ class DistinctValues(BaseModel):
     truncated: bool
 
 
-class MappingProposal(BaseModel):
+type TableRole = Literal[
+    "productivity",
+    "compliance",
+    "quality",
+    "shared",
+    "irrelevant",
+    "unsupported",
+]
+type CalculatorName = Literal[
+    "calculate_productivity",
+    "calculate_attendance_compliance",
+    "calculate_submission_compliance",
+    "calculate_leave_compliance",
+    "calculate_quality",
+    "load_employees",
+    "load_performance_targets",
+]
+
+
+class CalculatorInvocation(BaseModel):
+    calculator: CalculatorName
+    field_bindings: dict[str, str]
+
+
+class TableClassification(BaseModel):
     source_name: str
-    canonical_entity: str
-    field_mappings: dict[str, str]
+    kpi_family: TableRole
+    calculator_invocations: list[CalculatorInvocation]
     confidence: Literal["low", "medium", "high"]
+    rationale: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_unique_calculators(self) -> Self:
+        calculators = [
+            invocation.calculator for invocation in self.calculator_invocations
+        ]
+        if len(calculators) != len(set(calculators)):
+            raise ValueError("A table cannot invoke the same calculator more than once.")
+        return self
 
 
-class MappingValidation(BaseModel):
+class ClassificationValidation(BaseModel):
     source_name: str
-    canonical_entity: str
+    kpi_family: str
     valid: bool
     unknown_source_columns: list[str]
     duplicate_source_columns: list[str]
     missing_required_fields: list[str]
+    invalid_calculators: list[str]
     message: str
 
 
-class UploadAnalysis(BaseModel):
+class CalculationPlan(BaseModel):
     selected_tables: list[str]
-    mapping_proposals: list[MappingProposal]
+    table_classifications: list[TableClassification]
+
+    @model_validator(mode="after")
+    def validate_selected_tables(self) -> Self:
+        classified_sources = [item.source_name for item in self.table_classifications]
+        if len(classified_sources) != len(set(classified_sources)):
+            raise ValueError("Each source table must have exactly one classification.")
+        expected = {
+            item.source_name
+            for item in self.table_classifications
+            if item.kpi_family not in {"irrelevant", "unsupported"}
+        }
+        if set(self.selected_tables) != expected or len(self.selected_tables) != len(expected):
+            raise ValueError(
+                "selected_tables must contain each relevant classified table exactly once."
+            )
+        return self
 
 
 class ImportIssue(BaseModel):
@@ -162,6 +213,7 @@ class AnalyzeUploadResponse(BaseModel):
     validation_summary: ValidationSummary
     global_validation_findings: list[ValidationFinding]
     selected_tables: list[str]
+    table_classifications: list[TableClassification]
     limitations: list[str]
     model: str
     total_tokens: int

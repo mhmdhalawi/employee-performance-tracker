@@ -12,9 +12,9 @@ A FastAPI backend that:
 
 1. Lets a user upload a **CSV or Excel workbook** and press Submit once.
 2. Parses the upload into a request-scoped catalog without assigning business meaning.
-3. Builds a bounded catalog synopsis for an **AI agent that selects relevant tables and
-   proposes semantic mappings**.
-4. Validates the agent's mappings, validates the mapped records, and performs all arithmetic
+3. Builds a bounded catalog synopsis for an **AI agent that classifies tables by KPI family,
+   selects approved calculators, and proposes calculator-specific field bindings**.
+4. Validates the agent's plan and bound records, then performs all arithmetic
    deterministically in Python.
 5. Returns structured employee results with employee ID/name when available, the three KPI
    scores, evidence confidence, gated overall performance and tier, a deterministic summary,
@@ -27,8 +27,9 @@ a small LLM connectivity test; it does not receive or analyze uploaded data.
 
 > **The AI decides *what* to calculate. Tools do the calculating.**
 
-The agent interprets source semantics and proposes mappings. Python validates those mappings,
-decides which deterministic calculators can run, and computes every number in the response.
+The agent interprets source semantics and proposes a classification and calculation plan.
+Python validates that plan, decides which deterministic calculators can run, and computes every
+number in the response.
 
 The real shape of customer data has not been seen yet. Build for data that exists, not for
 formats we imagine a customer might send.
@@ -243,7 +244,7 @@ receive raw pandas frames.
 The intended production lifecycle is:
 
 ```
-upload -> validate/parse -> catalog -> agent table selection -> validated mappings
+upload -> validate/parse -> catalog -> agent KPI classification -> validated calculation plan
        -> canonical performance dataset -> Python KPI tools -> structured response
        -> optional on-demand AI explanation -> Python citation validation
 ```

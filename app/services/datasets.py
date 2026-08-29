@@ -5,111 +5,101 @@ from typing import get_args
 from pydantic import BaseModel, ValidationError
 
 from app.schemas.performance import (
-    AttendanceRecord,
+    AttendanceComplianceEvidence,
     Employee,
-    KpiTarget,
-    LeaveRequest,
-    PerformanceDataset,
-    Project,
-    QualityReview,
-    Report,
+    LeaveComplianceEvidence,
+    PerformanceEvidenceDataset,
+    PerformanceTarget,
+    QualityEvidence,
+    SubmissionComplianceEvidence,
+    WorkOutputEvidence,
 )
-from app.schemas.uploads import ImportIssue, MappingProposal, UploadCatalog
+from app.schemas.uploads import ImportIssue, TableClassification, UploadCatalog
 from app.services import catalog as catalog_service
 
-_CANONICAL_COLLECTIONS: dict[str, tuple[type[BaseModel], str]] = {
-    "employees": (Employee, "employees"),
-    "kpi_targets": (KpiTarget, "kpi_targets"),
-    "projects": (Project, "projects"),
-    "attendance": (AttendanceRecord, "attendance"),
-    "reports": (Report, "reports"),
-    "leave_requests": (LeaveRequest, "leave_requests"),
-    "quality_reviews": (QualityReview, "quality_reviews"),
+_CALCULATOR_INPUTS: dict[str, tuple[type[BaseModel], str]] = {
+    "load_employees": (Employee, "employees"),
+    "load_performance_targets": (PerformanceTarget, "performance_targets"),
+    "calculate_productivity": (WorkOutputEvidence, "work_outputs"),
+    "calculate_attendance_compliance": (AttendanceComplianceEvidence, "attendance_events"),
+    "calculate_submission_compliance": (SubmissionComplianceEvidence, "submission_events"),
+    "calculate_leave_compliance": (LeaveComplianceEvidence, "leave_events"),
+    "calculate_quality": (QualityEvidence, "quality_events"),
 }
 
 
 def build_performance_dataset(
     upload_catalog: UploadCatalog,
-    proposals: list[MappingProposal],
-) -> tuple[PerformanceDataset, list[ImportIssue]]:
-    """Apply validated agent mappings and report unusable source rows."""
+    classifications: list[TableClassification],
+) -> tuple[PerformanceEvidenceDataset, list[ImportIssue]]:
+    """Apply a validated classification plan and report unusable source rows."""
     collections: dict[str, list[BaseModel]] = {
         collection_name: []
-        for _, collection_name in _CANONICAL_COLLECTIONS.values()
+        for _, collection_name in _CALCULATOR_INPUTS.values()
     }
     issues: list[ImportIssue] = []
     mapped_fields: dict[str, set[str]] = {}
 
-    for proposal in proposals:
-        target = _CANONICAL_COLLECTIONS.get(proposal.canonical_entity)
-        if target is None:
-            issues.append(
-                ImportIssue(
-                    code="unknown_canonical_entity",
-                    message=f"Unknown canonical entity: {proposal.canonical_entity}.",
-                    source_name=proposal.source_name,
-                )
-            )
+    for classification in classifications:
+        if classification.kpi_family in {"irrelevant", "unsupported"}:
             continue
-
-        validation = catalog_service.validate_mapping(
-            upload_catalog,
-            proposal.source_name,
-            proposal.canonical_entity,
-            proposal.field_mappings,
-        )
+        validation = catalog_service.validate_classification(upload_catalog, classification)
         if not validation.valid:
             issues.append(
                 ImportIssue(
-                    code="invalid_mapping",
+                    code="invalid_classification",
                     message=validation.message,
-                    source_name=proposal.source_name,
+                    source_name=classification.source_name,
                 )
             )
             continue
 
-        model, collection_name = target
-        mapped_fields.setdefault(collection_name, set()).update(
-            proposal.field_mappings
-        )
         table = next(
             table
             for table in upload_catalog.tables
-            if table.source_name == proposal.source_name
+            if table.source_name == classification.source_name
         )
-        for row in table.rows:
-            source_row = row.get("_source_row")
-            row_number = (
-                source_row
-                if isinstance(source_row, int) and not isinstance(source_row, bool)
-                else None
+        for invocation in classification.calculator_invocations:
+            target = _CALCULATOR_INPUTS.get(invocation.calculator)
+            if target is None:
+                continue
+            model, collection_name = target
+            mapped_fields.setdefault(collection_name, set()).update(
+                invocation.field_bindings
             )
-            mapped_row = {
-                canonical_field: _normalize_value(
-                    model,
-                    canonical_field,
-                    row.get(source_column),
+            for row in table.rows:
+                source_row = row.get("_source_row")
+                row_number = (
+                    source_row
+                    if isinstance(source_row, int) and not isinstance(source_row, bool)
+                    else None
                 )
-                for canonical_field, source_column in proposal.field_mappings.items()
-                if row.get(source_column) is not None
-            }
-            try:
-                collections[collection_name].append(model.model_validate(mapped_row))
-            except ValidationError as exc:
-                issues.append(
-                    ImportIssue(
-                        code="invalid_row",
-                        message=str(exc),
-                        source_name=proposal.source_name,
-                        row_number=row_number,
+                mapped_row = {
+                    calculator_field: _normalize_value(
+                        model,
+                        calculator_field,
+                        row.get(source_column),
                     )
-                )
+                    for calculator_field, source_column in invocation.field_bindings.items()
+                    if row.get(source_column) is not None
+                }
+                try:
+                    collections[collection_name].append(model.model_validate(mapped_row))
+                except ValidationError as exc:
+                    issues.append(
+                        ImportIssue(
+                            code="invalid_row",
+                            message=str(exc),
+                            source_name=classification.source_name,
+                            row_number=row_number,
+                        )
+                    )
 
     dataset_data: dict[str, object] = {
         **collections,
         "mapped_fields": mapped_fields,
     }
-    return PerformanceDataset.model_validate(dataset_data), issues
+    return PerformanceEvidenceDataset.model_validate(dataset_data), issues
 
 
 def _normalize_value(
