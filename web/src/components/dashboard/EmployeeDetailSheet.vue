@@ -29,6 +29,27 @@ function alertCodeLabel(code: string): string {
   return code.replaceAll('_', ' ')
 }
 
+function impactLabel(impact: string): string {
+  const labels: Record<string, string> = {
+    lowers_confidence: 'Lowers confidence',
+    affects_score: 'Affects score',
+    excluded_from_scoring: 'Excluded from scoring',
+    blocks_score: 'Blocks score',
+    none: 'No scoring impact',
+  }
+  return labels[impact] ?? alertCodeLabel(impact)
+}
+
+function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' | 'warning' {
+  if (impact === 'blocks_score')
+    return 'destructive'
+  if (impact === 'lowers_confidence')
+    return 'warning'
+  if (impact === 'affects_score')
+    return 'secondary'
+  return 'outline'
+}
+
 </script>
 
 <template>
@@ -61,11 +82,24 @@ function alertCodeLabel(code: string): string {
               <span class="font-medium tabular-nums">{{ employee.data_confidence.toFixed(1) }}%</span>
             </div>
             <Progress :model-value="employee.data_confidence" />
+            <p class="text-xs text-muted-foreground">
+              Required threshold: {{ employee.confidence_threshold.toFixed(1) }}%
+            </p>
           </div>
         </div>
       </SheetHeader>
 
       <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 sm:px-6">
+        <Alert v-if="employee.overall_score === null" variant="warning">
+          <TriangleAlertIcon aria-hidden="true" />
+          <AlertTitle>Insufficient evidence for an overall result</AlertTitle>
+          <AlertDescription>
+            Overall performance and tier were withheld because evidence confidence is below
+            the required threshold. Component KPI values remain visible for auditability and
+            should not be treated as a complete performance assessment.
+          </AlertDescription>
+        </Alert>
+
         <section class="grid grid-cols-3 gap-2 sm:gap-3">
           <div class="flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-3 shadow-xs sm:p-4">
             <p class="truncate text-xs font-medium text-muted-foreground">Productivity</p>
@@ -80,6 +114,18 @@ function alertCodeLabel(code: string): string {
             <p class="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">{{ score(employee.quality_score) }}</p>
           </div>
         </section>
+
+        <Alert>
+          <FileSpreadsheetIcon aria-hidden="true" />
+          <AlertTitle>How evidence confidence was determined</AlertTitle>
+          <AlertDescription class="flex flex-col gap-2">
+            <p>{{ employee.confidence_reason }}</p>
+            <p class="text-xs">
+              Missing required evidence reduces confidence; it is not converted into zero
+              employee performance.
+            </p>
+          </AlertDescription>
+        </Alert>
 
         <Tabs default-value="alerts" class="min-h-0 flex-1">
           <TabsList variant="line" class="grid w-full grid-cols-2 border-b">
@@ -96,6 +142,9 @@ function alertCodeLabel(code: string): string {
                 <Badge variant="outline">{{ alert.occurrence_count }}</Badge>
               </AlertTitle>
               <AlertDescription class="flex flex-col gap-2 [&_p]:mb-0">
+                <Badge :variant="impactVariant(alert.scoring_impact)">
+                  {{ impactLabel(alert.scoring_impact) }}
+                </Badge>
                 <p>{{ alert.message }}</p>
                 <details v-if="alert.record_ids.length">
                   <summary class="cursor-pointer text-xs font-medium text-foreground">Supporting records ({{ alert.record_ids.length }})</summary>
