@@ -157,7 +157,7 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
       return
 
     const message = error instanceof TypeError
-      ? 'The API could not be reached. Confirm the FastAPI server is running on port 8000.'
+      ? 'The analysis service is temporarily unavailable. Please try again shortly.'
       : error instanceof Error ? error.message : 'The file could not be analyzed.'
     if (filtering)
       filterError.value = message

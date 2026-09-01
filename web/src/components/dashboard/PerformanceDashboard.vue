@@ -380,7 +380,7 @@ async function generateInsight(employeeId: string): Promise<void> {
   }
   catch (error) {
     insightError.value = error instanceof TypeError
-      ? 'The API could not be reached. Confirm the FastAPI server is running.'
+      ? 'The guidance service is temporarily unavailable. Please try again shortly.'
       : error instanceof Error ? error.message : 'AI guidance could not be generated.'
   }
   finally {
