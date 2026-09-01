@@ -40,8 +40,8 @@ from app.schemas.uploads import (
     AnalysisFilters,
     AnalysisSummary,
     AnalyzeUploadResponse,
-    CatalogTable,
     CalculationPlan,
+    CatalogTable,
     ClassificationValidation,
     ColumnDescription,
     EmployeeAIInsight,
@@ -155,9 +155,7 @@ async def analyze_upload(
 ) -> AnalyzeUploadResponse:
     """Parse an upload and let the agent select and map relevant source tables."""
     if start_date and end_date and start_date > end_date:
-        raise InvalidAnalysisFilterError(
-            "start_date must be on or before end_date."
-        )
+        raise InvalidAnalysisFilterError("start_date must be on or before end_date.")
     upload_catalog = parse_upload(file_name, contents, maximum_bytes)
     workbook_context = _build_workbook_context(upload_catalog)
     schema_fingerprint = _schema_fingerprint(upload_catalog)
@@ -367,6 +365,8 @@ async def analyze_upload(
         model_requests=usage.requests,
         mapping_cache_hit=mapping_cache_hit,
     )
+
+
 def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
     insufficient_ids = [
         result.employee_id
@@ -412,9 +412,7 @@ def _build_insight_context(
         if not grouped:
             continue
         allowed_record_ids = frozenset(
-            record_id
-            for record_ids in grouped.values()
-            for record_id in record_ids
+            record_id for record_ids in grouped.values() for record_id in record_ids
         )
         findings = [
             {
@@ -499,7 +497,9 @@ async def generate_employee_insight(
     ) as exc:
         raise AIError(f"The insight model call failed: {exc}") from exc
 
-    if not _validate_ai_insight(insight, employee_id, employee_context.allowed_record_ids):
+    if not _validate_ai_insight(
+        insight, employee_id, employee_context.allowed_record_ids
+    ):
         raise AIError(
             "The generated insight was omitted because its employee or record citations did not validate."
         )
@@ -640,10 +640,7 @@ def _expand_agent_plan(agent_plan: AgentCalculationPlan) -> CalculationPlan:
             confidence=item.confidence,
             rationale=_classification_rationale(
                 item.kpi_family,
-                [
-                    invocation.calculator
-                    for invocation in item.calculator_invocations
-                ],
+                [invocation.calculator for invocation in item.calculator_invocations],
             ),
         )
         for item in agent_plan.table_classifications
@@ -662,7 +659,9 @@ def _classification_rationale(kpi_family: str, calculators: list[str]) -> str:
     if kpi_family == "irrelevant":
         return "The mapping agent classified this source as unrelated to KPI evidence."
     if kpi_family == "unsupported":
-        return "The mapping agent found potential evidence without a supported calculator."
+        return (
+            "The mapping agent found potential evidence without a supported calculator."
+        )
     return "Mapped to approved calculator" + (
         f": {calculators[0]}."
         if len(calculators) == 1
@@ -675,9 +674,7 @@ def _build_workbook_context(upload_catalog: UploadCatalog) -> dict[str, object]:
         upload_catalog,
         [table.source_name for table in upload_catalog.tables],
     )
-    tables_by_source = {
-        table.source_name: table for table in upload_catalog.tables
-    }
+    tables_by_source = {table.source_name: table for table in upload_catalog.tables}
     return {
         "classification_and_calculator_contract": catalog.classification_contract(),
         "tables": [
@@ -696,9 +693,7 @@ def _build_targeted_repair_context(
     target_sources: set[str],
 ) -> dict[str, object]:
     analyses = catalog.inspect_tables(upload_catalog, sorted(target_sources))
-    tables_by_source = {
-        table.source_name: table for table in upload_catalog.tables
-    }
+    tables_by_source = {table.source_name: table for table in upload_catalog.tables}
     return {
         "tables": [
             _build_table_context(
@@ -721,10 +716,7 @@ def _repair_target_sources(
         for validation in invalid_classifications
     ):
         return known_sources
-    return {
-        validation.source_name
-        for validation in invalid_classifications
-    }
+    return {validation.source_name for validation in invalid_classifications}
 
 
 def _build_table_context(
@@ -736,8 +728,7 @@ def _build_table_context(
         "source_name": table.source_name,
         "row_count": table.row_count,
         "columns": [
-            _build_column_context(table, column, include_examples)
-            for column in columns
+            _build_column_context(table, column, include_examples) for column in columns
         ],
     }
 
@@ -782,10 +773,7 @@ def _column_signals(
         signals.append("constant")
     elif non_missing_count and column.unique_count == non_missing_count:
         signals.append("unique_values")
-    elif (
-        column.inferred_type == "text"
-        and 1 < column.unique_count <= 12
-    ):
+    elif column.inferred_type == "text" and 1 < column.unique_count <= 12:
         signals.append("low_cardinality")
 
     numeric_values = _numeric_values(table, column)
@@ -809,7 +797,7 @@ def _numeric_values(
             continue
         try:
             values.append(float(value))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return []
     return values
 
