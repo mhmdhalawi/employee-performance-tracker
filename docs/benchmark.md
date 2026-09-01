@@ -108,7 +108,7 @@ on which source controls those two expected values.
 
 Before benchmark-related work:
 
-1. Read `AGENTS.md`, `docs/plan.md`, and this document.
+1. Read `AGENTS.md` and this document.
 2. Ask for or locate the benchmark workbook; it is intentionally not stored in Git by
    default because employee data may be sensitive.
 3. Inspect only the sheets needed for the active phase.

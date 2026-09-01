@@ -39,8 +39,8 @@ formats we imagine a customer might send.
 The development benchmark is `Cedar Employee Performance Agent — Complete Project
 Dataset.xlsx`. Its `00_Start_Here` sheet defines the intended product and guardrails:
 
-- Build and validate a Productivity, Compliance, and Quality dashboard through the seven-day
-  delivery plan tracked in `docs/plan.md`.
+- Build and validate a Productivity, Compliance, and Quality dashboard against the benchmark
+  and acceptance criteria preserved in `docs/benchmark.md`.
 - The benchmark contains 30 employees over the 12-week period from 2026-05-25 through
   2026-08-22.
 - Productivity is 35%, Compliance is 30%, and Quality is 35% of the overall result.
@@ -151,9 +151,7 @@ tracker/
 ├── AGENTS.md
 ├── docs/
 │   ├── benchmark.md          # stable workbook context and confirmed benchmark exceptions
-│   ├── plan.md               # implementation phases and acceptance criteria
-│   └── team-feedback-checklist.md
-│                             # implementation status for received team feedback
+│   └── benchmark.md          # benchmark context, acceptance criteria, and known exceptions
 ├── pyproject.toml            # deps + build config
 ├── uv.lock                   # Python dependency lock
 ├── .env.example
