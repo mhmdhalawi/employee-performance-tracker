@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from unittest import TestCase
 
 from app.schemas.performance import (
@@ -82,7 +82,7 @@ class PerformanceQaTests(TestCase):
     def test_late_submission_reduces_compliance_but_missing_evidence_does_not(self) -> None:
         late = _dataset()
         late.submission_events[0] = late.submission_events[0].model_copy(
-            update={"submitted_date": date(2026, 6, 3), "outcome": "submitted late"}
+            update={"submitted_date": date(2026, 6, 3), "outcome": "submitted on time"}
         )
         missing = _dataset()
         missing.submission_events[0] = missing.submission_events[0].model_copy(
@@ -97,6 +97,90 @@ class PerformanceQaTests(TestCase):
         self.assertTrue(
             any(item.code == "missing_submission" for item in validate_dataset(missing))
         )
+        self.assertTrue(
+            any(item.code == "late_submission" for item in validate_dataset(late))
+        )
+
+    def test_attendance_uses_timestamps_instead_of_status_label(self) -> None:
+        dataset = _dataset()
+        dataset.attendance_events[0] = dataset.attendance_events[0].model_copy(
+            update={
+                "outcome": "on time",
+                "actual_start": time(9, 1),
+                "actual_end": time(16, 59),
+                "lunch_out": time(13),
+                "lunch_in": time(12, 30),
+            }
+        )
+
+        result = calculate_kpis(dataset)[0]
+
+        self.assertEqual(result.compliance_score, 50)
+        self.assertIn("arrival 0.00", result.compliance_reason)
+        self.assertIn("shift end 0.00", result.compliance_reason)
+        self.assertIn("lunch 0.00", result.compliance_reason)
+
+    def test_missing_lunch_time_lowers_confidence_without_lowering_compliance(self) -> None:
+        dataset = _dataset()
+        dataset.attendance_events[0] = dataset.attendance_events[0].model_copy(
+            update={"lunch_in": None}
+        )
+
+        findings = validate_dataset(dataset)
+        result = calculate_kpis(dataset, validation_findings=findings)[0]
+
+        self.assertTrue(any(item.code == "missing_lunch_in" for item in findings))
+        self.assertEqual(result.compliance_score, 100)
+        self.assertEqual(result.data_confidence, 0)
+        self.assertIsNone(result.overall_score)
+
+    def test_incomplete_sick_leave_documentation_affects_leave_compliance(self) -> None:
+        dataset = _dataset()
+        dataset.attendance_events[0] = dataset.attendance_events[0].model_copy(
+            update={
+                "outcome": "sick leave",
+                "scheduled_start": None,
+                "actual_start": None,
+                "lunch_out": None,
+                "lunch_in": None,
+                "scheduled_end": None,
+                "actual_end": None,
+            }
+        )
+        dataset.leave_events[0] = dataset.leave_events[0].model_copy(
+            update={"category": "sick leave", "documentation_complete": False}
+        )
+
+        findings = validate_dataset(dataset)
+        result = calculate_kpis(dataset, validation_findings=findings)[0]
+
+        self.assertTrue(
+            any(
+                item.code == "incomplete_sick_leave_documentation"
+                for item in findings
+            )
+        )
+        self.assertEqual(result.compliance_score, 70)
+        self.assertEqual(result.data_confidence, 100)
+
+    def test_holiday_is_neutral_without_attendance_timestamps(self) -> None:
+        dataset = _dataset()
+        dataset.attendance_events[0] = dataset.attendance_events[0].model_copy(
+            update={
+                "outcome": "holiday",
+                "scheduled_start": None,
+                "actual_start": None,
+                "lunch_out": None,
+                "lunch_in": None,
+                "scheduled_end": None,
+                "actual_end": None,
+            }
+        )
+
+        result = calculate_kpis(dataset)[0]
+
+        self.assertEqual(result.compliance_score, 100)
+        self.assertEqual(result.data_confidence, 100)
 
     def test_missing_effort_lowers_confidence_without_lowering_productivity(self) -> None:
         dataset = _dataset()
@@ -227,6 +311,11 @@ def _dataset(
                 occurred_on=date(2026, 6, 1),
                 outcome="on time",
                 record_status="complete",
+                scheduled_start="09:00",
+                actual_start="09:00",
+                lunch_out="12:00",
+                lunch_in="13:00",
+                scheduled_end="17:00",
                 actual_end="17:00",
                 confidence_score=1,
             )
@@ -265,5 +354,14 @@ def _dataset(
                 verification_status="verified",
             )
         ],
-        mapped_fields={"attendance_events": {"actual_end"}},
+        mapped_fields={
+            "attendance_events": {
+                "scheduled_start",
+                "actual_start",
+                "lunch_out",
+                "lunch_in",
+                "scheduled_end",
+                "actual_end",
+            }
+        },
     )

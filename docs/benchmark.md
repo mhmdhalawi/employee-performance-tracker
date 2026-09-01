@@ -31,6 +31,27 @@ The overall result combines the three KPI scores at 35% / 30% / 35%. Evidence co
 below 70% produces `Insufficient data`. Calculations are deterministic Python outputs; the AI
 may explain them but may not create or alter numerical results.
 
+### Compliance calculation contract
+
+Compliance combines attendance (50%), reports (35%), and leave documentation (15%). Python
+derives each result from bound source values rather than trusting source status labels:
+
+- Arrival is compliant when `actual_start <= scheduled_start`.
+- Shift end is compliant when `actual_end >= scheduled_end`.
+- Lunch is compliant when both timestamps exist and `lunch_in > lunch_out`.
+- The attendance component equally averages the arrival, shift-end, and lunch checks whose
+  field pairs are mapped. Missing values are excluded from performance arithmetic and lower
+  evidence confidence.
+- A verified report is on time when `submitted_date <= due_date`. A missing submission date
+  lowers confidence instead of becoming zero report performance.
+- Approved annual leave and holidays are neutral. Approved sick leave is neutral in attendance;
+  its request satisfies leave compliance only when documentation is complete.
+- No grace period is applied to arrival or early departure in the MVP.
+
+The API keeps the established `compliance_score` and `compliance_reason` fields. The reason
+reports the deterministic arrival, shift-end, lunch, reporting, and leave sub-scores shown by
+the dashboard.
+
 ## Workbook authorities
 
 - `00_Start_Here`: product scope, guardrails, delivery sequence, and acceptance checks

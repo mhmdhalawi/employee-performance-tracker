@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Protocol
 
@@ -26,8 +27,11 @@ REQUIRED_EVIDENCE_MATRIX: dict[str, tuple[str, ...]] = {
         "actual effort hours for completed work",
     ),
     "compliance": (
-        "attendance check-out unless on approved leave",
+        "scheduled and actual arrival when mapped",
+        "scheduled and actual shift end when mapped",
+        "lunch check-out and return when mapped",
         "submitted date and verified report evidence",
+        "complete approved sick-leave documentation",
     ),
     "quality": (
         "verified accuracy",
@@ -35,6 +39,21 @@ REQUIRED_EVIDENCE_MATRIX: dict[str, tuple[str, ...]] = {
         "rework hours",
     ),
 }
+
+_NEUTRAL_ATTENDANCE_OUTCOMES = {
+    "annual leave",
+    "sick leave",
+    "holiday",
+    "public holiday",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class AttendanceBreakdown:
+    score: float | None
+    arrival_score: float | None
+    shift_end_score: float | None
+    lunch_score: float | None
 
 
 def inspect_dataset(dataset: PerformanceEvidenceDataset) -> DatasetOverview:
@@ -126,25 +145,25 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
             findings.append(_orphan("KPI target", target.employee_id, target.employee_id))
 
     attendance_by_key: dict[tuple[str, date], list[str]] = defaultdict(list)
+    mapped_attendance_fields = dataset.mapped_fields.get("attendance_events", set())
     for record in dataset.attendance_events:
         attendance_by_key[record.employee_id, record.occurred_on].append(record.record_id)
         if record.employee_id not in employee_ids:
             findings.append(_orphan("attendance evidence", record.record_id, record.employee_id))
-        if not record.actual_end and record.outcome.casefold() not in {
-            "annual leave",
-            "sick leave",
-        }:
-            findings.append(
-                ValidationFinding(
-                    code="missing_actual_end",
-                    severity="warning",
-                    message="Attendance record has no actual end time and lowers evidence confidence.",
-                    employee_id=record.employee_id,
-                    record_ids=[record.record_id],
-                    source_type="attendance",
-                    scoring_impact="lowers_confidence",
-                )
-            )
+        if record.outcome.casefold() not in _NEUTRAL_ATTENDANCE_OUTCOMES:
+            required_fields = {"actual_end"}
+            for field_group in (
+                {"scheduled_start", "actual_start"},
+                {"scheduled_end", "actual_end"},
+                {"lunch_out", "lunch_in"},
+            ):
+                if field_group & mapped_attendance_fields:
+                    required_fields.update(field_group)
+            for field_name in sorted(required_fields):
+                if getattr(record, field_name) is None:
+                    findings.append(
+                        _missing_attendance_finding(record, field_name)
+                    )
     for (employee_id, _), record_ids in attendance_by_key.items():
         if len(record_ids) > 1:
             findings.append(
@@ -233,11 +252,43 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                     scoring_impact="lowers_confidence",
                 )
             )
+        if (
+            report.submitted_date is not None
+            and report.verification_status.casefold() == "verified"
+            and report.submitted_date > report.due_date
+        ):
+            findings.append(
+                ValidationFinding(
+                    code="late_submission",
+                    severity="info",
+                    message="Verified submission date is after its due date and affects report compliance.",
+                    employee_id=report.employee_id,
+                    record_ids=[report.record_id],
+                    source_type="submission_evidence",
+                    scoring_impact="affects_score",
+                )
+            )
 
     for leave_request in dataset.leave_events:
         if leave_request.employee_id not in employee_ids:
             findings.append(
                 _orphan("leave evidence", leave_request.record_id, leave_request.employee_id)
+            )
+        if (
+            leave_request.category.casefold() == "sick leave"
+            and leave_request.outcome.casefold() == "approved"
+            and not leave_request.documentation_complete
+        ):
+            findings.append(
+                ValidationFinding(
+                    code="incomplete_sick_leave_documentation",
+                    severity="warning",
+                    message="Approved sick leave is missing required documentation and affects leave compliance.",
+                    employee_id=leave_request.employee_id,
+                    record_ids=[leave_request.record_id],
+                    source_type="leave_evidence",
+                    scoring_impact="affects_score",
+                )
             )
 
     for review in dataset.quality_events:
@@ -403,7 +454,11 @@ def calculate_kpis(
         productivity = _weighted_available(
             [(completion_score, 0.60), (time_score, 0.40)]
         )
-        attendance_compliance = _attendance_compliance(attendance)
+        attendance_breakdown = _attendance_compliance(
+            attendance,
+            dataset.mapped_fields.get("attendance_events", set()),
+        )
+        attendance_compliance = attendance_breakdown.score
         report_compliance = _report_compliance(reports)
         leave_compliance = _leave_compliance(
             dataset,
@@ -427,6 +482,7 @@ def calculate_kpis(
             attendance,
             reports,
             reviews,
+            dataset.mapped_fields.get("attendance_events", set()),
         )
         confidence_threshold = target.minimum_confidence * 100
         score_is_allowed = (
@@ -455,7 +511,10 @@ def calculate_kpis(
                 ),
                 compliance_score=round(compliance, 2),
                 compliance_reason=(
-                    f"Weighted 50% attendance ({attendance_compliance:.2f}), "
+                    f"Weighted 50% attendance ({_format_optional_score(attendance_compliance)}: "
+                    f"arrival {_format_optional_score(attendance_breakdown.arrival_score)}, "
+                    f"shift end {_format_optional_score(attendance_breakdown.shift_end_score)}, "
+                    f"lunch {_format_optional_score(attendance_breakdown.lunch_score)}), "
                     f"35% reporting ({_format_optional_score(report_compliance)}), and 15% leave "
                     f"compliance ({leave_compliance:.2f}) after excluding duplicate "
                     "attendance records."
@@ -743,11 +802,50 @@ def _in_period[T: EmployeeLinkedRecord](
     ]
 
 
-def _attendance_compliance(records: list[AttendanceComplianceEvidence]) -> float:
-    if not records:
-        return 0
-    compliant = {"on time", "annual leave", "sick leave"}
-    return sum(record.outcome.casefold() in compliant for record in records) / len(records) * 100
+def _attendance_compliance(
+    records: list[AttendanceComplianceEvidence],
+    mapped_fields: set[str],
+) -> AttendanceBreakdown:
+    working_records = [
+        record
+        for record in records
+        if record.outcome.casefold() not in _NEUTRAL_ATTENDANCE_OUTCOMES
+    ]
+    arrival_score = (
+        _boolean_score(
+            record.actual_start <= record.scheduled_start
+            for record in working_records
+            if record.scheduled_start is not None and record.actual_start is not None
+        )
+        if {"scheduled_start", "actual_start"} <= mapped_fields
+        else None
+    )
+    shift_end_score = (
+        _boolean_score(
+            record.actual_end >= record.scheduled_end
+            for record in working_records
+            if record.scheduled_end is not None and record.actual_end is not None
+        )
+        if {"scheduled_end", "actual_end"} <= mapped_fields
+        else None
+    )
+    lunch_score = (
+        _boolean_score(
+            record.lunch_in > record.lunch_out
+            for record in working_records
+            if record.lunch_out is not None and record.lunch_in is not None
+        )
+        if {"lunch_out", "lunch_in"} <= mapped_fields
+        else None
+    )
+    return AttendanceBreakdown(
+        score=_weighted_available_optional(
+            [(arrival_score, 1), (shift_end_score, 1), (lunch_score, 1)]
+        ),
+        arrival_score=arrival_score,
+        shift_end_score=shift_end_score,
+        lunch_score=lunch_score,
+    )
 
 
 def _report_compliance(reports: list[SubmissionComplianceEvidence]) -> float | None:
@@ -760,7 +858,7 @@ def _report_compliance(reports: list[SubmissionComplianceEvidence]) -> float | N
     if not supported:
         return None
     return (
-        sum(report.outcome.casefold() == "submitted on time" for report in supported)
+        sum(report.submitted_date <= report.due_date for report in supported)
         / len(supported)
         * 100
     )
@@ -779,7 +877,20 @@ def _leave_compliance(
         and (start_date is None or request.end_date >= start_date)
         and (end_date is None or request.start_date <= end_date)
     ]
-    return sum(request.outcome.casefold() == "approved" for request in requests) / len(requests) * 100 if requests else 100
+    sick_requests = [
+        request for request in requests if request.category.casefold() == "sick leave"
+    ]
+    if not sick_requests:
+        return 100
+    return (
+        sum(
+            request.outcome.casefold() == "approved"
+            and request.documentation_complete
+            for request in sick_requests
+        )
+        / len(sick_requests)
+        * 100
+    )
 
 
 def _performance_tier(overall: float | None) -> str | None:
@@ -799,6 +910,7 @@ def _evidence_confidence(
     attendance: list[AttendanceComplianceEvidence],
     reports: list[SubmissionComplianceEvidence],
     reviews: list[QualityEvidence],
+    mapped_attendance_fields: set[str],
 ) -> tuple[float, str]:
     project_confidence = _coverage(
         record.verification_status.casefold() == "verified"
@@ -810,8 +922,7 @@ def _evidence_confidence(
         for record in projects
     )
     attendance_confidence = _coverage(
-        bool(record.actual_end)
-        or record.outcome.casefold() in {"annual leave", "sick leave"}
+        _attendance_evidence_complete(record, mapped_attendance_fields)
         for record in attendance
     )
     report_confidence = _coverage(
@@ -844,6 +955,11 @@ def _coverage(checks: Iterable[bool]) -> float:
     return sum(values) / len(values) * 100 if values else 0.0
 
 
+def _boolean_score(checks: Iterable[bool]) -> float | None:
+    values = list(checks)
+    return sum(values) / len(values) * 100 if values else None
+
+
 def _average(values: Iterable[float]) -> float | None:
     available = list(values)
     return round(sum(available) / len(available), 2) if available else None
@@ -859,8 +975,60 @@ def _weighted_available(
     return sum(value * weight for value, weight in available) / total_weight
 
 
+def _weighted_available_optional(
+    components: list[tuple[float | None, float]],
+) -> float | None:
+    available = [(value, weight) for value, weight in components if value is not None]
+    if not available:
+        return None
+    total_weight = sum(weight for _, weight in available)
+    return sum(value * weight for value, weight in available) / total_weight
+
+
 def _format_optional_score(value: float | None) -> str:
     return f"{value:.2f}" if value is not None else "unavailable"
+
+
+def _attendance_evidence_complete(
+    record: AttendanceComplianceEvidence,
+    mapped_fields: set[str],
+) -> bool:
+    if record.outcome.casefold() in _NEUTRAL_ATTENDANCE_OUTCOMES:
+        return True
+    required_fields = {"actual_end"}
+    for field_group in (
+        {"scheduled_start", "actual_start"},
+        {"scheduled_end", "actual_end"},
+        {"lunch_out", "lunch_in"},
+    ):
+        if field_group & mapped_fields:
+            required_fields.update(field_group)
+    return all(getattr(record, field_name) is not None for field_name in required_fields)
+
+
+def _missing_attendance_finding(
+    record: AttendanceComplianceEvidence,
+    field_name: str,
+) -> ValidationFinding:
+    labels = {
+        "scheduled_start": "scheduled start time",
+        "actual_start": "actual arrival time",
+        "lunch_out": "lunch check-out time",
+        "lunch_in": "lunch return time",
+        "scheduled_end": "scheduled end time",
+        "actual_end": "actual end time",
+    }
+    return ValidationFinding(
+        code=f"missing_{field_name}",
+        severity="warning",
+        message=(
+            f"Attendance record has no {labels[field_name]} and lowers evidence confidence."
+        ),
+        employee_id=record.employee_id,
+        record_ids=[record.record_id],
+        source_type="attendance",
+        scoring_impact="lowers_confidence",
+    )
 
 
 def _duplicates(values: Iterable[str]) -> list[str]:

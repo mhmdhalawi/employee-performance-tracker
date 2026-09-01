@@ -151,6 +151,7 @@ tracker/
 ├── AGENTS.md
 ├── docs/
 │   ├── benchmark.md          # stable workbook context and confirmed benchmark exceptions
+│   ├── data-dictionary.md    # normalized deterministic calculator fields and formulas
 │   └── benchmark.md          # benchmark context, acceptance criteria, and known exceptions
 ├── pyproject.toml            # deps + build config
 ├── uv.lock                   # Python dependency lock

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -36,7 +36,12 @@ class AttendanceComplianceEvidence(BaseModel):
     occurred_on: date
     outcome: str
     record_status: str
-    actual_end: str | None = None
+    scheduled_start: time | None = None
+    actual_start: time | None = None
+    lunch_out: time | None = None
+    lunch_in: time | None = None
+    scheduled_end: time | None = None
+    actual_end: time | None = None
     confidence_score: float = Field(ge=0, le=1)
 
 

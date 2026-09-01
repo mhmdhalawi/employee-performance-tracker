@@ -67,8 +67,11 @@ invocations with the field bindings required by each calculator. Shared employee
 tables use their approved loader invocations. Documentation,
 benchmark, and unrelated tables must be classified as irrelevant. Potential KPI evidence that
 does not satisfy an approved calculator contract must be classified as unsupported rather than
-forced into a role. Return lower confidence when semantics are ambiguous. Bind optional
-validation fields, especially attendance actual_end, whenever supported. Do not calculate,
+forced into a role. Source column names do not need to match normalized field names: bind
+semantically equivalent fields, such as target_projects_90d to target_outputs_90d and
+target_avg_hours to target_avg_effort_hours. Return lower confidence when semantics are ambiguous. Bind optional
+validation and calculation fields whenever supported. For attendance, bind scheduled_start,
+actual_start, lunch_out, lunch_in, scheduled_end, and actual_end when those columns exist. Do not calculate,
 validate source records, invent values, or explain scores. Return only the structured output.
 """
 
@@ -154,6 +157,14 @@ async def analyze_upload(
     workbook_context = _build_workbook_context(upload_catalog)
     schema_fingerprint = _schema_fingerprint(upload_catalog)
     analysis = _get_cached_analysis(schema_fingerprint)
+    if analysis is not None and any(
+        not validation.valid
+        for validation in catalog.validate_classifications(
+            upload_catalog,
+            analysis.table_classifications,
+        )
+    ):
+        analysis = None
     mapping_cache_hit = analysis is not None
     usage = RunUsage()
 
@@ -190,10 +201,14 @@ async def analyze_upload(
             upload_catalog,
             analysis.table_classifications,
         )
-        if final_validations and all(
-            validation.valid for validation in final_validations
-        ):
-            _cache_analysis(schema_fingerprint, analysis)
+        invalid_final_validations = [
+            validation for validation in final_validations if not validation.valid
+        ]
+        if invalid_final_validations:
+            raise AIError(
+                "The model calculation plan did not pass deterministic validation."
+            )
+        _cache_analysis(schema_fingerprint, analysis)
 
     performance_dataset, mapping_issues = build_performance_dataset(
         upload_catalog,
@@ -681,11 +696,22 @@ def _build_limitations(
         limitations.append(
             f"{len(import_issues)} source rows or calculator bindings could not be imported."
         )
-    if dataset.attendance_events and "actual_end" not in dataset.mapped_fields.get(
-        "attendance_events", set()
-    ):
+    mapped_attendance = dataset.mapped_fields.get("attendance_events", set())
+    attendance_capabilities = {
+        "arrival": {"scheduled_start", "actual_start"},
+        "shift-end": {"scheduled_end", "actual_end"},
+        "lunch": {"lunch_out", "lunch_in"},
+    }
+    unavailable_attendance_checks = [
+        label
+        for label, required_fields in attendance_capabilities.items()
+        if dataset.attendance_events and not required_fields <= mapped_attendance
+    ]
+    if unavailable_attendance_checks:
         limitations.append(
-            "Attendance end-time validation was unavailable because actual_end was not mapped."
+            "Attendance checks unavailable because their timestamp fields were not mapped: "
+            + ", ".join(unavailable_attendance_checks)
+            + "."
         )
     excluded_count = summarize_validation(validation_findings).excluded_record_count
     if excluded_count:

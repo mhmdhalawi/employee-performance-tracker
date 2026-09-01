@@ -149,6 +149,34 @@ def validate_classifications(
                 ),
             )
         )
+    invoked_calculators = {
+        invocation.calculator
+        for classification in classifications
+        for invocation in classification.calculator_invocations
+    }
+    if any(
+        calculator.startswith("calculate_")
+        for calculator in invoked_calculators
+    ):
+        missing_foundations = sorted(
+            {"load_employees", "load_performance_targets"} - invoked_calculators
+        )
+        if missing_foundations:
+            validations.append(
+                ClassificationValidation(
+                    source_name="calculation_plan",
+                    kpi_family="shared",
+                    valid=False,
+                    unknown_source_columns=[],
+                    duplicate_source_columns=[],
+                    missing_required_fields=missing_foundations,
+                    invalid_calculators=[],
+                    message=(
+                        "A KPI calculation plan requires employee and performance-target "
+                        "loaders before deterministic scoring."
+                    ),
+                )
+            )
     return validations
 
 
