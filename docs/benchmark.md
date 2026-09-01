@@ -85,12 +85,11 @@ Vue dashboard.
 
 ## Phase 3 benchmark findings
 
-Comparison against `Expected_KPI` confirms that employee data confidence is the lowest
-verified-evidence coverage across projects, submitted reports, and quality reviews. A report
-without a submission date affects report compliance; among reports that were submitted, an
-unverified evidence status lowers report evidence coverage. Missing attendance exits lower
-record confidence and produce traceable findings under QA-03, but they do not change the
-employee-level `Expected_KPI.data_confidence` value.
+Employee data confidence is the lowest required-evidence coverage across projects, attendance
+check-outs, submitted reports, and quality reviews. Missing effort hours, check-outs, report
+submissions, or verified quality evidence lower confidence rather than becoming zero
+performance. This final acceptance rule intentionally supersedes the earlier workbook behavior
+where missing attendance exits affected record confidence only.
 
 This rule reproduces all 30 benchmark confidence values and result statuses. EMP-027 through
 EMP-030 each have 60% data confidence, no overall score, and an `Insufficient data` status.

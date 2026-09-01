@@ -74,8 +74,12 @@ class PerformanceQaTests(TestCase):
 
         self.assertEqual(finding.record_ids, ["ATT-001"])
         self.assertEqual(finding.scoring_impact, "lowers_confidence")
+        result = calculate_kpis(dataset)[0]
+        self.assertEqual(result.data_confidence, 0)
+        self.assertEqual(result.compliance_score, 100)
+        self.assertIsNone(result.overall_score)
 
-    def test_late_and_missing_submissions_reduce_compliance(self) -> None:
+    def test_late_submission_reduces_compliance_but_missing_evidence_does_not(self) -> None:
         late = _dataset()
         late.submission_events[0] = late.submission_events[0].model_copy(
             update={"submitted_date": date(2026, 6, 3), "outcome": "submitted late"}
@@ -86,10 +90,54 @@ class PerformanceQaTests(TestCase):
         )
 
         self.assertEqual(calculate_kpis(late)[0].compliance_score, 65)
-        self.assertEqual(calculate_kpis(missing)[0].compliance_score, 65)
+        missing_result = calculate_kpis(missing)[0]
+        self.assertEqual(missing_result.compliance_score, 100)
+        self.assertEqual(missing_result.data_confidence, 0)
+        self.assertIsNone(missing_result.overall_score)
         self.assertTrue(
             any(item.code == "missing_submission" for item in validate_dataset(missing))
         )
+
+    def test_missing_effort_lowers_confidence_without_lowering_productivity(self) -> None:
+        dataset = _dataset()
+        dataset.work_outputs[0] = dataset.work_outputs[0].model_copy(
+            update={"actual_effort_hours": None}
+        )
+
+        findings = validate_dataset(dataset)
+        result = calculate_kpis(dataset, validation_findings=findings)[0]
+
+        finding = next(item for item in findings if item.code == "missing_actual_effort")
+        self.assertEqual(finding.scoring_impact, "lowers_confidence")
+        self.assertEqual(result.productivity_score, 100)
+        self.assertEqual(result.data_confidence, 0)
+        self.assertIsNone(result.overall_score)
+
+    def test_duplicate_employee_id_blocks_score(self) -> None:
+        dataset = _dataset()
+        dataset.employees.append(dataset.employees[0].model_copy())
+
+        findings = validate_dataset(dataset)
+        results = calculate_kpis(dataset, validation_findings=findings)
+
+        self.assertTrue(any(item.code == "duplicate_employee_id" for item in findings))
+        self.assertEqual(len(results), 1)
+        self.assertIsNone(results[0].overall_score)
+        self.assertEqual(results[0].result_status, "Insufficient data")
+
+    def test_duplicate_record_id_blocks_every_affected_employee(self) -> None:
+        dataset = _dataset()
+        dataset.attendance_events[0] = dataset.attendance_events[0].model_copy(
+            update={"record_id": "OUT-001"}
+        )
+
+        findings = validate_dataset(dataset)
+        result = calculate_kpis(dataset, validation_findings=findings)[0]
+
+        duplicate = next(item for item in findings if item.code == "duplicate_record_id")
+        self.assertEqual(duplicate.record_ids, ["OUT-001"])
+        self.assertIsNone(result.overall_score)
+        self.assertEqual(result.result_status, "Insufficient data")
 
     def test_overdue_work_and_low_quality_are_reported(self) -> None:
         dataset = _dataset()

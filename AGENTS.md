@@ -56,9 +56,9 @@ Dataset.xlsx`. Its `00_Start_Here` sheet defines the intended product and guardr
 - `Expected_KPI` is the authoritative numerical benchmark for Phase 3, and `QA_Test_Cases` is
   the minimum regression suite for Phase 6.
 
-Phase 3 comparison confirmed that employee data confidence is the lowest verified-evidence
-coverage across projects, submitted reports, and quality reviews. Missing attendance exits
-lower record confidence under QA-03 but do not change `Expected_KPI.data_confidence`.
+Employee data confidence is the lowest required-evidence coverage across projects, attendance
+check-outs, submitted reports, and quality reviews. Missing required evidence lowers employee
+confidence and never becomes zero performance.
 Component KPI calculations remain visible below the threshold for auditability, while the
 overall score and performance tier are withheld and the status is `Insufficient data`.
 
@@ -299,8 +299,9 @@ formulas or execute calculations.
 The deterministic scorer uses Productivity (35%), Compliance (30%), and Quality (35%).
 Productivity combines completion (60%) and time efficiency (40%); Compliance combines
 attendance (50%), reports (35%), and leave compliance (15%); Quality combines accuracy (60%),
-first-pass rate (25%), and rework (15%). Employee data confidence is the lowest verified
-coverage across project evidence, submitted-report evidence, and quality-review evidence.
+first-pass rate (25%), and rework (15%). Employee data confidence is the lowest required-
+evidence coverage across project evidence, attendance check-outs, submitted-report evidence,
+and quality-review evidence.
 When confidence is below the employee's configured threshold (70% by default), retain the
 component KPI calculations for traceability but return `Insufficient data` with no overall
 score or performance tier.

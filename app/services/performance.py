@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
 from datetime import date, timedelta
 from typing import Protocol
@@ -18,6 +18,23 @@ from app.schemas.performance import (
     ValidationSummary,
     WorkOutputEvidence,
 )
+
+
+REQUIRED_EVIDENCE_MATRIX: dict[str, tuple[str, ...]] = {
+    "productivity": (
+        "verified completion status",
+        "actual effort hours for completed work",
+    ),
+    "compliance": (
+        "attendance check-out unless on approved leave",
+        "submitted date and verified report evidence",
+    ),
+    "quality": (
+        "verified accuracy",
+        "first-pass result",
+        "rework hours",
+    ),
+}
 
 
 def inspect_dataset(dataset: PerformanceEvidenceDataset) -> DatasetOverview:
@@ -50,6 +67,47 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
     known_outputs = {record.record_id for record in dataset.work_outputs}
     known_targets = {target.employee_id for target in dataset.performance_targets}
 
+    duplicate_employee_ids = _duplicates(
+        employee.employee_id for employee in dataset.employees
+    )
+    for duplicate_employee_id in duplicate_employee_ids:
+        findings.append(
+            ValidationFinding(
+                code="duplicate_employee_id",
+                severity="error",
+                message="Employee IDs must be unique before KPI calculation.",
+                employee_id=duplicate_employee_id,
+                record_ids=[duplicate_employee_id],
+                source_type="employees",
+                scoring_impact="blocks_score",
+            )
+        )
+
+    records = [
+        *dataset.work_outputs,
+        *dataset.attendance_events,
+        *dataset.submission_events,
+        *dataset.leave_events,
+        *dataset.quality_events,
+    ]
+    duplicate_record_ids = _duplicates(record.record_id for record in records)
+    for duplicate_record_id in duplicate_record_ids:
+        affected_employee_ids = sorted(
+            {record.employee_id for record in records if record.record_id == duplicate_record_id}
+        )
+        for affected_employee_id in affected_employee_ids:
+            findings.append(
+                ValidationFinding(
+                    code="duplicate_record_id",
+                    severity="error",
+                    message="Source record IDs must be unique before KPI calculation.",
+                    employee_id=affected_employee_id,
+                    record_ids=[duplicate_record_id],
+                    source_type="source_records",
+                    scoring_impact="blocks_score",
+                )
+            )
+
     for employee_id in sorted(employee_ids - known_targets):
         findings.append(
             ValidationFinding(
@@ -72,11 +130,10 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
         attendance_by_key[record.employee_id, record.occurred_on].append(record.record_id)
         if record.employee_id not in employee_ids:
             findings.append(_orphan("attendance evidence", record.record_id, record.employee_id))
-        if (
-            "actual_end" in dataset.mapped_fields.get("attendance_events", set())
-            and not record.actual_end
-            and record.outcome.casefold() not in {"annual leave", "sick leave"}
-        ):
+        if not record.actual_end and record.outcome.casefold() not in {
+            "annual leave",
+            "sick leave",
+        }:
             findings.append(
                 ValidationFinding(
                     code="missing_actual_end",
@@ -117,6 +174,22 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                     scoring_impact="lowers_confidence",
                 )
             )
+        if (
+            record.completion_status.casefold()
+            in {"completed on time", "completed late"}
+            and record.actual_effort_hours is None
+        ):
+            findings.append(
+                ValidationFinding(
+                    code="missing_actual_effort",
+                    severity="warning",
+                    message="Completed work has no actual effort hours and lowers evidence confidence.",
+                    employee_id=record.employee_id,
+                    record_ids=[record.record_id],
+                    source_type="productivity_evidence",
+                    scoring_impact="lowers_confidence",
+                )
+            )
         if record.completion_status.casefold() == "overdue" and record.completed_date is None:
             findings.append(
                 ValidationFinding(
@@ -138,11 +211,11 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                 ValidationFinding(
                     code="missing_submission",
                     severity="warning",
-                    message="Required submission has no submission date and counts against compliance.",
+                    message="Required submission has no submission date and lowers evidence confidence.",
                     employee_id=report.employee_id,
                     record_ids=[report.record_id],
                     source_type="submission_evidence",
-                    scoring_impact="affects_score",
+                    scoring_impact="lowers_confidence",
                 )
             )
         if (
@@ -253,8 +326,17 @@ def calculate_kpis(
         if finding.code == "duplicate_attendance"
         for record_id in finding.record_ids[1:]
     }
+    blocking_employee_ids = {
+        finding.employee_id
+        for finding in findings
+        if finding.scoring_impact == "blocks_score" and finding.employee_id
+    }
     results: list[KpiResult] = []
+    processed_employee_ids: set[str] = set()
     for employee in dataset.employees:
+        if employee.employee_id in processed_employee_ids:
+            continue
+        processed_employee_ids.add(employee.employee_id)
         if employee_id and employee.employee_id != employee_id:
             continue
         if team and (employee.team or "").casefold() != team.casefold():
@@ -304,9 +386,23 @@ def calculate_kpis(
             period_days = (end_date - start_date).days + 1
             project_target *= period_days / 90
         completion_score = min(100.0, len(completed) / project_target * 100)
-        average_hours = sum(record.actual_effort_hours or 0 for record in completed) / len(completed) if completed else 0
-        time_score = min(100.0, target.target_avg_effort_hours / average_hours * 100) if average_hours else 0
-        productivity = completion_score * 0.60 + time_score * 0.40
+        effort_records = [
+            record for record in completed if record.actual_effort_hours is not None
+        ]
+        average_hours = (
+            sum(record.actual_effort_hours for record in effort_records if record.actual_effort_hours is not None)
+            / len(effort_records)
+            if effort_records
+            else None
+        )
+        time_score = (
+            min(100.0, target.target_avg_effort_hours / average_hours * 100)
+            if average_hours
+            else None
+        )
+        productivity = _weighted_available(
+            [(completion_score, 0.60), (time_score, 0.40)]
+        )
         attendance_compliance = _attendance_compliance(attendance)
         report_compliance = _report_compliance(reports)
         leave_compliance = _leave_compliance(
@@ -315,18 +411,28 @@ def calculate_kpis(
             start_date,
             end_date,
         )
-        compliance = attendance_compliance * 0.50 + report_compliance * 0.35 + leave_compliance * 0.15
+        compliance = _weighted_available(
+            [
+                (attendance_compliance, 0.50),
+                (report_compliance, 0.35),
+                (leave_compliance, 0.15),
+            ]
+        )
         accuracy = sum(review.accuracy_ratio for review in reviews) / len(reviews) * 100 if reviews else 0
         first_pass = sum(review.first_pass_approved for review in reviews) / len(reviews) * 100 if reviews else 0
         rework = max(0.0, 100 - (sum(review.rework_hours for review in reviews) / len(reviews) * 8)) if reviews else 0
         quality = accuracy * 0.60 + first_pass * 0.25 + rework * 0.15
         confidence, confidence_reason = _evidence_confidence(
             projects,
+            attendance,
             reports,
             reviews,
         )
         confidence_threshold = target.minimum_confidence * 100
-        score_is_allowed = confidence >= confidence_threshold
+        score_is_allowed = (
+            confidence >= confidence_threshold
+            and employee.employee_id not in blocking_employee_ids
+        )
         overall = (
             productivity * 0.35 + compliance * 0.30 + quality * 0.35
             if score_is_allowed
@@ -342,15 +448,15 @@ def calculate_kpis(
                 productivity_score=round(productivity, 2),
                 productivity_reason=(
                     f"Weighted 60% completion ({completion_score:.2f}) and 40% "
-                    f"time efficiency ({time_score:.2f}); {len(completed)} completed "
+                    f"time efficiency ({_format_optional_score(time_score)}); {len(completed)} completed "
                     f"work outputs against a target of {project_target:.2f}, "
-                    f"averaging {average_hours:.2f} hours against a target of "
+                    f"averaging {_format_optional_score(average_hours)} hours against a target of "
                     f"{target.target_avg_effort_hours:g}."
                 ),
                 compliance_score=round(compliance, 2),
                 compliance_reason=(
                     f"Weighted 50% attendance ({attendance_compliance:.2f}), "
-                    f"35% reporting ({report_compliance:.2f}), and 15% leave "
+                    f"35% reporting ({_format_optional_score(report_compliance)}), and 15% leave "
                     f"compliance ({leave_compliance:.2f}) after excluding duplicate "
                     "attendance records."
                 ),
@@ -644,8 +750,20 @@ def _attendance_compliance(records: list[AttendanceComplianceEvidence]) -> float
     return sum(record.outcome.casefold() in compliant for record in records) / len(records) * 100
 
 
-def _report_compliance(reports: list[SubmissionComplianceEvidence]) -> float:
-    return sum(report.outcome.casefold() == "submitted on time" for report in reports) / len(reports) * 100 if reports else 0
+def _report_compliance(reports: list[SubmissionComplianceEvidence]) -> float | None:
+    supported = [
+        report
+        for report in reports
+        if report.submitted_date is not None
+        and report.verification_status.casefold() == "verified"
+    ]
+    if not supported:
+        return None
+    return (
+        sum(report.outcome.casefold() == "submitted on time" for report in supported)
+        / len(supported)
+        * 100
+    )
 
 
 def _leave_compliance(
@@ -678,28 +796,46 @@ def _performance_tier(overall: float | None) -> str | None:
 
 def _evidence_confidence(
     projects: list[WorkOutputEvidence],
+    attendance: list[AttendanceComplianceEvidence],
     reports: list[SubmissionComplianceEvidence],
     reviews: list[QualityEvidence],
 ) -> tuple[float, str]:
     project_confidence = _coverage(
-        record.verification_status.casefold() == "verified" for record in projects
+        record.verification_status.casefold() == "verified"
+        and (
+            record.completion_status.casefold()
+            not in {"completed on time", "completed late"}
+            or record.actual_effort_hours is not None
+        )
+        for record in projects
+    )
+    attendance_confidence = _coverage(
+        bool(record.actual_end)
+        or record.outcome.casefold() in {"annual leave", "sick leave"}
+        for record in attendance
     )
     report_confidence = _coverage(
-        report.verification_status.casefold() == "verified" for report in reports
-        if report.submitted_date is not None
+        report.submitted_date is not None
+        and report.verification_status.casefold() == "verified"
+        for report in reports
     )
     quality_confidence = _coverage(
         review.verification_status.casefold() == "verified" for review in reviews
     )
     coverage = {
         "productivity": project_confidence,
+        "attendance": attendance_confidence,
         "submissions": report_confidence,
         "quality": quality_confidence,
     }
     confidence = min(coverage.values())
+    required = "; ".join(
+        f"{kpi}: {', '.join(fields)}"
+        for kpi, fields in REQUIRED_EVIDENCE_MATRIX.items()
+    )
     reason = "Evidence coverage by required source: " + ", ".join(
         f"{source} {value:.2f}%" for source, value in coverage.items()
-    ) + "; confidence is the lowest required-source coverage."
+    ) + f"; confidence is the lowest required-source coverage. Required evidence: {required}."
     return confidence, reason
 
 
@@ -711,6 +847,24 @@ def _coverage(checks: Iterable[bool]) -> float:
 def _average(values: Iterable[float]) -> float | None:
     available = list(values)
     return round(sum(available) / len(available), 2) if available else None
+
+
+def _weighted_available(
+    components: list[tuple[float | None, float]],
+) -> float:
+    available = [(value, weight) for value, weight in components if value is not None]
+    if not available:
+        return 0.0
+    total_weight = sum(weight for _, weight in available)
+    return sum(value * weight for value, weight in available) / total_weight
+
+
+def _format_optional_score(value: float | None) -> str:
+    return f"{value:.2f}" if value is not None else "unavailable"
+
+
+def _duplicates(values: Iterable[str]) -> list[str]:
+    return sorted(value for value, count in Counter(values).items() if count > 1)
 
 
 def _orphan(record_type: str, record_id: str, employee_id: str) -> ValidationFinding:
