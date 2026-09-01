@@ -19,13 +19,15 @@ import {
 } from '@/components/ui/card'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Spinner } from '@/components/ui/spinner'
+import LoginScreen from '@/components/auth/LoginScreen.vue'
 import PerformanceDashboard from '@/components/dashboard/PerformanceDashboard.vue'
 import { cn } from '@/lib/utils'
 import type { AnalyzeResponse, DashboardFilters, ErrorPayload } from '@/types/analysis'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
+const isAuth = ref<boolean | undefined>(undefined)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const fileError = ref('')
@@ -177,8 +179,9 @@ async function submitAnalysis(): Promise<void> {
 </script>
 
 <template>
+  <LoginScreen v-if="isAuth !== true" @authenticated="isAuth = true" />
   <PerformanceDashboard
-    v-if="showDashboard && analysis"
+    v-else-if="showDashboard && analysis"
     :analysis="analysis"
     :is-filtering="isFiltering"
     :filter-error="filterError"
