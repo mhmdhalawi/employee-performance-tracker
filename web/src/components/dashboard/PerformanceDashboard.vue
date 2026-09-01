@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
 import { ArrowDownIcon, ArrowLeftIcon, ArrowUpDownIcon, ArrowUpIcon, EyeIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -21,7 +21,7 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import EmployeeDetailSheet from '@/components/dashboard/EmployeeDetailSheet.vue'
+import EmployeeDetailPage from '@/components/dashboard/EmployeeDetailPage.vue'
 import DataInterpretationCard from '@/components/dashboard/DataInterpretationCard.vue'
 import type { AIInsightResponse, AnalyzeResponse, DashboardFilters, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload } from '@/types/analysis'
 
@@ -48,8 +48,9 @@ const allEmployeeOptions = ref<EmployeeKpiResult[]>(props.analysis.results)
 const insightsByEmployee = ref<Record<string, EmployeeAIInsight>>({})
 const insightLoadingEmployeeId = ref<string | null>(null)
 const insightError = ref('')
-const selectedEmployee = ref<EmployeeKpiResult | null>(null)
+const selectedEmployeeId = ref<string | null>(readEmployeeIdFromUrl())
 let filterTimer: number | undefined
+let dashboardScrollY = 0
 
 const employeeOptions = computed(() => allEmployeeOptions.value.filter(row =>
   team.value === 'all' || row.team === team.value,
@@ -125,6 +126,9 @@ const alertCountsByEmployee = computed(() => props.analysis.alerts.reduce<Record
   },
   {},
 ))
+const selectedEmployee = computed(() => selectedEmployeeId.value
+  ? props.analysis.results.find(row => row.employee_id === selectedEmployeeId.value) ?? null
+  : null)
 const selectedEmployeeAlerts = computed(() => selectedEmployee.value
   ? props.analysis.alerts.filter(alert => alert.employee_id === selectedEmployee.value?.employee_id)
   : [])
@@ -169,7 +173,17 @@ watch(() => props.analysis.analysis_id, () => {
   insightsByEmployee.value = {}
   insightLoadingEmployeeId.value = null
   insightError.value = ''
-  selectedEmployee.value = null
+  setEmployeeUrlFilter(null, 'replace')
+})
+
+onMounted(() => {
+  window.addEventListener('popstate', handlePopState)
+  if (selectedEmployeeId.value && !selectedEmployee.value)
+    setEmployeeUrlFilter(null, 'replace')
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('popstate', handlePopState)
 })
 
 function buildFilters(): DashboardFilters {
@@ -222,9 +236,62 @@ function alertCount(employeeId: string): number {
   return alertCountsByEmployee.value[employeeId] ?? 0
 }
 
-function openEmployeeDetails(row: EmployeeKpiResult): void {
+async function openEmployeeDetails(row: EmployeeKpiResult): Promise<void> {
   insightError.value = ''
-  selectedEmployee.value = row
+  dashboardScrollY = window.scrollY
+  setEmployeeUrlFilter(row.employee_id, 'push')
+  await nextTick()
+  window.scrollTo({ top: 0 })
+}
+
+async function closeEmployeeDetails(): Promise<void> {
+  if (window.history.state?.trackerEmployeeDetail === props.analysis.analysis_id) {
+    window.history.back()
+    return
+  }
+
+  setEmployeeUrlFilter(null, 'replace')
+  await nextTick()
+  window.scrollTo({ top: dashboardScrollY })
+}
+
+async function handlePopState(): Promise<void> {
+  const wasOpen = selectedEmployeeId.value !== null
+  selectedEmployeeId.value = readEmployeeIdFromUrl()
+  await nextTick()
+
+  if (selectedEmployee.value)
+    window.scrollTo({ top: 0 })
+  else if (wasOpen)
+    window.scrollTo({ top: dashboardScrollY })
+}
+
+function readEmployeeIdFromUrl(): string | null {
+  return new URL(window.location.href).searchParams.get('employee')
+}
+
+function setEmployeeUrlFilter(employeeId: string | null, mode: 'push' | 'replace'): void {
+  const url = new URL(window.location.href)
+  if (employeeId)
+    url.searchParams.set('employee', employeeId)
+  else
+    url.searchParams.delete('employee')
+
+  if (mode === 'push') {
+    window.history.pushState(
+      { trackerEmployeeDetail: props.analysis.analysis_id },
+      '',
+      url,
+    )
+  }
+  else {
+    window.history.replaceState(
+      { trackerEmployeeDetail: null },
+      '',
+      url,
+    )
+  }
+  selectedEmployeeId.value = employeeId
 }
 
 async function generateInsight(employeeId: string): Promise<void> {
@@ -276,7 +343,17 @@ function formatIsoDate(value: Date): string {
 </script>
 
 <template>
-  <main class="min-h-svh bg-muted/30">
+  <EmployeeDetailPage
+    v-if="selectedEmployee"
+    :employee="selectedEmployee"
+    :alerts="selectedEmployeeAlerts"
+    :insight="selectedEmployeeInsight"
+    :insight-loading="insightLoadingEmployeeId === selectedEmployee.employee_id"
+    :insight-error="insightError"
+    @back="closeEmployeeDetails"
+    @generate-insight="generateInsight"
+  />
+  <main v-else class="min-h-svh bg-muted/30">
     <header class="border-b bg-background">
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">
@@ -352,15 +429,5 @@ function formatIsoDate(value: Date): string {
       </Card>
 
     </div>
-
-    <EmployeeDetailSheet
-      :employee="selectedEmployee"
-      :alerts="selectedEmployeeAlerts"
-      :insight="selectedEmployeeInsight"
-      :insight-loading="insightLoadingEmployeeId === selectedEmployee?.employee_id"
-      :insight-error="insightError"
-      @close="selectedEmployee = null"
-      @generate-insight="generateInsight"
-    />
   </main>
 </template>
