@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { CircleAlertIcon, Clock3Icon, FileSpreadsheetIcon, LightbulbIcon, SparklesIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +22,8 @@ const emit = defineEmits<{
   close: []
   generateInsight: [employeeId: string]
 }>()
+const detailTitle = ref<HTMLElement | null>(null)
+const detailScroll = ref<HTMLElement | null>(null)
 
 const complianceBreakdown = computed(() => {
   const reason = props.employee?.compliance_reason
@@ -73,14 +75,26 @@ function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' 
   return 'outline'
 }
 
+function handleOpenAutoFocus(event: Event): void {
+  event.preventDefault()
+  detailScroll.value?.scrollTo({ top: 0 })
+  detailTitle.value?.focus({ preventScroll: true })
+}
+
 </script>
 
 <template>
   <Sheet :open="Boolean(employee)" @update:open="value => !value && emit('close')">
-    <SheetContent v-if="employee" class="w-full gap-0 sm:w-[min(70vw,56rem)] sm:max-w-none">
+    <SheetContent
+      v-if="employee"
+      class="w-full gap-0 sm:w-[min(70vw,56rem)] sm:max-w-none"
+      @open-auto-focus="handleOpenAutoFocus"
+    >
       <SheetHeader class="gap-4 border-b border-primary/15 bg-primary/5 px-5 py-5 sm:px-6">
         <div class="pr-8">
-          <SheetTitle class="tracking-tight">Employee performance details</SheetTitle>
+          <SheetTitle as-child>
+            <h2 ref="detailTitle" class="text-base font-medium tracking-tight" tabindex="-1">Employee performance details</h2>
+          </SheetTitle>
           <SheetDescription class="mt-1">KPIs, alerts, and AI guidance for this employee.</SheetDescription>
         </div>
         <div class="flex items-center justify-between gap-4 pr-8">
@@ -112,7 +126,7 @@ function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' 
         </div>
       </SheetHeader>
 
-      <div class="min-h-0 flex-1 overflow-y-auto px-5 pt-5 sm:px-6">
+      <div ref="detailScroll" class="min-h-0 flex-1 overflow-y-auto px-5 pt-5 sm:px-6">
         <div class="flex flex-col gap-5">
         <Alert v-if="employee.overall_score === null" variant="warning">
           <TriangleAlertIcon aria-hidden="true" />
