@@ -169,7 +169,7 @@ class EvidenceResult(BaseModel):
 
 class KpiTrendResult(BaseModel):
     employee_id: str
-    employee_name: str
+    employee_name: str | None
     baseline_overall_score: float | None
     current_overall_score: float | None
     overall_score_change: float | None

@@ -2,7 +2,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Protocol
+from typing import Literal, Protocol
 
 from app.schemas.performance import (
     AttendanceComplianceEvidence,
@@ -19,7 +19,6 @@ from app.schemas.performance import (
     ValidationSummary,
     WorkOutputEvidence,
 )
-
 
 REQUIRED_EVIDENCE_MATRIX: dict[str, tuple[str, ...]] = {
     "productivity": (
@@ -75,7 +74,9 @@ def inspect_dataset(dataset: PerformanceEvidenceDataset) -> DatasetOverview:
             "leave_compliance_evidence": len(dataset.leave_events),
             "quality_evidence": len(dataset.quality_events),
         },
-        teams=sorted({employee.team for employee in dataset.employees if employee.team}),
+        teams=sorted(
+            {employee.team for employee in dataset.employees if employee.team}
+        ),
     )
 
 
@@ -112,7 +113,11 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
     duplicate_record_ids = _duplicates(record.record_id for record in records)
     for duplicate_record_id in duplicate_record_ids:
         affected_employee_ids = sorted(
-            {record.employee_id for record in records if record.record_id == duplicate_record_id}
+            {
+                record.employee_id
+                for record in records
+                if record.record_id == duplicate_record_id
+            }
         )
         for affected_employee_id in affected_employee_ids:
             findings.append(
@@ -142,14 +147,20 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
 
     for target in dataset.performance_targets:
         if target.employee_id not in employee_ids:
-            findings.append(_orphan("KPI target", target.employee_id, target.employee_id))
+            findings.append(
+                _orphan("KPI target", target.employee_id, target.employee_id)
+            )
 
     attendance_by_key: dict[tuple[str, date], list[str]] = defaultdict(list)
     mapped_attendance_fields = dataset.mapped_fields.get("attendance_events", set())
     for record in dataset.attendance_events:
-        attendance_by_key[record.employee_id, record.occurred_on].append(record.record_id)
+        attendance_by_key[record.employee_id, record.occurred_on].append(
+            record.record_id
+        )
         if record.employee_id not in employee_ids:
-            findings.append(_orphan("attendance evidence", record.record_id, record.employee_id))
+            findings.append(
+                _orphan("attendance evidence", record.record_id, record.employee_id)
+            )
         if record.outcome.casefold() not in _NEUTRAL_ATTENDANCE_OUTCOMES:
             required_fields = {"actual_end"}
             for field_group in (
@@ -161,9 +172,7 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                     required_fields.update(field_group)
             for field_name in sorted(required_fields):
                 if getattr(record, field_name) is None:
-                    findings.append(
-                        _missing_attendance_finding(record, field_name)
-                    )
+                    findings.append(_missing_attendance_finding(record, field_name))
     for (employee_id, _), record_ids in attendance_by_key.items():
         if len(record_ids) > 1:
             findings.append(
@@ -180,7 +189,9 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
 
     for record in dataset.work_outputs:
         if record.employee_id not in employee_ids:
-            findings.append(_orphan("work output", record.record_id, record.employee_id))
+            findings.append(
+                _orphan("work output", record.record_id, record.employee_id)
+            )
         if record.verification_status.casefold() != "verified":
             findings.append(
                 ValidationFinding(
@@ -209,7 +220,10 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                     scoring_impact="lowers_confidence",
                 )
             )
-        if record.completion_status.casefold() == "overdue" and record.completed_date is None:
+        if (
+            record.completion_status.casefold() == "overdue"
+            and record.completed_date is None
+        ):
             findings.append(
                 ValidationFinding(
                     code="overdue_work_output",
@@ -224,7 +238,9 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
 
     for report in dataset.submission_events:
         if report.employee_id not in employee_ids:
-            findings.append(_orphan("submission evidence", report.record_id, report.employee_id))
+            findings.append(
+                _orphan("submission evidence", report.record_id, report.employee_id)
+            )
         if report.submitted_date is None:
             findings.append(
                 ValidationFinding(
@@ -272,7 +288,9 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
     for leave_request in dataset.leave_events:
         if leave_request.employee_id not in employee_ids:
             findings.append(
-                _orphan("leave evidence", leave_request.record_id, leave_request.employee_id)
+                _orphan(
+                    "leave evidence", leave_request.record_id, leave_request.employee_id
+                )
             )
         if (
             leave_request.category.casefold() == "sick leave"
@@ -293,7 +311,9 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
 
     for review in dataset.quality_events:
         if review.employee_id not in employee_ids:
-            findings.append(_orphan("quality evidence", review.record_id, review.employee_id))
+            findings.append(
+                _orphan("quality evidence", review.record_id, review.employee_id)
+            )
         if review.related_output_id not in known_outputs:
             findings.append(
                 ValidationFinding(
@@ -431,7 +451,12 @@ def calculate_kpis(
         reviews = [
             review for review in reviews if review.related_output_id in known_output_ids
         ]
-        completed = [record for record in projects if record.completion_status.casefold() in {"completed on time", "completed late"}]
+        completed = [
+            record
+            for record in projects
+            if record.completion_status.casefold()
+            in {"completed on time", "completed late"}
+        ]
         project_target = target.target_outputs_90d
         if start_date is not None and end_date is not None:
             period_days = (end_date - start_date).days + 1
@@ -441,7 +466,11 @@ def calculate_kpis(
             record for record in completed if record.actual_effort_hours is not None
         ]
         average_hours = (
-            sum(record.actual_effort_hours for record in effort_records if record.actual_effort_hours is not None)
+            sum(
+                record.actual_effort_hours
+                for record in effort_records
+                if record.actual_effort_hours is not None
+            )
             / len(effort_records)
             if effort_records
             else None
@@ -473,9 +502,25 @@ def calculate_kpis(
                 (leave_compliance, 0.15),
             ]
         )
-        accuracy = sum(review.accuracy_ratio for review in reviews) / len(reviews) * 100 if reviews else 0
-        first_pass = sum(review.first_pass_approved for review in reviews) / len(reviews) * 100 if reviews else 0
-        rework = max(0.0, 100 - (sum(review.rework_hours for review in reviews) / len(reviews) * 8)) if reviews else 0
+        accuracy = (
+            sum(review.accuracy_ratio for review in reviews) / len(reviews) * 100
+            if reviews
+            else 0
+        )
+        first_pass = (
+            sum(review.first_pass_approved for review in reviews) / len(reviews) * 100
+            if reviews
+            else 0
+        )
+        rework = (
+            max(
+                0.0,
+                100
+                - (sum(review.rework_hours for review in reviews) / len(reviews) * 8),
+            )
+            if reviews
+            else 0
+        )
         quality = accuracy * 0.60 + first_pass * 0.25 + rework * 0.15
         confidence, confidence_reason = _evidence_confidence(
             projects,
@@ -496,7 +541,12 @@ def calculate_kpis(
         )
         performance_tier = _performance_tier(overall) if score_is_allowed else None
         status = performance_tier or "Insufficient data"
-        record_ids = [*(record.record_id for record in projects), *(record.record_id for record in attendance), *(record.record_id for record in reports), *(record.record_id for record in reviews)]
+        record_ids = [
+            *(record.record_id for record in projects),
+            *(record.record_id for record in attendance),
+            *(record.record_id for record in reports),
+            *(record.record_id for record in reviews),
+        ]
         results.append(
             KpiResult(
                 employee_id=employee.employee_id,
@@ -576,23 +626,27 @@ def calculate_weekly_kpi_trends(
             if record.employee_id in result_ids
             and week_start <= record.assigned_date <= week_end
         }
-        compliance_ids = {
-            record.employee_id
-            for record in dataset.attendance_events
-            if record.employee_id in result_ids
-            and week_start <= record.occurred_on <= week_end
-        } | {
-            report.employee_id
-            for report in dataset.submission_events
-            if report.employee_id in result_ids
-            and week_start <= report.due_date <= week_end
-        } | {
-            request.employee_id
-            for request in dataset.leave_events
-            if request.employee_id in result_ids
-            and request.end_date >= week_start
-            and request.start_date <= week_end
-        }
+        compliance_ids = (
+            {
+                record.employee_id
+                for record in dataset.attendance_events
+                if record.employee_id in result_ids
+                and week_start <= record.occurred_on <= week_end
+            }
+            | {
+                report.employee_id
+                for report in dataset.submission_events
+                if report.employee_id in result_ids
+                and week_start <= report.due_date <= week_end
+            }
+            | {
+                request.employee_id
+                for request in dataset.leave_events
+                if request.employee_id in result_ids
+                and request.end_date >= week_start
+                and request.start_date <= week_end
+            }
+        )
         quality_ids = {
             review.employee_id
             for review in dataset.quality_events
@@ -629,9 +683,7 @@ def calculate_weekly_kpi_trends(
                     for result in scored
                     if result.overall_score is not None
                 ),
-                data_confidence=_average(
-                    result.data_confidence for result in results
-                ),
+                data_confidence=_average(result.data_confidence for result in results),
                 record_count=len(
                     {
                         record_id
@@ -651,9 +703,7 @@ def build_performance_alerts(
     included_record_ids: set[str],
 ) -> list[PerformanceAlert]:
     """Convert relevant validation findings into traceable dashboard alerts."""
-    employee_by_id = {
-        employee.employee_id: employee for employee in dataset.employees
-    }
+    employee_by_id = {employee.employee_id: employee for employee in dataset.employees}
     project_links = {
         record.record_id: record.evidence_link
         for record in dataset.work_outputs
@@ -670,7 +720,19 @@ def build_performance_alerts(
         )
     ]
     grouped: dict[
-        tuple[str | None, str, str, str, str],
+        tuple[
+            str | None,
+            str,
+            Literal["error", "warning", "info"],
+            str,
+            Literal[
+                "blocks_score",
+                "excluded_from_scoring",
+                "lowers_confidence",
+                "affects_score",
+                "none",
+            ],
+        ],
         list[ValidationFinding],
     ] = defaultdict(list)
     for finding in relevant:
@@ -710,10 +772,10 @@ def build_performance_alerts(
             ),
             evidence_links=sorted(
                 {
-                project_links[record_id]
-                for finding in group_findings
-                for record_id in finding.record_ids
-                if record_id in project_links
+                    project_links[record_id]
+                    for finding in group_findings
+                    for record_id in finding.record_ids
+                    if record_id in project_links
                 }
             ),
             scoring_impact=scoring_impact,
@@ -736,12 +798,44 @@ def build_performance_alerts(
     )
 
 
-def get_supporting_evidence(dataset: PerformanceEvidenceDataset, employee_id: str) -> EvidenceResult:
+def get_supporting_evidence(
+    dataset: PerformanceEvidenceDataset, employee_id: str
+) -> EvidenceResult:
     """Return records, evidence links, and validation findings supporting an employee result."""
-    findings = [finding for finding in validate_dataset(dataset) if finding.employee_id == employee_id]
-    outputs = [record for record in dataset.work_outputs if record.employee_id == employee_id]
-    record_ids = [*(record.record_id for record in outputs), *(record.record_id for record in dataset.attendance_events if record.employee_id == employee_id), *(record.record_id for record in dataset.submission_events if record.employee_id == employee_id), *(record.record_id for record in dataset.quality_events if record.employee_id == employee_id)]
-    return EvidenceResult(employee_id=employee_id, record_ids=record_ids, evidence_links=[record.evidence_link for record in outputs if record.evidence_link], findings=findings)
+    findings = [
+        finding
+        for finding in validate_dataset(dataset)
+        if finding.employee_id == employee_id
+    ]
+    outputs = [
+        record for record in dataset.work_outputs if record.employee_id == employee_id
+    ]
+    record_ids = [
+        *(record.record_id for record in outputs),
+        *(
+            record.record_id
+            for record in dataset.attendance_events
+            if record.employee_id == employee_id
+        ),
+        *(
+            record.record_id
+            for record in dataset.submission_events
+            if record.employee_id == employee_id
+        ),
+        *(
+            record.record_id
+            for record in dataset.quality_events
+            if record.employee_id == employee_id
+        ),
+    ]
+    return EvidenceResult(
+        employee_id=employee_id,
+        record_ids=record_ids,
+        evidence_links=[
+            record.evidence_link for record in outputs if record.evidence_link
+        ],
+        findings=findings,
+    )
 
 
 def calculate_kpi_trends(
@@ -753,8 +847,24 @@ def calculate_kpi_trends(
     employee_id: str | None = None,
 ) -> list[KpiTrendResult]:
     """Compare deterministic overall KPI results across two explicit periods."""
-    baseline = {result.employee_id: result for result in calculate_kpis(dataset, employee_id, baseline_start, baseline_end)}
-    current = {result.employee_id: result for result in calculate_kpis(dataset, employee_id, current_start, current_end)}
+    baseline = {
+        result.employee_id: result
+        for result in calculate_kpis(
+            dataset,
+            employee_id=employee_id,
+            start_date=baseline_start,
+            end_date=baseline_end,
+        )
+    }
+    current = {
+        result.employee_id: result
+        for result in calculate_kpis(
+            dataset,
+            employee_id=employee_id,
+            start_date=current_start,
+            end_date=current_end,
+        )
+    }
     trends: list[KpiTrendResult] = []
     for result in current.values():
         baseline_result = baseline.get(result.employee_id)
@@ -849,16 +959,18 @@ def _attendance_compliance(
 
 
 def _report_compliance(reports: list[SubmissionComplianceEvidence]) -> float | None:
-    supported = [
-        report
-        for report in reports
-        if report.submitted_date is not None
-        and report.verification_status.casefold() == "verified"
-    ]
+    supported: list[tuple[date, date]] = []
+    for report in reports:
+        submitted_date = report.submitted_date
+        if (
+            submitted_date is not None
+            and report.verification_status.casefold() == "verified"
+        ):
+            supported.append((submitted_date, report.due_date))
     if not supported:
         return None
     return (
-        sum(report.submitted_date <= report.due_date for report in supported)
+        sum(submitted_date <= due_date for submitted_date, due_date in supported)
         / len(supported)
         * 100
     )
@@ -884,8 +996,7 @@ def _leave_compliance(
         return 100
     return (
         sum(
-            request.outcome.casefold() == "approved"
-            and request.documentation_complete
+            request.outcome.casefold() == "approved" and request.documentation_complete
             for request in sick_requests
         )
         / len(sick_requests)
@@ -944,9 +1055,11 @@ def _evidence_confidence(
         f"{kpi}: {', '.join(fields)}"
         for kpi, fields in REQUIRED_EVIDENCE_MATRIX.items()
     )
-    reason = "Evidence coverage by required source: " + ", ".join(
-        f"{source} {value:.2f}%" for source, value in coverage.items()
-    ) + f"; confidence is the lowest required-source coverage. Required evidence: {required}."
+    reason = (
+        "Evidence coverage by required source: "
+        + ", ".join(f"{source} {value:.2f}%" for source, value in coverage.items())
+        + f"; confidence is the lowest required-source coverage. Required evidence: {required}."
+    )
     return confidence, reason
 
 
@@ -1003,7 +1116,9 @@ def _attendance_evidence_complete(
     ):
         if field_group & mapped_fields:
             required_fields.update(field_group)
-    return all(getattr(record, field_name) is not None for field_name in required_fields)
+    return all(
+        getattr(record, field_name) is not None for field_name in required_fields
+    )
 
 
 def _missing_attendance_finding(
