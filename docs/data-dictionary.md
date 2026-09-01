@@ -4,6 +4,24 @@ This file records the normalized fields consumed by Python calculators after the
 agent's source-column bindings have passed structural validation. Source labels may differ;
 the normalized meaning and formulas below do not.
 
+## Required-evidence matrix
+
+Missing required evidence changes evidence confidence, never employee performance. The
+employee confidence value is the lowest coverage across the required source families below.
+When it falls below the configured threshold (70% by default), component KPIs remain visible
+for auditability but the overall score and performance tier are withheld as
+`Insufficient data`.
+
+| KPI family | Required evidence | Missing-evidence behavior |
+| --- | --- | --- |
+| Productivity | Verified `completion_status`; `actual_effort_hours` for completed work | Lower productivity evidence coverage; do not substitute zero effort or performance |
+| Compliance | Mapped scheduled/actual arrival and shift-end pairs; mapped lunch check-out/return pair; verified report `submitted_date`; complete approved sick-leave documentation | Lower compliance evidence coverage; exclude the missing check from performance arithmetic |
+| Quality | Verified `accuracy_ratio`, `first_pass_approved`, and `rework_hours` | Lower quality evidence coverage; do not create a zero quality result |
+
+Every employee and evidence record must have a non-empty identifier. Duplicate employee IDs
+or duplicate record IDs block the affected overall result; orphan evidence is reported and is
+not silently joined to another employee.
+
 ## Compliance evidence
 
 | Normalized field | Type | Required behavior |

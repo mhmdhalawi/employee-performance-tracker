@@ -100,6 +100,7 @@ dependencies, and `library-skills` discovers skills bundled by those installed p
 | `GET` | `/api/v1/health` | Liveness and whether AI is configured |
 | `POST` | `/api/v1/ask` | Test the configured model with a plain prompt |
 | `POST` | `/api/v1/analyze` | Upload, classify, validate, and analyze CSV/XLSX performance data |
+| `POST` | `/api/v1/insights` | Generate optional guidance for one employee from the temporary validated analysis context |
 
 ## Development guide
 
