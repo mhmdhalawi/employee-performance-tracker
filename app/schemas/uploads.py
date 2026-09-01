@@ -119,6 +119,33 @@ class TableClassification(BaseModel):
         return self
 
 
+class AgentTableClassification(BaseModel):
+    source_name: str
+    kpi_family: TableRole
+    calculator_invocations: list[CalculatorInvocation]
+    confidence: Literal["low", "medium", "high"]
+
+    @model_validator(mode="after")
+    def validate_unique_calculators(self) -> Self:
+        calculators = [
+            invocation.calculator for invocation in self.calculator_invocations
+        ]
+        if len(calculators) != len(set(calculators)):
+            raise ValueError("A table cannot invoke the same calculator more than once.")
+        return self
+
+
+class AgentCalculationPlan(BaseModel):
+    table_classifications: list[AgentTableClassification]
+
+    @model_validator(mode="after")
+    def validate_unique_sources(self) -> Self:
+        sources = [item.source_name for item in self.table_classifications]
+        if len(sources) != len(set(sources)):
+            raise ValueError("Each source table must have exactly one classification.")
+        return self
+
+
 class ClassificationValidation(BaseModel):
     source_name: str
     kpi_family: str

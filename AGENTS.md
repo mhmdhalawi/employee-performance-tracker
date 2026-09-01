@@ -231,8 +231,10 @@ Analysis is per request. Python parses an upload into a request-scoped catalog o
 headers, inferred types, row counts, and raw records; it preserves the original file unchanged.
 It does not decide what a table means merely from its sheet name.
 
-Python reduces the catalog to bounded table metadata, inferred column profiles, duplicate
-counts, and at most two sample rows per table. The agent uses that synopsis to decide which
+Python reduces the catalog to bounded table metadata, row counts, column names and inferred
+types, plus compact mechanically derived signals such as identifier-shaped names, sparsity,
+cardinality, and numeric ranges. The initial mapping prompt contains neither complete sample
+rows nor exact missing, unique, or duplicate counts. The agent uses that synopsis to decide which
 tables support KPI families and which approved calculators their columns can feed. Python must
 validate every proposal before it becomes a `PerformanceEvidenceDataset` or feeds a named KPI
 calculator. Preserve source
@@ -255,9 +257,11 @@ upload -> validate/parse -> catalog -> agent KPI classification -> validated cal
 
 The compact synopsis is serialized into one structured classification and calculator-planning
 request. Python validates the returned classifications and bindings and makes one targeted
-repair request only when structural validation
-fails. Calculation services may process complete selected datasets in Python without sending
-the source rows to the model.
+repair request only when structural validation fails. That repair receives only the affected
+table profiles plus at most three distinct low-cardinality examples for safe, non-sensitive text
+columns; it returns only corrected classifications, which Python merges without allowing valid
+classifications to be overwritten. Calculation services may process complete selected datasets
+in Python without sending the source rows to the model.
 
 **Current implementation boundary:** `/analyze` validates and parses the upload, gives the
 request-scoped catalog to the agent for bounded inspection and KPI classification, validates the
@@ -281,12 +285,14 @@ Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark e
 
 ## 6. Calculations
 
-Python prepares a compact classification synopsis containing table metadata, inferred column
-profiles, duplicate counts, and at most two sample rows per table. The agent receives that
-bounded synopsis in one structured-output request and returns selected tables plus semantic
+Python prepares a compact classification synopsis containing table metadata, row counts, column
+names and inferred types, and mechanically derived semantic signals without complete sample
+rows or exact profile counts. The agent receives that bounded synopsis in one structured-output
+request and returns selected tables plus semantic
 calculator invocations and bindings; it has no row-access or calculation tools in this path.
-Python validates the returned plan and makes one targeted repair request only when structural
-validation fails. Validated plans are cached in memory by a schema-only fingerprint so repeated
+Python validates the returned plan and makes one targeted repair request with safe per-column
+examples only when structural validation fails. Validated plans are cached in memory by a
+schema-only fingerprint so repeated
 recognized layouts can skip the model while the server process remains running. Full record
 validation and calculations run deterministically in Python. A bounded on-demand explanation
 request may receive one employee's result status and validated findings, but never raw source

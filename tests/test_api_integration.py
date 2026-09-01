@@ -35,6 +35,8 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertEqual(body["summary"]["insufficient_data_employee_ids"], ["EMP-027", "EMP-028", "EMP-029", "EMP-030"])
         self.assertEqual(body["validation_summary"]["excluded_record_count"], 4)
         self.assertEqual(body["model_requests"], 0)
+        self.assertNotIn("model_usage", body)
+        self.assertNotIn("timings", body)
 
     def test_employee_team_and_period_filters(self) -> None:
         employee = self._post_benchmark("?employee_id=EMP-027").json()
