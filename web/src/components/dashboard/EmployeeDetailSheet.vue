@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { CircleAlertIcon, FileSpreadsheetIcon, LightbulbIcon, SparklesIcon, TriangleAlertIcon } from '@lucide/vue'
+import { computed } from 'vue'
+import { CircleAlertIcon, Clock3Icon, FileSpreadsheetIcon, LightbulbIcon, SparklesIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -20,6 +22,27 @@ const emit = defineEmits<{
   close: []
   generateInsight: [employeeId: string]
 }>()
+
+const complianceBreakdown = computed(() => {
+  const reason = props.employee?.compliance_reason
+  if (!reason)
+    return null
+
+  const match = reason.match(
+    /attendance \(([^:]+): arrival ([^,]+), shift end ([^,]+), lunch ([^)]+)\), 35% reporting \(([^)]+)\), and 15% leave compliance \(([^)]+)\)/,
+  )
+  if (!match)
+    return null
+
+  return {
+    attendance: match[1],
+    arrival: match[2],
+    shiftEnd: match[3],
+    lunch: match[4],
+    reporting: match[5],
+    leave: match[6],
+  }
+})
 
 function score(value: number | null): string {
   return value === null ? '—' : `${value.toFixed(1)}%`
@@ -89,7 +112,8 @@ function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' 
         </div>
       </SheetHeader>
 
-      <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 sm:px-6">
+      <div class="min-h-0 flex-1 overflow-y-auto px-5 pt-5 sm:px-6">
+        <div class="flex flex-col gap-5">
         <Alert v-if="employee.overall_score === null" variant="warning">
           <TriangleAlertIcon aria-hidden="true" />
           <AlertTitle>Insufficient evidence for an overall result</AlertTitle>
@@ -124,6 +148,58 @@ function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' 
               Missing required evidence reduces confidence; it is not converted into zero
               employee performance.
             </p>
+          </AlertDescription>
+        </Alert>
+
+        <Alert>
+          <Clock3Icon aria-hidden="true" />
+          <AlertTitle>Compliance calculation</AlertTitle>
+          <AlertDescription class="flex min-w-0 flex-col gap-3">
+            <div v-if="complianceBreakdown" class="flex min-w-0 flex-col gap-3">
+              <section class="flex flex-col gap-2">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="font-medium text-foreground">Attendance</span>
+                    <Badge variant="secondary">50%</Badge>
+                  </div>
+                  <strong class="shrink-0 text-base tabular-nums text-foreground">{{ complianceBreakdown.attendance }}%</strong>
+                </div>
+                <dl class="grid grid-cols-3 gap-3 text-xs">
+                  <div class="flex flex-col gap-0.5"><dt>Arrival</dt><dd class="font-medium tabular-nums text-foreground">{{ complianceBreakdown.arrival }}%</dd></div>
+                  <div class="flex flex-col gap-0.5"><dt>Shift end</dt><dd class="font-medium tabular-nums text-foreground">{{ complianceBreakdown.shiftEnd }}%</dd></div>
+                  <div class="flex flex-col gap-0.5"><dt>Lunch</dt><dd class="font-medium tabular-nums text-foreground">{{ complianceBreakdown.lunch }}%</dd></div>
+                </dl>
+                <p class="text-xs">Actual arrival and shift end are compared with the schedule; lunch requires a valid check-out and return.</p>
+              </section>
+
+              <Separator />
+
+              <section class="flex flex-col gap-1">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="font-medium text-foreground">Reporting</span>
+                    <Badge variant="secondary">35%</Badge>
+                  </div>
+                  <strong class="shrink-0 text-base tabular-nums text-foreground">{{ complianceBreakdown.reporting }}%</strong>
+                </div>
+                <p class="text-xs">Submitted date is compared with the due date.</p>
+              </section>
+
+              <Separator />
+
+              <section class="flex flex-col gap-1">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="font-medium text-foreground">Leave</span>
+                    <Badge variant="secondary">15%</Badge>
+                  </div>
+                  <strong class="shrink-0 text-base tabular-nums text-foreground">{{ complianceBreakdown.leave }}%</strong>
+                </div>
+                <p class="text-xs">Approved annual leave and holidays are neutral; sick leave requires complete documentation.</p>
+              </section>
+            </div>
+            <p v-else>{{ employee.compliance_reason }}</p>
+            <p class="text-xs font-medium text-foreground">Missing required evidence lowers confidence—it never becomes zero performance.</p>
           </AlertDescription>
         </Alert>
 
@@ -201,6 +277,8 @@ function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' 
             <p v-if="!alerts.length" class="text-sm text-muted-foreground">AI guidance is available only when validated findings exist.</p>
           </TabsContent>
         </Tabs>
+        </div>
+        <div class="h-5 shrink-0" aria-hidden="true" />
       </div>
     </SheetContent>
   </Sheet>
