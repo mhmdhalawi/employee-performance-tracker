@@ -18,8 +18,8 @@ const emit = defineEmits<{
   authenticated: []
 }>()
 
-const AUTH_EMAIL = 'bilal@cedardigitalsolutions.com'
-const AUTH_PASSWORD = 'bilal1234'
+const AUTH_EMAIL = import.meta.env.VITE_AUTH_EMAIL
+const AUTH_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD
 
 const email = ref('')
 const password = ref('')
