@@ -8,7 +8,6 @@ import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { EmployeeAIInsight, EmployeeKpiResult, PerformanceAlert } from '@/types/analysis'
 
 const props = defineProps<{
@@ -217,39 +216,11 @@ function handleOpenAutoFocus(event: Event): void {
           </AlertDescription>
         </Alert>
 
-        <Tabs default-value="alerts" class="min-h-0 flex-1">
-          <TabsList variant="line" class="grid w-full grid-cols-2 border-b">
-            <TabsTrigger value="alerts">Alerts <Badge variant="secondary">{{ alerts.length }}</Badge></TabsTrigger>
-            <TabsTrigger value="guidance"><SparklesIcon aria-hidden="true" />AI guidance</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="alerts" class="mt-4 flex flex-col gap-3">
-            <Alert v-for="alert in alerts" :key="alert.code" :variant="alert.severity === 'info' ? 'default' : 'warning'">
-              <TriangleAlertIcon v-if="alert.severity !== 'info'" aria-hidden="true" />
-              <FileSpreadsheetIcon v-else aria-hidden="true" />
-              <AlertTitle class="capitalize">
-                {{ alertCodeLabel(alert.code) }}
-                <Badge variant="outline">{{ alert.occurrence_count }}</Badge>
-              </AlertTitle>
-              <AlertDescription class="flex flex-col gap-2 [&_p]:mb-0">
-                <Badge :variant="impactVariant(alert.scoring_impact)">
-                  {{ impactLabel(alert.scoring_impact) }}
-                </Badge>
-                <p>{{ alert.message }}</p>
-                <details v-if="alert.record_ids.length">
-                  <summary class="cursor-pointer text-xs font-medium text-foreground">Supporting records ({{ alert.record_ids.length }})</summary>
-                  <div class="mt-2 flex flex-wrap gap-1">
-                    <Badge v-for="recordId in alert.record_ids" :key="recordId" variant="secondary">{{ recordId }}</Badge>
-                  </div>
-                </details>
-                <a v-if="alert.evidence_links[0]" class="text-primary underline-offset-4 hover:underline" :href="alert.evidence_links[0]" target="_blank" rel="noreferrer">Open evidence</a>
-              </AlertDescription>
-            </Alert>
-            <p v-if="!alerts.length" class="py-10 text-center text-sm text-muted-foreground">No alerts for this employee.</p>
-          </TabsContent>
-
-          <TabsContent value="guidance" class="mt-4 flex flex-col gap-3">
+        <section aria-labelledby="ai-guidance-heading" class="flex flex-col gap-3">
+          <div class="flex flex-col gap-1">
+            <h3 id="ai-guidance-heading" class="text-sm font-semibold tracking-tight">AI guidance</h3>
             <p class="text-sm text-muted-foreground">Generated on demand from this employee’s validated findings.</p>
+          </div>
             <Button
               v-if="alerts.length && !insight"
               class="w-full sm:w-fit"
@@ -289,8 +260,38 @@ function handleOpenAutoFocus(event: Event): void {
               </AlertDescription>
             </Alert>
             <p v-if="!alerts.length" class="text-sm text-muted-foreground">AI guidance is available only when validated findings exist.</p>
-          </TabsContent>
-        </Tabs>
+        </section>
+
+        <Separator />
+
+        <section aria-labelledby="employee-alerts-heading" class="flex flex-col gap-3">
+          <div class="flex items-center justify-between gap-3">
+            <h3 id="employee-alerts-heading" class="text-sm font-semibold tracking-tight">Alerts</h3>
+            <Badge variant="secondary">{{ alerts.length }}</Badge>
+          </div>
+          <Alert v-for="alert in alerts" :key="alert.code" :variant="alert.severity === 'info' ? 'default' : 'warning'">
+            <TriangleAlertIcon v-if="alert.severity !== 'info'" aria-hidden="true" />
+            <FileSpreadsheetIcon v-else aria-hidden="true" />
+            <AlertTitle class="capitalize">
+              {{ alertCodeLabel(alert.code) }}
+              <Badge variant="outline">{{ alert.occurrence_count }}</Badge>
+            </AlertTitle>
+            <AlertDescription class="flex flex-col gap-2 [&_p]:mb-0">
+              <Badge :variant="impactVariant(alert.scoring_impact)">
+                {{ impactLabel(alert.scoring_impact) }}
+              </Badge>
+              <p>{{ alert.message }}</p>
+              <details v-if="alert.record_ids.length">
+                <summary class="cursor-pointer text-xs font-medium text-foreground">Supporting records ({{ alert.record_ids.length }})</summary>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <Badge v-for="recordId in alert.record_ids" :key="recordId" variant="secondary">{{ recordId }}</Badge>
+                </div>
+              </details>
+              <a v-if="alert.evidence_links[0]" class="text-primary underline-offset-4 hover:underline" :href="alert.evidence_links[0]" target="_blank" rel="noreferrer">Open evidence</a>
+            </AlertDescription>
+          </Alert>
+          <p v-if="!alerts.length" class="py-10 text-center text-sm text-muted-foreground">No alerts for this employee.</p>
+        </section>
         </div>
         <div class="h-5 shrink-0" aria-hidden="true" />
       </div>
