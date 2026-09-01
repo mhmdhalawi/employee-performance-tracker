@@ -21,6 +21,7 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import DataInterpretationPage from '@/components/dashboard/DataInterpretationPage.vue'
 import EmployeeDetailPage from '@/components/dashboard/EmployeeDetailPage.vue'
 import DataInterpretationCard from '@/components/dashboard/DataInterpretationCard.vue'
 import type { AIInsightResponse, AnalyzeResponse, DashboardFilters, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload } from '@/types/analysis'
@@ -49,6 +50,7 @@ const insightsByEmployee = ref<Record<string, EmployeeAIInsight>>({})
 const insightLoadingEmployeeId = ref<string | null>(null)
 const insightError = ref('')
 const selectedEmployeeId = ref<string | null>(readEmployeeIdFromUrl())
+const dataInterpretationOpen = ref(readDataInterpretationFromUrl())
 let filterTimer: number | undefined
 let dashboardScrollY = 0
 
@@ -173,7 +175,7 @@ watch(() => props.analysis.analysis_id, () => {
   insightsByEmployee.value = {}
   insightLoadingEmployeeId.value = null
   insightError.value = ''
-  setEmployeeUrlFilter(null, 'replace')
+  clearDetailUrl()
 })
 
 onMounted(() => {
@@ -244,6 +246,13 @@ async function openEmployeeDetails(row: EmployeeKpiResult): Promise<void> {
   window.scrollTo({ top: 0 })
 }
 
+async function openDataInterpretation(): Promise<void> {
+  dashboardScrollY = window.scrollY
+  setDataInterpretationUrl(true, 'push')
+  await nextTick()
+  window.scrollTo({ top: 0 })
+}
+
 async function closeEmployeeDetails(): Promise<void> {
   if (window.history.state?.trackerEmployeeDetail === props.analysis.analysis_id) {
     window.history.back()
@@ -255,12 +264,24 @@ async function closeEmployeeDetails(): Promise<void> {
   window.scrollTo({ top: dashboardScrollY })
 }
 
+async function closeDataInterpretation(): Promise<void> {
+  if (window.history.state?.trackerDataInterpretation === props.analysis.analysis_id) {
+    window.history.back()
+    return
+  }
+
+  setDataInterpretationUrl(false, 'replace')
+  await nextTick()
+  window.scrollTo({ top: dashboardScrollY })
+}
+
 async function handlePopState(): Promise<void> {
-  const wasOpen = selectedEmployeeId.value !== null
+  const wasOpen = selectedEmployeeId.value !== null || dataInterpretationOpen.value
   selectedEmployeeId.value = readEmployeeIdFromUrl()
+  dataInterpretationOpen.value = readDataInterpretationFromUrl()
   await nextTick()
 
-  if (selectedEmployee.value)
+  if (selectedEmployee.value || dataInterpretationOpen.value)
     window.scrollTo({ top: 0 })
   else if (wasOpen)
     window.scrollTo({ top: dashboardScrollY })
@@ -270,12 +291,20 @@ function readEmployeeIdFromUrl(): string | null {
   return new URL(window.location.href).searchParams.get('employee')
 }
 
+function readDataInterpretationFromUrl(): boolean {
+  const url = new URL(window.location.href)
+  return !url.searchParams.has('employee') && url.searchParams.get('view') === 'data-interpretation'
+}
+
 function setEmployeeUrlFilter(employeeId: string | null, mode: 'push' | 'replace'): void {
   const url = new URL(window.location.href)
-  if (employeeId)
+  if (employeeId) {
     url.searchParams.set('employee', employeeId)
-  else
+    url.searchParams.delete('view')
+  }
+  else {
     url.searchParams.delete('employee')
+  }
 
   if (mode === 'push') {
     window.history.pushState(
@@ -292,6 +321,36 @@ function setEmployeeUrlFilter(employeeId: string | null, mode: 'push' | 'replace
     )
   }
   selectedEmployeeId.value = employeeId
+  if (employeeId)
+    dataInterpretationOpen.value = false
+}
+
+function setDataInterpretationUrl(open: boolean, mode: 'push' | 'replace'): void {
+  const url = new URL(window.location.href)
+  if (open) {
+    url.searchParams.set('view', 'data-interpretation')
+    url.searchParams.delete('employee')
+  }
+  else {
+    url.searchParams.delete('view')
+  }
+
+  const state = open
+    ? { trackerDataInterpretation: props.analysis.analysis_id }
+    : { trackerDataInterpretation: null }
+  window.history[mode === 'push' ? 'pushState' : 'replaceState'](state, '', url)
+  dataInterpretationOpen.value = open
+  if (open)
+    selectedEmployeeId.value = null
+}
+
+function clearDetailUrl(): void {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('employee')
+  url.searchParams.delete('view')
+  window.history.replaceState({}, '', url)
+  selectedEmployeeId.value = null
+  dataInterpretationOpen.value = false
 }
 
 async function generateInsight(employeeId: string): Promise<void> {
@@ -353,6 +412,12 @@ function formatIsoDate(value: Date): string {
     @back="closeEmployeeDetails"
     @generate-insight="generateInsight"
   />
+  <DataInterpretationPage
+    v-else-if="dataInterpretationOpen"
+    :classifications="analysis.table_classifications"
+    :file-name="analysis.file_name"
+    @back="closeDataInterpretation"
+  />
   <main v-else class="min-h-svh bg-muted/30">
     <header class="border-b bg-background">
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
@@ -383,7 +448,10 @@ function formatIsoDate(value: Date): string {
         <Card v-for="item in summaryCards" :key="item.label"><CardHeader class="pb-2"><CardDescription class="flex items-center gap-2"><span class="size-2 rounded-full" :style="{ backgroundColor: item.color }" />{{ item.label }}</CardDescription><CardTitle class="text-3xl" :style="{ color: item.color }">{{ score(item.value) }}</CardTitle></CardHeader><CardContent class="text-xs text-muted-foreground">{{ item.detail }}</CardContent></Card>
       </section>
 
-      <DataInterpretationCard :classifications="analysis.table_classifications" />
+      <DataInterpretationCard
+        :classifications="analysis.table_classifications"
+        @view-details="openDataInterpretation"
+      />
 
       <Card>
         <CardHeader><div class="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Employee results</CardTitle><CardDescription>Component scores remain visible when overall scoring is withheld.</CardDescription></div><Badge variant="outline">{{ filteredRows.length }} employees</Badge></div></CardHeader>

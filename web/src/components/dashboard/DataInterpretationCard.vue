@@ -5,19 +5,13 @@ import { ArrowRightIcon, DatabaseIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { TableClassification } from '@/types/analysis'
 
 const props = defineProps<{
   classifications: TableClassification[]
+}>()
+const emit = defineEmits<{
+  viewDetails: []
 }>()
 
 const relevant = computed(() => props.classifications.filter(item =>
@@ -29,19 +23,6 @@ const needsAttention = computed(() => props.classifications.filter(item =>
 
 function familyLabel(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1)
-}
-
-function calculatorLabel(value: string): string {
-  return value
-    .replace(/^calculate_/, '')
-    .replace(/^load_/, 'load ')
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-}
-
-function confidenceVariant(confidence: TableClassification['confidence']): 'success' | 'warning' {
-  return confidence === 'high' ? 'success' : 'warning'
 }
 
 function familyVariant(family: string): 'default' | 'secondary' | 'outline' | 'warning' {
@@ -87,58 +68,10 @@ function familyStyle(family: string): CSSProperties | undefined {
           </CardDescription>
         </div>
 
-        <Sheet>
-          <SheetTrigger as-child>
-            <Button variant="outline" size="sm">
-              View details
-              <ArrowRightIcon data-icon="inline-end" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent class="w-full gap-0 sm:max-w-2xl">
-            <SheetHeader class="border-b border-primary/15 bg-primary/5 px-5 py-5 sm:px-6">
-              <SheetTitle>Data interpretation details</SheetTitle>
-              <SheetDescription>
-                Source tables, KPI classifications, approved calculators, and validated field bindings for this analysis.
-              </SheetDescription>
-            </SheetHeader>
-
-            <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 sm:px-6">
-              <div v-for="item in classifications" :key="item.source_name" class="flex flex-col gap-3 rounded-lg border p-4">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div class="flex flex-col gap-1">
-                    <p class="font-medium">{{ item.source_name }}</p>
-                    <p class="text-sm text-muted-foreground">{{ item.rationale }}</p>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <Badge :variant="familyVariant(item.kpi_family)" :style="familyStyle(item.kpi_family)">{{ familyLabel(item.kpi_family) }}</Badge>
-                    <Badge :variant="confidenceVariant(item.confidence)">{{ familyLabel(item.confidence) }} confidence</Badge>
-                  </div>
-                </div>
-
-                <div v-if="item.calculator_invocations.length" class="flex flex-col gap-4">
-                  <div v-for="invocation in item.calculator_invocations" :key="invocation.calculator" class="flex flex-col gap-2">
-                    <p class="text-sm font-medium">{{ calculatorLabel(invocation.calculator) }}</p>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Calculator input</TableHead>
-                          <TableHead>Source column</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <TableRow v-for="(sourceColumn, inputField) in invocation.field_bindings" :key="inputField">
-                          <TableCell class="font-mono text-xs">{{ inputField }}</TableCell>
-                          <TableCell class="font-mono text-xs">{{ sourceColumn }}</TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-                <p v-else class="text-sm text-muted-foreground">No calculator was invoked for this table.</p>
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
+        <Button variant="outline" size="sm" @click="emit('viewDetails')">
+          View details
+          <ArrowRightIcon data-icon="inline-end" />
+        </Button>
       </div>
     </CardHeader>
 
