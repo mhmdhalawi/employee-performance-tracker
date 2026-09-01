@@ -1,0 +1,24 @@
+{
+  "benchmark": "cedar-sanitized-v1",
+  "period_start": "2026-05-25",
+  "period_end": "2026-08-22",
+  "employees": [
+    {"employee_id":"EMP-001","team":"Automation"},{"employee_id":"EMP-002","team":"Automation"},
+    {"employee_id":"EMP-003","team":"Automation"},{"employee_id":"EMP-004","team":"Automation"},
+    {"employee_id":"EMP-005","team":"Automation"},{"employee_id":"EMP-006","team":"Automation"},
+    {"employee_id":"EMP-007","team":"Automation"},{"employee_id":"EMP-008","team":"Automation"},
+    {"employee_id":"EMP-009","team":"Automation"},{"employee_id":"EMP-010","team":"Automation"},
+    {"employee_id":"EMP-011","team":"Operations"},{"employee_id":"EMP-012","team":"Operations"},
+    {"employee_id":"EMP-013","team":"Operations"},{"employee_id":"EMP-014","team":"Operations"},
+    {"employee_id":"EMP-015","team":"Operations"},{"employee_id":"EMP-016","team":"Operations"},
+    {"employee_id":"EMP-017","team":"Operations"},{"employee_id":"EMP-018","team":"Operations"},
+    {"employee_id":"EMP-019","team":"Operations"},{"employee_id":"EMP-020","team":"Operations"},
+    {"employee_id":"EMP-021","team":"Quality"},{"employee_id":"EMP-022","team":"Quality"},
+    {"employee_id":"EMP-023","team":"Quality"},{"employee_id":"EMP-024","team":"Quality"},
+    {"employee_id":"EMP-025","team":"Quality"},{"employee_id":"EMP-026","team":"Quality"},
+    {"employee_id":"EMP-027","team":"Quality"},{"employee_id":"EMP-028","team":"Quality"},
+    {"employee_id":"EMP-029","team":"Quality"},{"employee_id":"EMP-030","team":"Quality"}
+  ],
+  "insufficient_data_ids": ["EMP-027", "EMP-028", "EMP-029", "EMP-030"],
+  "duplicate_attendance_ids": ["EMP-027", "EMP-028", "EMP-029", "EMP-030"]
+}

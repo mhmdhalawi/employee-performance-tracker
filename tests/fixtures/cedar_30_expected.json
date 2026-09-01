@@ -1,0 +1,14 @@
+{
+  "tolerance": 0.1,
+  "default": {"productivity_score":100.0,"compliance_score":100.0,"quality_score":100.0,"data_confidence":100.0,"overall_score":100.0,"result_status":"Top performer"},
+  "overrides": {
+    "EMP-027":{"data_confidence":60.0,"overall_score":null,"result_status":"Insufficient data"},
+    "EMP-028":{"data_confidence":60.0,"overall_score":null,"result_status":"Insufficient data"},
+    "EMP-029":{"data_confidence":60.0,"overall_score":null,"result_status":"Insufficient data"},
+    "EMP-030":{"data_confidence":60.0,"overall_score":null,"result_status":"Insufficient data"}
+  },
+  "documented_workbook_exceptions": {
+    "EMP-027":{"field":"compliance_score","workbook_expected":99.7696,"production_expected":100.0,"difference":0.2304},
+    "EMP-029":{"field":"compliance_score","workbook_expected":99.6211,"production_expected":100.0,"difference":0.3789}
+  }
+}

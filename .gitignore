@@ -16,4 +16,5 @@ wheels/
 # Tooling caches
 .pytest_cache/
 .ruff_cache/
+.uv-cache/
 .pnpm-store/
