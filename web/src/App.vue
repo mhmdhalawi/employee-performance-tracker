@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   CircleAlertIcon,
   DatabaseIcon,
@@ -28,6 +28,8 @@ import type { AnalyzeResponse, DashboardFilters, ErrorPayload } from '@/types/an
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const SAMPLE_REQUEST_URL = new URL('../data/request.json', import.meta.url)
+// Temporary entry mode: set to true when manual upload access should return.
+const SHOW_DATA_SOURCE_PAGE = false
 
 type AnalysisSource = 'upload' | 'sample'
 
@@ -234,6 +236,11 @@ async function submitSampleAnalysis(): Promise<void> {
   requestError.value = ''
   await requestAnalysis()
 }
+
+watch(isAuth, (authenticated) => {
+  if (authenticated && !SHOW_DATA_SOURCE_PAGE && !analysis.value && !isSubmitting.value)
+    void submitSampleAnalysis()
+}, { immediate: true })
 </script>
 
 <template>
@@ -243,9 +250,41 @@ async function submitSampleAnalysis(): Promise<void> {
     :analysis="analysis"
     :is-filtering="isFiltering"
     :filter-error="filterError"
+    :show-new-analysis="SHOW_DATA_SOURCE_PAGE"
     @back="showDashboard = false"
     @filters-change="requestAnalysis($event, true)"
   />
+  <main v-else-if="!SHOW_DATA_SOURCE_PAGE" class="flex min-h-svh items-center bg-muted/30 px-4 py-8 sm:px-6">
+    <Card class="mx-auto w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>
+          {{ sampleRequestError ? 'Performance table unavailable' : 'Loading performance table' }}
+        </CardTitle>
+        <CardDescription>
+          Fetching the latest analyzed results from the performance service.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent>
+        <Alert v-if="sampleRequestError" variant="destructive">
+          <CircleAlertIcon aria-hidden="true" />
+          <AlertTitle>Dashboard could not load</AlertTitle>
+          <AlertDescription>{{ sampleRequestError }}</AlertDescription>
+        </Alert>
+        <div v-else class="flex items-center gap-3 text-sm text-muted-foreground">
+          <Spinner />
+          <span>Classifying evidence and calculating employee results…</span>
+        </div>
+      </CardContent>
+
+      <CardFooter v-if="sampleRequestError">
+        <Button class="w-full" type="button" :disabled="isSubmitting" @click="submitSampleAnalysis">
+          <Spinner v-if="isSubmitting" data-icon="inline-start" />
+          Retry
+        </Button>
+      </CardFooter>
+    </Card>
+  </main>
   <main v-else class="min-h-svh bg-muted/30 px-4 py-8 sm:px-6 sm:py-12">
     <div class="mx-auto flex w-full max-w-2xl flex-col gap-8">
       <header class="flex flex-col items-center gap-3 text-center">

@@ -32,6 +32,7 @@ const props = defineProps<{
   analysis: AnalyzeResponse
   isFiltering?: boolean
   filterError?: string
+  showNewAnalysis?: boolean
 }>()
 const emit = defineEmits<{
   back: []
@@ -425,7 +426,7 @@ function formatIsoDate(value: Date): string {
           <div class="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ShieldCheckIcon class="size-4" aria-hidden="true" /></div>
           <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis.file_name }}</p></div>
         </div>
-        <Button variant="outline" @click="emit('back')"><ArrowLeftIcon data-icon="inline-start" />New analysis</Button>
+        <Button v-if="showNewAnalysis" variant="outline" @click="emit('back')"><ArrowLeftIcon data-icon="inline-start" />New analysis</Button>
       </div>
     </header>
 
