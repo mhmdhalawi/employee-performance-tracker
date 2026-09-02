@@ -33,10 +33,9 @@ When any filter is present, the backend reloads the latest stored request and it
 calculation plan, then reruns deterministic Python validation and KPI calculations. It does not
 ask the mapping LLM to classify the schema again.
 
-The Vue app currently hides the upload/sample entry screen with `SHOW_DATA_SOURCE_PAGE = false`.
-On startup it calls `GET /api/v1/dashboard`; it does not automatically send the bundled sample
-request. Send a Postman request first, then load or refresh the frontend. The backend currently
-has no authentication, session, or auth-cookie configuration.
+The Vue app no longer includes upload or sample-data entry cards. On startup it calls
+`GET /api/v1/dashboard`. Send a Postman request first, then load or refresh the frontend. The
+backend currently has no authentication, session, or auth-cookie configuration.
 
 Employee, team, and reporting-period controls all issue filtered dashboard requests. The browser
 keeps presentation state, sorting, and pagination, while Python remains authoritative for filtered

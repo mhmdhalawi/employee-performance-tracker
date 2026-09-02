@@ -294,8 +294,8 @@ validate. The Vue client presents employee results with alert counts and sorting
 and a responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
 The dashboard also exposes a compact data-interpretation summary and detail sheet for table
 classifications, confidence, approved calculator invocations, and field bindings. The Vue app
-currently opens the persisted dashboard first; its upload/sample screen remains in source behind
-`SHOW_DATA_SOURCE_PAGE = false`.
+opens the persisted dashboard directly; the upload and sample-data entry cards have been removed
+from the frontend.
 Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark exception described in
 `docs/benchmark.md`.
 

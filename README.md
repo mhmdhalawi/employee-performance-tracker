@@ -19,8 +19,8 @@ summary KPIs; sortable, paginated employee results with alert counts; weekly KPI
 responsive employee detail sheet containing traceable alerts and on-demand AI guidance. A
 data-interpretation card and detail sheet show each table's KPI classification, confidence,
 selected calculator, and validated source-column bindings.
-The backend has no authentication/session layer. The upload/sample entry UI remains in source but
-is currently hidden; use Postman or a webhook to submit JSON tables, then refresh the frontend.
+The backend has no authentication/session layer. The frontend no longer includes upload or
+sample-data entry cards; use Postman or a webhook to submit JSON tables, then refresh the frontend.
 
 ## Prerequisites
 
