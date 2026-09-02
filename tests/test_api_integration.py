@@ -1,5 +1,7 @@
 from io import BytesIO
 import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import AsyncMock, patch
 
@@ -18,7 +20,14 @@ from tests.benchmark_fixture import benchmark_plan, benchmark_tables, benchmark_
 class AnalyzeApiIntegrationTests(TestCase):
     def setUp(self) -> None:
         agent_service._mapping_cache.clear()
+        self._temporary_directory = TemporaryDirectory()
+        self._original_database_path = get_settings().database_path
+        get_settings().database_path = Path(self._temporary_directory.name) / "tracker.sqlite3"
         self.client = TestClient(app)
+
+    def tearDown(self) -> None:
+        get_settings().database_path = self._original_database_path
+        self._temporary_directory.cleanup()
 
     def _post_benchmark(self, query: str = ""):
         with patch.object(agent_service, "_run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
@@ -82,6 +91,63 @@ class AnalyzeApiIntegrationTests(TestCase):
             [item["employee_id"] for item in response.json()["results"]],
             ["EMP-027"],
         )
+
+    def test_json_submission_is_available_as_latest_dashboard(self) -> None:
+        submitted = self._post_benchmark_tables()
+
+        self.assertEqual(submitted.status_code, 200)
+        dashboard = self.client.get("/api/v1/dashboard")
+        self.assertEqual(dashboard.status_code, 200)
+        for field in (
+            "results",
+            "summary",
+            "dataset_overview",
+            "available_teams",
+            "trends",
+            "alerts",
+            "table_classifications",
+            "limitations",
+        ):
+            self.assertEqual(dashboard.json()[field], submitted.json()[field], field)
+        self.assertNotEqual(
+            dashboard.json()["analysis_id"],
+            submitted.json()["analysis_id"],
+        )
+
+    def test_latest_dashboard_uses_persisted_plan_for_filters(self) -> None:
+        submitted = self._post_benchmark_tables()
+        self.assertEqual(submitted.status_code, 200)
+        agent_service._mapping_cache.clear()
+
+        mapping_agent = AsyncMock(side_effect=AssertionError("mapping agent should not run"))
+        with patch.object(agent_service, "_run_mapping_agent", mapping_agent):
+            filtered = self.client.get(
+                "/api/v1/dashboard?start_date=2026-06-01&end_date=2026-06-05"
+            )
+
+        self.assertEqual(filtered.status_code, 200)
+        self.assertEqual(
+            filtered.json()["applied_filters"]["start_date"],
+            "2026-06-01",
+        )
+        employee = self.client.get("/api/v1/dashboard?employee_id=EMP-027")
+        self.assertEqual(employee.status_code, 200)
+        self.assertEqual(
+            [item["employee_id"] for item in employee.json()["results"]],
+            ["EMP-027"],
+        )
+        team = self.client.get("/api/v1/dashboard?team=Automation")
+        self.assertEqual(team.status_code, 200)
+        self.assertTrue(
+            all(item["team"] == "Automation" for item in team.json()["results"])
+        )
+        mapping_agent.assert_not_awaited()
+
+    def test_latest_dashboard_requires_a_completed_submission(self) -> None:
+        response = self.client.get("/api/v1/dashboard")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"]["code"], "dashboard_not_found")
 
     def test_invalid_json_table_shapes_return_422(self) -> None:
         duplicate_names = self.client.post(

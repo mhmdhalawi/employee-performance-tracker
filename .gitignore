@@ -18,3 +18,8 @@ wheels/
 .ruff_cache/
 .uv-cache/
 .pnpm-store/
+
+# Local SQLite persistence
+storage/*.sqlite3
+storage/*.sqlite3-shm
+storage/*.sqlite3-wal

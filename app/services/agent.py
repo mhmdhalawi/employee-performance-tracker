@@ -189,6 +189,7 @@ async def analyze_tables(
     team: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    calculation_plan: CalculationPlan | None = None,
 ) -> AnalysisResponse:
     """Analyze validated JSON tables through the shared catalog workflow."""
     return await analyze_catalog(
@@ -198,6 +199,7 @@ async def analyze_tables(
         team=team,
         start_date=start_date,
         end_date=end_date,
+        calculation_plan=calculation_plan,
     )
 
 
@@ -208,13 +210,18 @@ async def analyze_catalog(
     team: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    calculation_plan: CalculationPlan | None = None,
 ) -> AnalysisResponse:
     """Classify and calculate a transport-neutral source catalog."""
     if start_date and end_date and start_date > end_date:
         raise InvalidAnalysisFilterError("start_date must be on or before end_date.")
     workbook_context = _build_workbook_context(source_catalog)
     schema_fingerprint = _schema_fingerprint(source_catalog)
-    analysis = _get_cached_analysis(schema_fingerprint)
+    analysis = (
+        calculation_plan.model_copy(deep=True)
+        if calculation_plan is not None
+        else _get_cached_analysis(schema_fingerprint)
+    )
     if analysis is not None and any(
         not validation.valid
         for validation in catalog.validate_classifications(
@@ -407,6 +414,15 @@ async def analyze_catalog(
         total_tokens=usage.total_tokens,
         model_requests=usage.requests,
         mapping_cache_hit=mapping_cache_hit,
+    )
+
+
+def refresh_analysis_insight_context(
+    response: AnalysisResponse,
+) -> AnalysisResponse:
+    """Attach a fresh process-local insight context to a persisted dashboard snapshot."""
+    return response.model_copy(
+        update={"analysis_id": _cache_insight_context(response.results)}
     )
 
 

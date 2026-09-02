@@ -163,7 +163,7 @@ watch(team, () => {
     employee.value = 'all'
 })
 
-watch(period, () => {
+watch([employee, team, period], () => {
   window.clearTimeout(filterTimer)
   filterTimer = window.setTimeout(() => emit('filtersChange', buildFilters()), 250)
 }, { flush: 'post' })
@@ -191,6 +191,10 @@ onBeforeUnmount(() => {
 
 function buildFilters(): DashboardFilters {
   const filters: DashboardFilters = {}
+  if (employee.value !== 'all')
+    filters.employee_id = employee.value
+  if (team.value !== 'all')
+    filters.team = team.value
   if (period.value !== 'full' && props.analysis.dataset_overview.date_end) {
     const weeks = Number.parseInt(period.value, 10)
     const end = parseDate(props.analysis.dataset_overview.date_end)

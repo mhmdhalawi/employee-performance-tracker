@@ -11,10 +11,10 @@ from app.schemas.uploads import (
     AnalyzeUploadResponse,
 )
 from app.services.agent import (
-    analyze_tables,
     analyze_upload,
     generate_employee_insight,
 )
+from app.services.submissions import analyze_and_store_tables, get_latest_dashboard
 
 router = APIRouter(tags=["agent"])
 
@@ -53,8 +53,23 @@ async def analyze_table_data(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> AnalysisResponse:
-    return await analyze_tables(
+    return await analyze_and_store_tables(
         request,
+        employee_id=employee_id,
+        team=team,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@router.get("/dashboard", response_model=AnalysisResponse)
+async def latest_dashboard(
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> AnalysisResponse:
+    return await get_latest_dashboard(
         employee_id=employee_id,
         team=team,
         start_date=start_date,

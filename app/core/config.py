@@ -1,5 +1,7 @@
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,10 +14,11 @@ class Settings(BaseSettings):
 
     app_name: str = "Employee Performance Tracking Agent"
     api_prefix: str = "/api/v1"
-    debug: bool = False
+    debug: bool = Field(default=False, validation_alias="APP_DEBUG")
 
     cors_origins: list[str] = ["http://localhost:5173"]
     upload_max_bytes: int = 10 * 1024 * 1024
+    database_path: Path = Path("storage/tracker.sqlite3")
 
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.6-luna"

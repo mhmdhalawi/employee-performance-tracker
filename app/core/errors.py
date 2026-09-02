@@ -55,6 +55,13 @@ class InvalidAnalysisFilterError(AppError):
     code = "invalid_analysis_filter"
 
 
+class DashboardNotFoundError(AppError):
+    """No completed persisted analysis is available for the dashboard."""
+
+    status_code = 404
+    code = "dashboard_not_found"
+
+
 class InsightContextExpiredError(AppError):
     """The temporary analysis context is missing or has expired."""
 

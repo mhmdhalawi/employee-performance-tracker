@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils'
 import type { AnalyzeResponse, DashboardFilters, ErrorPayload } from '@/types/analysis'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 const SAMPLE_REQUEST_URL = new URL('../data/request.json', import.meta.url)
 // Temporary entry mode: set to true when manual upload access should return.
 const SHOW_DATA_SOURCE_PAGE = false
@@ -39,6 +39,7 @@ const selectedFile = ref<File | null>(null)
 const fileError = ref('')
 const requestError = ref('')
 const sampleRequestError = ref('')
+const dashboardRequestError = ref('')
 const analysis = ref<AnalyzeResponse | null>(null)
 const isDragging = ref(false)
 const isSubmitting = ref(false)
@@ -123,10 +124,73 @@ async function loadSampleRequest(signal: AbortSignal): Promise<string> {
 async function readErrorMessage(response: Response): Promise<string> {
   try {
     const payload = await response.json() as ErrorPayload
-    return payload.error?.message ?? 'The file could not be analyzed.'
+    return payload.error?.message ?? 'The request could not be completed.'
   }
   catch {
-    return 'The file could not be analyzed.'
+    return 'The request could not be completed.'
+  }
+}
+
+async function requestStoredDashboard(
+  filters: DashboardFilters = {},
+  filtering = false,
+): Promise<void> {
+  const sequence = ++requestSequence
+  requestController?.abort()
+  requestController = new AbortController()
+  if (filtering) {
+    isFiltering.value = true
+    filterError.value = ''
+  }
+  else {
+    isSubmitting.value = true
+    dashboardRequestError.value = ''
+    analysis.value = null
+  }
+
+  try {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) {
+      if (value)
+        query.set(key, value)
+    }
+    const endpoint = `${API_BASE_URL}/api/v1/dashboard${query.size ? `?${query}` : ''}`
+    const response = await fetch(endpoint, {
+      signal: requestController.signal,
+    })
+
+    if (!response.ok)
+      throw new Error(await readErrorMessage(response))
+    if (sequence !== requestSequence)
+      return
+
+    const result = await response.json() as AnalyzeResponse
+    analysis.value = {
+      ...result,
+      file_name: 'Latest stored submission',
+      file_type: 'json',
+      byte_size: 0,
+    }
+    showDashboard.value = true
+  }
+  catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError')
+      return
+
+    const message = error instanceof TypeError
+      ? 'The dashboard service is temporarily unavailable. Please try again shortly.'
+      : error instanceof Error ? error.message : 'The dashboard could not be loaded.'
+    if (filtering)
+      filterError.value = message
+    else
+      dashboardRequestError.value = message
+  }
+  finally {
+    if (sequence === requestSequence) {
+      isSubmitting.value = false
+      isFiltering.value = false
+      requestController = null
+    }
   }
 }
 
@@ -237,9 +301,19 @@ async function submitSampleAnalysis(): Promise<void> {
   await requestAnalysis()
 }
 
+async function requestDashboard(
+  filters: DashboardFilters = {},
+  filtering = false,
+): Promise<void> {
+  if (SHOW_DATA_SOURCE_PAGE)
+    await requestAnalysis(filters, filtering)
+  else
+    await requestStoredDashboard(filters, filtering)
+}
+
 watch(isAuth, (authenticated) => {
   if (authenticated && !SHOW_DATA_SOURCE_PAGE && !analysis.value && !isSubmitting.value)
-    void submitSampleAnalysis()
+    void requestStoredDashboard()
 }, { immediate: true })
 </script>
 
@@ -252,13 +326,13 @@ watch(isAuth, (authenticated) => {
     :filter-error="filterError"
     :show-new-analysis="SHOW_DATA_SOURCE_PAGE"
     @back="showDashboard = false"
-    @filters-change="requestAnalysis($event, true)"
+    @filters-change="requestDashboard($event, true)"
   />
   <main v-else-if="!SHOW_DATA_SOURCE_PAGE" class="flex min-h-svh items-center bg-muted/30 px-4 py-8 sm:px-6">
     <Card class="mx-auto w-full max-w-lg">
       <CardHeader>
         <CardTitle>
-          {{ sampleRequestError ? 'Performance table unavailable' : 'Loading performance table' }}
+          {{ dashboardRequestError ? 'Performance table unavailable' : 'Loading performance table' }}
         </CardTitle>
         <CardDescription>
           Fetching the latest analyzed results from the performance service.
@@ -266,19 +340,19 @@ watch(isAuth, (authenticated) => {
       </CardHeader>
 
       <CardContent>
-        <Alert v-if="sampleRequestError" variant="destructive">
+        <Alert v-if="dashboardRequestError" variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>Dashboard could not load</AlertTitle>
-          <AlertDescription>{{ sampleRequestError }}</AlertDescription>
+          <AlertDescription>{{ dashboardRequestError }}</AlertDescription>
         </Alert>
         <div v-else class="flex items-center gap-3 text-sm text-muted-foreground">
           <Spinner />
-          <span>Classifying evidence and calculating employee results…</span>
+          <span>Loading the latest completed submission…</span>
         </div>
       </CardContent>
 
-      <CardFooter v-if="sampleRequestError">
-        <Button class="w-full" type="button" :disabled="isSubmitting" @click="submitSampleAnalysis">
+      <CardFooter v-if="dashboardRequestError">
+        <Button class="w-full" type="button" :disabled="isSubmitting" @click="requestStoredDashboard()">
           <Spinner v-if="isSubmitting" data-icon="inline-start" />
           Retry
         </Button>

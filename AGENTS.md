@@ -211,9 +211,9 @@ state, and presentation logic in Vue; keep source validation, KPI formulas, evid
 confidence, trend calculation, and all other business arithmetic in Python.
 
 Use pnpm exclusively within `web/`. Do not commit `node_modules/`, `dist/`, `.pnpm-store/`,
-or other generated caches. The frontend may retain one request's structured analysis in
-browser memory for interactive filtering, but must not introduce backend persistence or
-recalculate authoritative KPI values in JavaScript.
+or other generated caches. The frontend may retain one structured analysis in browser memory,
+but persisted dashboard data comes from the FastAPI API and authoritative KPI values remain
+calculated in Python.
 
 Use the configured `@/` alias for imports from `web/src`. Prefer existing shadcn-vue
 components over custom equivalents and add them through
@@ -370,17 +370,26 @@ Current endpoints:
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
 | `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
 | `POST` | `/api/v1/analyze` | upload, classify, validate, and return employee KPI results with findings |
-| `POST` | `/api/v1/analyze-tables` | classify and analyze JSON tables through the same catalog workflow |
+| `POST` | `/api/v1/analyze-tables` | classify JSON tables and persist an unfiltered canonical submission |
+| `GET` | `/api/v1/dashboard` | return the latest persisted dashboard or recalculate its filtered view |
 | `POST` | `/api/v1/insights` | generate on-demand guidance for one employee from a temporary analysis context |
 
 ---
 
 ## 9. Persistence
 
-**No durable persistence exists.** Source datasets and rows are not stored. Analysis workflows
-keep only compact validated insight contexts in a bounded in-memory LRU cache for 15 minutes;
-they disappear on expiry, eviction, or server restart. The browser may retain generated
-insights for the active analysis. Do not add a database without asking.
+Unfiltered JSON submissions sent to `/analyze-tables` are durably stored in local SQLite. The
+database keeps the complete validated request, validated calculation plan, and complete canonical
+`AnalysisResponse`. `/dashboard` returns the latest completed snapshot; filtered dashboard reads
+recalculate from its request with the persisted plan and deterministic Python calculators.
+
+The default path is `storage/tracker.sqlite3`, configurable with `DATABASE_PATH`. Keep SQLite on
+local disk. Migrations live in `migrations/`, and database/WAL files must remain ignored by Git.
+See `docs/persistence.md` for the request lifecycle and the cross-submission history boundary.
+
+Uploads through `/analyze` remain request-scoped and are not persisted. Insight contexts remain
+in a bounded 15-minute in-memory cache; `/dashboard` creates a fresh context when it restores a
+snapshot.
 
 ---
 
@@ -427,5 +436,5 @@ insights for the active analysis. Do not add a database without asking.
 
 ## 12. Deliberately out of scope for now
 
-Auth/multi-tenancy, database + migrations, background jobs, persisted historical data, PDF
-export, streaming AI responses, and rate limiting.
+Auth/multi-tenancy, background jobs, cross-submission historical aggregation, PDF export,
+streaming AI responses, and rate limiting.
