@@ -87,6 +87,23 @@ For example, if week 1 contains `ATT-001`, `ATT-002`, and `OUT-001`, then a late
 submission containing those IDs plus `ATT-003`, `ATT-004`, and `OUT-002` produces six canonical
 records, not nine. Repeated IDs are upserts; only new IDs increase the record count.
 
+Use separate safeguards for each duplicate case:
+
+1. **Whole-request retry:** the same deployment-wide `Idempotency-Key` returns the original receipt
+   without performing a second write.
+2. **Overlapping batches:** stable record identities are upserted, so previously submitted weeks
+   may safely appear again.
+3. **Exact duplicate content under different IDs:** flag it for review, but do not automatically
+   merge it because two legitimate events can have equal values.
+4. **Correction ordering:** prefer a source-provided version or `source_updated_at`; otherwise use
+   submission completion time as the deterministic fallback.
+
+The initial contract treats overlap as incremental upserts, so records omitted from a later request
+remain active. If the fixed company feed later needs authoritative replacement snapshots, add an
+explicit `period_snapshot` mode with a declared coverage range. Only that mode may tombstone
+previous records in its record-type/date scope that are absent from the new snapshot. Never infer
+replacement behavior merely because a request repeats an earlier week.
+
 ## Target request flow
 
 ```text
