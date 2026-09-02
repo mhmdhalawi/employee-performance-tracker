@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
-import { ArrowDownIcon, ArrowLeftIcon, ArrowUpDownIcon, ArrowUpIcon, EyeIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, EyeIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,10 +32,8 @@ const props = defineProps<{
   analysis: AnalyzeResponse
   isFiltering?: boolean
   filterError?: string
-  showNewAnalysis?: boolean
 }>()
 const emit = defineEmits<{
-  back: []
   filtersChange: [filters: DashboardFilters]
 }>()
 
@@ -430,7 +428,6 @@ function formatIsoDate(value: Date): string {
           <div class="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ShieldCheckIcon class="size-4" aria-hidden="true" /></div>
           <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis.file_name }}</p></div>
         </div>
-        <Button v-if="showNewAnalysis" variant="outline" @click="emit('back')"><ArrowLeftIcon data-icon="inline-start" />New analysis</Button>
       </div>
     </header>
 
