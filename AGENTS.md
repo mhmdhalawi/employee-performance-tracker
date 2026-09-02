@@ -16,7 +16,8 @@ A FastAPI backend that:
    selects approved calculators, and proposes calculator-specific field bindings**.
 4. Validates the agent's plan and bound records, then performs all arithmetic
    deterministically in Python.
-5. Returns structured employee results with employee ID/name when available, the three KPI
+5. Persists unfiltered JSON submissions, validated plans, and canonical responses in SQLite.
+6. Returns structured employee results with employee ID/name when available, the three KPI
    scores, evidence confidence, gated overall performance and tier, a deterministic summary,
    limitations, and supporting evidence.
 
@@ -88,9 +89,10 @@ require the user to attach it or authorize its local path in a new session.
 | Frontend | Vue 3 + TypeScript + Vite (`web/`) |
 | Frontend deps | **pnpm** (never npm or yarn) |
 | Frontend styling | Tailwind CSS v4 + shadcn-vue (Nova, neutral) |
+| Persistence | SQLite via the Python standard library; numbered SQL migrations |
 
-**Not allowed without a strong, stated reason:** LangChain, a database/ORM, Celery/Redis,
-Docker Compose stacks, auth systems.
+**Not allowed without a strong, stated reason:** LangChain, an ORM or second database layer,
+Celery/Redis, Docker Compose stacks, auth systems.
 
 ---
 
@@ -153,14 +155,18 @@ tracker/
 ├── docs/
 │   ├── benchmark.md          # stable workbook context and confirmed benchmark exceptions
 │   ├── data-dictionary.md    # normalized deterministic calculator fields and formulas
-│   └── benchmark.md          # benchmark context, acceptance criteria, and known exceptions
+│   ├── handover.md           # reproducible acceptance-test handover
+│   └── persistence.md        # SQLite, dashboard, filtering, and Railway deployment flow
+├── migrations/
+│   └── 001_initial.sql       # submissions, mapping plans, and analysis snapshots
+├── storage/                  # ignored local SQLite files; only .gitkeep is committed
 ├── pyproject.toml            # deps + build config
 ├── uv.lock                   # Python dependency lock
 ├── .env.example
 ├── app/
 │   ├── main.py               # app, middleware, exception handlers, routers
 │   ├── api/                  # FastAPI routes — thin: parse, call one service, return
-│   │   ├── agent.py          # POST /ask and POST /analyze
+│   │   ├── agent.py          # analysis, persisted dashboard, and insight endpoints
 │   │   └── health.py         # GET /health
 │   ├── schemas/              # Pydantic request/response + internal models ONLY
 │   │   ├── agent.py          # AskRequest, AskResponse
@@ -171,13 +177,18 @@ tracker/
 │   │   ├── agent.py          # PydanticAI classification/planning agent + analysis workflow
 │   │   ├── imports.py        # mechanical upload parsing and inspection
 │   │   ├── performance.py    # validation and deterministic KPI calculations
+│   │   ├── submissions.py    # canonical submission writes and persisted dashboard reads
 │   │   ├── tables.py         # mechanical JSON table-to-catalog conversion
 │   │   └── uploads.py        # extension and size validation
 │   ├── core/                 # config, errors, clients, storage
 │   │   ├── config.py         # Settings (env-driven), get_settings()
-│   │   └── errors.py         # AppError hierarchy + FastAPI handler
+│   │   ├── database.py       # SQLite connection and migration lifecycle
+│   │   ├── errors.py         # AppError hierarchy + FastAPI handler
+│   │   └── storage.py        # typed low-level submission/snapshot persistence
 │   └── utils/                # small pure helpers (nothing here yet)
 ├── tests/
+│   ├── test_api_integration.py # uploads, JSON persistence, dashboard, and filter API tests
+│   ├── test_benchmark.py     # sanitized 30-employee benchmark parity
 │   └── test_performance.py   # generic-evidence KPI and validation regressions
 └── web/                      # Vue 3 browser client
     ├── components.json       # shadcn-vue project configuration
@@ -209,6 +220,7 @@ The `web/` app is a separate Vite application in the same repository. It consume
 FastAPI `/api/v1` contract and must not import Python modules. Keep uploads, filters, view
 state, and presentation logic in Vue; keep source validation, KPI formulas, evidence
 confidence, trend calculation, and all other business arithmetic in Python.
+Employee, team, and reporting-period selections request filtered results from the backend.
 
 Use pnpm exclusively within `web/`. Do not commit `node_modules/`, `dist/`, `.pnpm-store/`,
 or other generated caches. The frontend may retain one structured analysis in browser memory,
@@ -266,10 +278,12 @@ columns; it returns only corrected classifications, which Python merges without 
 classifications to be overwritten. Calculation services may process complete selected datasets
 in Python without sending the source rows to the model.
 
-**Current implementation boundary:** `/analyze` validates and parses the upload, gives the
-request-scoped catalog to the agent for bounded inspection and KPI classification, validates the
-returned calculator plan in Python, builds the generic evidence dataset, runs deterministic source-data
-validation, and calculates KPI scores, evidence confidence, gated overall scores, and tiers.
+**Current implementation boundary:** `/analyze` remains a request-scoped upload workflow.
+`/analyze-tables` performs the same validated analysis and persists unfiltered JSON requests,
+calculation plans, and responses. `/dashboard` restores the latest completed snapshot or
+recalculates a filtered view from its stored request and plan. Both analysis paths build the
+generic evidence dataset, run deterministic source-data validation, and calculate KPI scores,
+evidence confidence, gated overall scores, and tiers.
 The response contains employee-specific findings, supporting record IDs, a validation
 summary, unmatched/global findings, KPI results, applied filters, deterministic weekly trends,
 and a deterministic summary derived from the final results; it does not return parsed source
@@ -279,8 +293,9 @@ guidance for one employee, and Python rejects employee or record citations that 
 validate. The Vue client presents employee results with alert counts and sorting, KPI trends,
 and a responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
 The dashboard also exposes a compact data-interpretation summary and detail sheet for table
-classifications, confidence, approved calculator invocations, and field bindings. The upload
-screen sets the expectation that analysis may take a few seconds.
+classifications, confidence, approved calculator invocations, and field bindings. The Vue app
+currently opens the persisted dashboard first; its upload/sample screen remains in source behind
+`SHOW_DATA_SOURCE_PAGE = false`.
 Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark exception described in
 `docs/benchmark.md`.
 
@@ -295,8 +310,9 @@ request and returns selected tables plus semantic
 calculator invocations and bindings; it has no row-access or calculation tools in this path.
 Python validates the returned plan and makes one targeted repair request with safe per-column
 examples only when structural validation fails. Validated plans are cached in memory by a
-schema-only fingerprint so repeated
-recognized layouts can skip the model while the server process remains running. Full record
+schema-only fingerprint so repeated recognized layouts can skip the model while the server
+process remains running. Canonical JSON analyses also store the plan in SQLite; filtered
+`/dashboard` reads reuse that persisted plan after restarts without calling the mapping model. Full record
 validation and calculations run deterministically in Python. A bounded on-demand explanation
 request may receive one employee's result status and validated findings, but never raw source
 rows or complete KPI calculation inputs.
@@ -342,8 +358,8 @@ than asking nicely in the prompt. Classification confidence communicates semanti
 
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
-The `/analyze` and `/analyze-tables` workflows construct a request-scoped synopsis and pass it
-directly to the planning agent. After Python calculates results, it caches a bounded explanation
+The `/analyze` and `/analyze-tables` workflows construct a request-scoped synopsis when no valid
+mapping plan is cached. After Python calculates results, it caches a bounded explanation
 context without calling the explanation agent. `/insights` retrieves one employee from that temporary context,
 calls the explanation agent, and validates every citation before returning it. Neither agent
 has an upload dependency or function tools. `/ask` remains a separate plain connectivity test
@@ -384,8 +400,12 @@ database keeps the complete validated request, validated calculation plan, and c
 recalculate from its request with the persisted plan and deterministic Python calculators.
 
 The default path is `storage/tracker.sqlite3`, configurable with `DATABASE_PATH`. Keep SQLite on
-local disk. Migrations live in `migrations/`, and database/WAL files must remain ignored by Git.
-See `docs/persistence.md` for the request lifecycle and the cross-submission history boundary.
+local disk. Railway production requires a Volume mounted at `/data` and
+`DATABASE_PATH=/data/tracker.sqlite3`; a Railway variable alone does not provide persistence.
+Migrations live in `migrations/`, and database/WAL files must remain ignored by Git. Repeated
+identical requests are accepted as separate submissions; the mapping cache reuses only semantic
+bindings and never skips validation or KPI calculation. See `docs/persistence.md` for the full
+request lifecycle, Railway setup, cache boundaries, and cross-submission history boundary.
 
 Uploads through `/analyze` remain request-scoped and are not persisted. Insight contexts remain
 in a bounded 15-minute in-memory cache; `/dashboard` creates a fresh context when it restores a
@@ -436,5 +456,5 @@ snapshot.
 
 ## 12. Deliberately out of scope for now
 
-Auth/multi-tenancy, background jobs, cross-submission historical aggregation, PDF export,
+Backend authentication/multi-tenancy, background jobs, cross-submission historical aggregation, PDF export,
 streaming AI responses, and rate limiting.

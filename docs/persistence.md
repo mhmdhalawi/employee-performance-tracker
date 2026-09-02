@@ -34,8 +34,13 @@ calculation plan, then reruns deterministic Python validation and KPI calculatio
 ask the mapping LLM to classify the schema again.
 
 The Vue app currently hides the upload/sample entry screen with `SHOW_DATA_SOURCE_PAGE = false`.
-After authentication it calls `GET /api/v1/dashboard`; it does not automatically send the bundled
-sample request. Send a Postman request first, then load or refresh the frontend.
+On startup it calls `GET /api/v1/dashboard`; it does not automatically send the bundled sample
+request. Send a Postman request first, then load or refresh the frontend. The backend currently
+has no authentication, session, or auth-cookie configuration.
+
+Employee, team, and reporting-period controls all issue filtered dashboard requests. The browser
+keeps presentation state, sorting, and pagination, while Python remains authoritative for filtered
+results, summaries, alerts, confidence, and trends.
 
 ## Stored tables
 
@@ -46,6 +51,37 @@ sample request. Send a Postman request first, then load or refresh the frontend.
 
 Migration `migrations/001_initial.sql` is applied automatically. SQLite uses WAL mode, foreign-key
 validation, a five-second busy timeout, and one short-lived connection per operation.
+
+## Cache boundaries and repeat submissions
+
+Sending the exact same unfiltered request again is allowed. Every call receives a new submission
+ID and is stored independently; `request_sha256` is indexed for audit purposes but is not unique.
+Identical input naturally produces identical KPI values.
+
+`mapping_cache_hit = true` means only that table classifications and calculator bindings were
+reused. The service still validates every source row and recalculates every KPI. New analyses use
+the bounded in-memory schema cache while the process is running. Filtered `/dashboard` requests
+use the plan stored in SQLite, including after a restart. The complete dashboard response is not
+served from the mapping cache.
+
+Insight explanation contexts remain bounded and process-local for 15 minutes. Loading a persisted
+dashboard creates a fresh context and a fresh `analysis_id` so `/insights` can work after restart.
+
+## Railway production
+
+Railway's normal service filesystem is ephemeral. Attach one Railway Volume to the FastAPI
+service, mount it at `/data`, and configure:
+
+```env
+DATABASE_PATH=/data/tracker.sqlite3
+```
+
+The variable does not create persistent storage by itself. Railway mounts Volumes only at runtime,
+which is compatible with the app because migrations run on first database access. Keep the service
+at one replica; Railway does not support replicas on a service with a Volume. Enable manual or
+automated Volume backups. If a non-root container receives volume permission errors, set
+`RAILWAY_RUN_UID=0`; otherwise leave it unset. See Railway's [Volume setup](https://docs.railway.com/volumes)
+and [Volume reference](https://docs.railway.com/volumes/reference).
 
 ## Daily submissions and history boundary
 

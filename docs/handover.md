@@ -23,19 +23,20 @@ validation, filtering, and deterministic scoring path.
   source tables and an in-memory XLSX workbook.
 - `tests/test_benchmark.py` verifies all 30 results, EMP-027 through EMP-030 confidence gating,
   duplicate exclusion, traceability, and the EMP-027/EMP-029 exception allowlist.
-- `tests/test_api_integration.py` verifies XLSX and CSV uploads, employee/team/period filters,
-  invalid rows, malformed and unsupported files, oversized uploads, and invalid filters.
+- `tests/test_api_integration.py` verifies XLSX and CSV uploads, JSON persistence, latest-dashboard
+  restoration, persisted-plan filter recalculation, employee/team/period filters, invalid rows,
+  malformed and unsupported files, oversized uploads, and invalid filters.
 
 The fixture is intentionally synthetic. It reproduces the agreed acceptance guardrails without
 copying employee-level content from the confidential source workbook.
 
 ## Verified output
 
-Final run: 2026-09-01, Python 3.14, Windows.
+Final run: 2026-09-02, Python 3.14, Windows.
 
 ```text
 ----------------------------------------------------------------------
-Ran 31 tests in 1.223s
+Ran 38 tests in 2.666s
 
 OK
 ```
