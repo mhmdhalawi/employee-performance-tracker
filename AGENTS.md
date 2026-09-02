@@ -10,8 +10,8 @@ If something here conflicts with a request, mention the conflict and follow the 
 
 A FastAPI backend that:
 
-1. Lets a user upload a **CSV or Excel workbook** and press Submit once.
-2. Parses the upload into a request-scoped catalog without assigning business meaning.
+1. Accepts either a **CSV/Excel workbook** or JSON tables with their rows.
+2. Builds a request-scoped catalog without assigning business meaning.
 3. Builds a bounded catalog synopsis for an **AI agent that classifies tables by KPI family,
    selects approved calculators, and proposes calculator-specific field bindings**.
 4. Validates the agent's plan and bound records, then performs all arithmetic
@@ -20,8 +20,9 @@ A FastAPI backend that:
    scores, evidence confidence, gated overall performance and tier, a deterministic summary,
    limitations, and supporting evidence.
 
-`POST /api/v1/analyze` owns that one-request workflow. `POST /api/v1/ask` is retained only as
-a small LLM connectivity test; it does not receive or analyze uploaded data.
+`POST /api/v1/analyze` owns the upload workflow, while `POST /api/v1/analyze-tables` accepts
+JSON tables and runs the same catalog analysis. `POST /api/v1/ask` is retained only as a small
+LLM connectivity test; it does not receive or analyze source data.
 
 ### The one rule that matters most
 
@@ -164,11 +165,13 @@ tracker/
 │   ├── schemas/              # Pydantic request/response + internal models ONLY
 │   │   ├── agent.py          # AskRequest, AskResponse
 │   │   ├── performance.py    # generic calculator evidence records and tool results
-│   │   └── uploads.py        # upload-inspection response models
+│   │   ├── tables.py         # JSON table request models
+│   │   └── uploads.py        # catalog, upload, and analysis response models
 │   ├── services/             # all business logic lives here
 │   │   ├── agent.py          # PydanticAI classification/planning agent + analysis workflow
 │   │   ├── imports.py        # mechanical upload parsing and inspection
 │   │   ├── performance.py    # validation and deterministic KPI calculations
+│   │   ├── tables.py         # mechanical JSON table-to-catalog conversion
 │   │   └── uploads.py        # extension and size validation
 │   ├── core/                 # config, errors, clients, storage
 │   │   ├── config.py         # Settings (env-driven), get_settings()
@@ -339,9 +342,9 @@ than asking nicely in the prompt. Classification confidence communicates semanti
 
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
-The `/analyze` workflow constructs a request-scoped synopsis and passes it directly to the
-planning agent. After Python calculates results, it caches a bounded explanation context without
-calling the explanation agent. `/insights` retrieves one employee from that temporary context,
+The `/analyze` and `/analyze-tables` workflows construct a request-scoped synopsis and pass it
+directly to the planning agent. After Python calculates results, it caches a bounded explanation
+context without calling the explanation agent. `/insights` retrieves one employee from that temporary context,
 calls the explanation agent, and validates every citation before returning it. Neither agent
 has an upload dependency or function tools. `/ask` remains a separate plain connectivity test
 with no upload data.
@@ -367,14 +370,15 @@ Current endpoints:
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
 | `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
 | `POST` | `/api/v1/analyze` | upload, classify, validate, and return employee KPI results with findings |
+| `POST` | `/api/v1/analyze-tables` | classify and analyze JSON tables through the same catalog workflow |
 | `POST` | `/api/v1/insights` | generate on-demand guidance for one employee from a temporary analysis context |
 
 ---
 
 ## 9. Persistence
 
-**No durable persistence exists.** Uploaded datasets and source rows are not stored. `/analyze`
-keeps only compact validated insight contexts in a bounded in-memory LRU cache for 15 minutes;
+**No durable persistence exists.** Source datasets and rows are not stored. Analysis workflows
+keep only compact validated insight contexts in a bounded in-memory LRU cache for 15 minutes;
 they disappear on expiry, eviction, or server restart. The browser may retain generated
 insights for the active analysis. Do not add a database without asking.
 

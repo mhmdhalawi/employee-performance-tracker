@@ -3,12 +3,18 @@ from datetime import date
 from fastapi import APIRouter, UploadFile
 
 from app.core.config import get_settings
+from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
     AIInsightRequest,
     AIInsightResponse,
+    AnalysisResponse,
     AnalyzeUploadResponse,
 )
-from app.services.agent import analyze_upload, generate_employee_insight
+from app.services.agent import (
+    analyze_tables,
+    analyze_upload,
+    generate_employee_insight,
+)
 
 router = APIRouter(tags=["agent"])
 
@@ -32,6 +38,23 @@ async def analyze_agent(
         file.filename,
         contents,
         settings.upload_max_bytes,
+        employee_id=employee_id,
+        team=team,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@router.post("/analyze-tables", response_model=AnalysisResponse)
+async def analyze_table_data(
+    request: AnalyzeTablesRequest,
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> AnalysisResponse:
+    return await analyze_tables(
+        request,
         employee_id=employee_id,
         team=team,
         start_date=start_date,

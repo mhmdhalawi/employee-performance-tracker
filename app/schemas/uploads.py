@@ -26,11 +26,14 @@ class CatalogTable(TableInspection):
     rows: list[dict[str, CellValue]]
 
 
-class UploadCatalog(BaseModel):
+class DataCatalog(BaseModel):
+    tables: list[CatalogTable]
+
+
+class UploadCatalog(DataCatalog):
     file_name: str
     file_type: Literal["csv", "xlsx"]
     byte_size: int
-    tables: list[CatalogTable]
 
 
 class ColumnDescription(BaseModel):
@@ -224,11 +227,8 @@ class AIInsightResponse(BaseModel):
     model_requests: int = Field(ge=0)
 
 
-class AnalyzeUploadResponse(BaseModel):
+class AnalysisResponse(BaseModel):
     analysis_id: str
-    file_name: str
-    file_type: Literal["csv", "xlsx"]
-    byte_size: int
     results: list[EmployeeKpiScores]
     summary: AnalysisSummary
     dataset_overview: DatasetOverview
@@ -246,3 +246,9 @@ class AnalyzeUploadResponse(BaseModel):
     total_tokens: int
     model_requests: int
     mapping_cache_hit: bool
+
+
+class AnalyzeUploadResponse(AnalysisResponse):
+    file_name: str
+    file_type: Literal["csv", "xlsx"]
+    byte_size: int

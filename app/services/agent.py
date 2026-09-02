@@ -37,6 +37,7 @@ from app.schemas.performance import (
 from app.schemas.uploads import (
     AgentCalculationPlan,
     AIInsightResponse,
+    AnalysisResponse,
     AnalysisFilters,
     AnalysisSummary,
     AnalyzeUploadResponse,
@@ -44,11 +45,12 @@ from app.schemas.uploads import (
     CatalogTable,
     ClassificationValidation,
     ColumnDescription,
+    DataCatalog,
     EmployeeAIInsight,
     ImportIssue,
     TableClassification,
-    UploadCatalog,
 )
+from app.schemas.tables import AnalyzeTablesRequest
 from app.services import catalog
 from app.services.datasets import build_performance_dataset
 from app.services.imports import parse_upload
@@ -60,11 +62,12 @@ from app.services.performance import (
     summarize_validation,
     validate_dataset,
 )
+from app.services.tables import catalog_from_tables
 
 MAPPING_AGENT_INSTRUCTIONS = """
-You classify uploaded employee-performance tables and create a deterministic calculation plan.
+You classify employee-performance source tables and create a deterministic calculation plan.
 
-Use only the bounded workbook synopsis in the user prompt. Classify every table by its data,
+Use only the bounded catalog synopsis in the user prompt. Classify every table by its data,
 not its name alone. A relevant table receives a KPI family and one or more approved calculator
 invocations with the field bindings required by each calculator. Shared employee and target
 tables use their approved loader invocations. Documentation,
@@ -154,16 +157,68 @@ async def analyze_upload(
     end_date: date | None = None,
 ) -> AnalyzeUploadResponse:
     """Parse an upload and let the agent select and map relevant source tables."""
+    upload_catalog = parse_upload(file_name, contents, maximum_bytes)
+    import_issues = [
+        ImportIssue(
+            code="header_not_found",
+            message="No row with at least two non-empty header values was found.",
+            source_name=table.source_name,
+        )
+        for table in upload_catalog.tables
+        if table.header_row is None
+    ]
+    response = await analyze_catalog(
+        upload_catalog,
+        import_issues=import_issues,
+        employee_id=employee_id,
+        team=team,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return AnalyzeUploadResponse(
+        **response.model_dump(),
+        file_name=upload_catalog.file_name,
+        file_type=upload_catalog.file_type,
+        byte_size=upload_catalog.byte_size,
+    )
+
+
+async def analyze_tables(
+    request: AnalyzeTablesRequest,
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> AnalysisResponse:
+    """Analyze validated JSON tables through the shared catalog workflow."""
+    return await analyze_catalog(
+        catalog_from_tables(request),
+        import_issues=[],
+        employee_id=employee_id,
+        team=team,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+async def analyze_catalog(
+    source_catalog: DataCatalog,
+    import_issues: list[ImportIssue],
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> AnalysisResponse:
+    """Classify and calculate a transport-neutral source catalog."""
     if start_date and end_date and start_date > end_date:
         raise InvalidAnalysisFilterError("start_date must be on or before end_date.")
-    upload_catalog = parse_upload(file_name, contents, maximum_bytes)
-    workbook_context = _build_workbook_context(upload_catalog)
-    schema_fingerprint = _schema_fingerprint(upload_catalog)
+    workbook_context = _build_workbook_context(source_catalog)
+    schema_fingerprint = _schema_fingerprint(source_catalog)
     analysis = _get_cached_analysis(schema_fingerprint)
     if analysis is not None and any(
         not validation.valid
         for validation in catalog.validate_classifications(
-            upload_catalog,
+            source_catalog,
             analysis.table_classifications,
         )
     ):
@@ -181,14 +236,14 @@ async def analyze_upload(
             invalid_classifications = [
                 validation
                 for validation in catalog.validate_classifications(
-                    upload_catalog,
+                    source_catalog,
                     analysis.table_classifications,
                 )
                 if not validation.valid
             ]
             if invalid_classifications:
                 agent_plan = await _repair_mappings(
-                    upload_catalog,
+                    source_catalog,
                     workbook_context,
                     agent_plan,
                     invalid_classifications,
@@ -204,7 +259,7 @@ async def analyze_upload(
             raise AIError(f"The model call failed: {exc}") from exc
 
         final_validations = catalog.validate_classifications(
-            upload_catalog,
+            source_catalog,
             analysis.table_classifications,
         )
         invalid_final_validations = [
@@ -217,7 +272,7 @@ async def analyze_upload(
         _cache_analysis(schema_fingerprint, analysis)
 
     performance_dataset, mapping_issues = build_performance_dataset(
-        upload_catalog,
+        source_catalog,
         analysis.table_classifications,
     )
     validation_findings = validate_dataset(performance_dataset)
@@ -243,16 +298,7 @@ async def analyze_upload(
         end_date=effective_end,
         validation_findings=validation_findings,
     )
-    import_issues = [
-        ImportIssue(
-            code="header_not_found",
-            message="No row with at least two non-empty header values was found.",
-            source_name=table.source_name,
-        )
-        for table in upload_catalog.tables
-        if table.header_row is None
-    ]
-    import_issues.extend(mapping_issues)
+    import_issues = [*import_issues, *mapping_issues]
     result_employee_ids = {kpi.employee_id for kpi in kpi_results}
     employee_by_id = {
         employee.employee_id: employee for employee in performance_dataset.employees
@@ -327,11 +373,8 @@ async def analyze_upload(
     )
     analysis_id = _cache_insight_context(employee_results)
 
-    return AnalyzeUploadResponse(
+    return AnalysisResponse(
         analysis_id=analysis_id,
-        file_name=upload_catalog.file_name,
-        file_type=upload_catalog.file_type,
-        byte_size=upload_catalog.byte_size,
         results=employee_results,
         summary=_build_analysis_summary(kpi_results),
         dataset_overview=overview,
@@ -476,7 +519,7 @@ async def generate_employee_insight(
     cached = _get_insight_context(analysis_id)
     if cached is None:
         raise InsightContextExpiredError(
-            "This analysis has expired. Run the file analysis again before requesting AI guidance."
+            "This analysis has expired. Run the analysis again before requesting AI guidance."
         )
     employee_context = cached.employees.get(employee_id)
     if employee_context is None:
@@ -566,7 +609,7 @@ async def _run_mapping_agent(
 
 
 async def _repair_mappings(
-    upload_catalog: UploadCatalog,
+    upload_catalog: DataCatalog,
     workbook_context: dict[str, object],
     analysis: AgentCalculationPlan,
     invalid_classifications: list[ClassificationValidation],
@@ -598,7 +641,7 @@ async def _repair_mappings(
         )
         + "\n\nREPAIRABLE_SOURCES:\n"
         + json.dumps(sorted(repairable_sources), separators=(",", ":"))
-        + "\n\nWORKBOOK_SYNOPSIS:\n"
+        + "\n\nCATALOG_SYNOPSIS:\n"
         + json.dumps(workbook_context, ensure_ascii=False, separators=(",", ":"))
         + "\n\nTARGETED_COLUMN_EXAMPLES:\n"
         + json.dumps(targeted_context, ensure_ascii=False, separators=(",", ":"))
@@ -669,7 +712,7 @@ def _classification_rationale(kpi_family: str, calculators: list[str]) -> str:
     )
 
 
-def _build_workbook_context(upload_catalog: UploadCatalog) -> dict[str, object]:
+def _build_workbook_context(upload_catalog: DataCatalog) -> dict[str, object]:
     analyses = catalog.inspect_tables(
         upload_catalog,
         [table.source_name for table in upload_catalog.tables],
@@ -689,7 +732,7 @@ def _build_workbook_context(upload_catalog: UploadCatalog) -> dict[str, object]:
 
 
 def _build_targeted_repair_context(
-    upload_catalog: UploadCatalog,
+    upload_catalog: DataCatalog,
     target_sources: set[str],
 ) -> dict[str, object]:
     analyses = catalog.inspect_tables(upload_catalog, sorted(target_sources))
@@ -707,7 +750,7 @@ def _build_targeted_repair_context(
 
 
 def _repair_target_sources(
-    upload_catalog: UploadCatalog,
+    upload_catalog: DataCatalog,
     invalid_classifications: list[ClassificationValidation],
 ) -> set[str]:
     known_sources = {table.source_name for table in upload_catalog.tables}
@@ -854,10 +897,9 @@ def _is_sensitive_example_column(column_name: str) -> bool:
 
 
 def _schema_fingerprint(
-    upload_catalog: UploadCatalog,
+    upload_catalog: DataCatalog,
 ) -> str:
     schema_only = {
-        "file_type": upload_catalog.file_type,
         "tables": [
             {
                 "source_name": table.source_name,

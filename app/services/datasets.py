@@ -14,7 +14,7 @@ from app.schemas.performance import (
     SubmissionComplianceEvidence,
     WorkOutputEvidence,
 )
-from app.schemas.uploads import ImportIssue, TableClassification, UploadCatalog
+from app.schemas.uploads import DataCatalog, ImportIssue, TableClassification
 from app.services import catalog as catalog_service
 
 _CALCULATOR_INPUTS: dict[str, tuple[type[BaseModel], str]] = {
@@ -29,7 +29,7 @@ _CALCULATOR_INPUTS: dict[str, tuple[type[BaseModel], str]] = {
 
 
 def build_performance_dataset(
-    upload_catalog: UploadCatalog,
+    upload_catalog: DataCatalog,
     classifications: list[TableClassification],
 ) -> tuple[PerformanceEvidenceDataset, list[ImportIssue]]:
     """Apply a validated classification plan and report unusable source rows."""

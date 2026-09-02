@@ -24,7 +24,7 @@ from app.schemas.uploads import (
     TableDescription,
     TableInspection,
     TableProfile,
-    UploadCatalog,
+    DataCatalog,
 )
 
 _CALCULATOR_CONTRACTS: dict[str, tuple[type[BaseModel], str]] = {
@@ -61,7 +61,7 @@ def classification_contract() -> dict[str, object]:
     }
 
 
-def list_tables(catalog: UploadCatalog) -> list[TableInspection]:
+def list_tables(catalog: DataCatalog) -> list[TableInspection]:
     """List table names, headers, row counts, and columns without returning row data."""
     return [
         TableInspection(
@@ -74,7 +74,7 @@ def list_tables(catalog: UploadCatalog) -> list[TableInspection]:
     ]
 
 
-def describe_table(catalog: UploadCatalog, table_name: str) -> TableDescription:
+def describe_table(catalog: DataCatalog, table_name: str) -> TableDescription:
     """Describe one table's columns and return at most five representative rows."""
     table = _table(catalog, table_name)
     return TableDescription(
@@ -87,7 +87,7 @@ def describe_table(catalog: UploadCatalog, table_name: str) -> TableDescription:
 
 
 def inspect_tables(
-    catalog: UploadCatalog,
+    catalog: DataCatalog,
     table_names: list[str],
 ) -> list[TableAnalysis]:
     """Describe and profile several selected tables in one bounded operation."""
@@ -106,7 +106,7 @@ def inspect_tables(
 
 
 def validate_classifications(
-    catalog: UploadCatalog,
+    catalog: DataCatalog,
     classifications: list[TableClassification],
 ) -> list[ClassificationValidation]:
     """Validate the complete table classification and execution plan."""
@@ -181,7 +181,7 @@ def validate_classifications(
 
 
 def get_rows(
-    catalog: UploadCatalog,
+    catalog: DataCatalog,
     table_name: str,
     columns: list[str] | None,
     filters: dict[str, str] | None,
@@ -222,7 +222,7 @@ def get_rows(
     )
 
 
-def profile_data(catalog: UploadCatalog, table_name: str) -> TableProfile:
+def profile_data(catalog: DataCatalog, table_name: str) -> TableProfile:
     """Profile blanks, duplicate rows, and likely ID, date, and numeric columns."""
     table = _table(catalog, table_name)
     descriptions = [_describe_column(table, column) for column in table.columns]
@@ -259,7 +259,7 @@ def profile_data(catalog: UploadCatalog, table_name: str) -> TableProfile:
 
 
 def search_rows(
-    catalog: UploadCatalog,
+    catalog: DataCatalog,
     query: str,
     table_name: str | None,
     limit: int,
@@ -291,7 +291,7 @@ def search_rows(
 
 
 def get_distinct_values(
-    catalog: UploadCatalog,
+    catalog: DataCatalog,
     table_name: str,
     column: str,
     limit: int,
@@ -310,7 +310,7 @@ def get_distinct_values(
 
 
 def validate_classification(
-    catalog: UploadCatalog,
+    catalog: DataCatalog,
     classification: TableClassification,
 ) -> ClassificationValidation:
     """Validate a classification and its calculator-specific field bindings."""
@@ -381,7 +381,7 @@ def validate_classification(
     )
 
 
-def _table(catalog: UploadCatalog, table_name: str) -> CatalogTable:
+def _table(catalog: DataCatalog, table_name: str) -> CatalogTable:
     for table in catalog.tables:
         if table.source_name == table_name:
             return table

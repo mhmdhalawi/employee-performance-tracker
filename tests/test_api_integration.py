@@ -27,6 +27,16 @@ class AnalyzeApiIntegrationTests(TestCase):
                 files={"file": ("cedar-30-sanitized.xlsx", benchmark_xlsx(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
             )
 
+    def _post_benchmark_tables(self, query: str = ""):
+        payload = {
+            "tables": [
+                {"source_name": source_name, "rows": rows}
+                for source_name, rows in benchmark_tables().items()
+            ]
+        }
+        with patch.object(agent_service, "_run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
+            return self.client.post(f"/api/v1/analyze-tables{query}", json=payload)
+
     def test_full_xlsx_upload_runs_without_an_api_key(self) -> None:
         response = self._post_benchmark()
         self.assertEqual(response.status_code, 200)
@@ -37,6 +47,78 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertEqual(body["model_requests"], 0)
         self.assertNotIn("model_usage", body)
         self.assertNotIn("timings", body)
+
+    def test_json_tables_match_the_upload_analysis(self) -> None:
+        upload_body = self._post_benchmark().json()
+        agent_service._mapping_cache.clear()
+        response = self._post_benchmark_tables()
+
+        self.assertEqual(response.status_code, 200)
+        table_body = response.json()
+        for field in (
+            "results",
+            "summary",
+            "dataset_overview",
+            "available_teams",
+            "trends",
+            "alerts",
+            "import_issues",
+            "validation_summary",
+            "global_validation_findings",
+            "selected_tables",
+            "table_classifications",
+            "limitations",
+        ):
+            self.assertEqual(table_body[field], upload_body[field], field)
+        self.assertNotIn("file_name", table_body)
+        self.assertNotIn("file_type", table_body)
+        self.assertNotIn("byte_size", table_body)
+
+    def test_json_tables_support_existing_filters(self) -> None:
+        response = self._post_benchmark_tables("?employee_id=EMP-027")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [item["employee_id"] for item in response.json()["results"]],
+            ["EMP-027"],
+        )
+
+    def test_invalid_json_table_shapes_return_422(self) -> None:
+        duplicate_names = self.client.post(
+            "/api/v1/analyze-tables",
+            json={
+                "tables": [
+                    {"source_name": "Employees", "rows": [{"employee_id": "1"}]},
+                    {"source_name": "employees", "rows": [{"employee_id": "2"}]},
+                ]
+            },
+        )
+        reserved_column = self.client.post(
+            "/api/v1/analyze-tables",
+            json={
+                "tables": [
+                    {
+                        "source_name": "Employees",
+                        "rows": [{"employee_id": "1", "_source_row": 99}],
+                    }
+                ]
+            },
+        )
+        nested_cell = self.client.post(
+            "/api/v1/analyze-tables",
+            json={
+                "tables": [
+                    {
+                        "source_name": "Employees",
+                        "rows": [{"employee_id": {"nested": "value"}}],
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(duplicate_names.status_code, 422)
+        self.assertEqual(reserved_column.status_code, 422)
+        self.assertEqual(nested_cell.status_code, 422)
 
     def test_employee_team_and_period_filters(self) -> None:
         employee = self._post_benchmark("?employee_id=EMP-027").json()
