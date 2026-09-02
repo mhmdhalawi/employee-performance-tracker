@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import {
   CircleAlertIcon,
+  DatabaseIcon,
   FileSpreadsheetIcon,
   ShieldCheckIcon,
   UploadCloudIcon,
@@ -26,20 +27,26 @@ import type { AnalyzeResponse, DashboardFilters, ErrorPayload } from '@/types/an
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+const SAMPLE_REQUEST_URL = new URL('../data/request.json', import.meta.url)
+
+type AnalysisSource = 'upload' | 'sample'
 
 const isAuth = ref<boolean | undefined>(undefined)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const fileError = ref('')
 const requestError = ref('')
+const sampleRequestError = ref('')
 const analysis = ref<AnalyzeResponse | null>(null)
 const isDragging = ref(false)
 const isSubmitting = ref(false)
 const showDashboard = ref(false)
 const isFiltering = ref(false)
 const filterError = ref('')
+const activeSource = ref<AnalysisSource>('upload')
 let requestSequence = 0
 let requestController: AbortController | null = null
+let sampleRequestBody: string | null = null
 
 const selectedFileSize = computed(() => {
   if (!selectedFile.value)
@@ -71,6 +78,7 @@ function selectFile(file: File | undefined): void {
   const validationError = validateFile(file)
   fileError.value = validationError
   requestError.value = ''
+  sampleRequestError.value = ''
   analysis.value = null
   selectedFile.value = validationError ? null : file
 
@@ -98,6 +106,18 @@ function clearFile(): void {
     fileInput.value.value = ''
 }
 
+async function loadSampleRequest(signal: AbortSignal): Promise<string> {
+  if (sampleRequestBody)
+    return sampleRequestBody
+
+  const response = await fetch(SAMPLE_REQUEST_URL, { signal })
+  if (!response.ok)
+    throw new Error('The bundled sample data could not be loaded.')
+
+  sampleRequestBody = await response.text()
+  return sampleRequestBody
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   try {
     const payload = await response.json() as ErrorPayload
@@ -109,7 +129,8 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 async function requestAnalysis(filters: DashboardFilters = {}, filtering = false): Promise<void> {
-  if (!selectedFile.value) {
+  const source = activeSource.value
+  if (source === 'upload' && !selectedFile.value) {
     fileError.value = 'Select a CSV or XLSX file before submitting.'
     return
   }
@@ -123,12 +144,12 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
   }
   else {
     isSubmitting.value = true
-    requestError.value = ''
+    if (source === 'sample')
+      sampleRequestError.value = ''
+    else
+      requestError.value = ''
     analysis.value = null
   }
-
-  const formData = new FormData()
-  formData.append('file', selectedFile.value)
 
   try {
     const query = new URLSearchParams()
@@ -136,10 +157,29 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
       if (value)
         query.set(key, value)
     }
-    const endpoint = `${API_BASE_URL}/api/v1/analyze${query.size ? `?${query}` : ''}`
+    let body: BodyInit
+    let headers: HeadersInit | undefined
+    let endpointPath: string
+    let sampleByteSize = 0
+
+    if (source === 'sample') {
+      body = await loadSampleRequest(requestController.signal)
+      headers = { 'Content-Type': 'application/json' }
+      endpointPath = '/api/v1/analyze-tables'
+      sampleByteSize = new Blob([body]).size
+    }
+    else {
+      const formData = new FormData()
+      formData.append('file', selectedFile.value as File)
+      body = formData
+      endpointPath = '/api/v1/analyze'
+    }
+
+    const endpoint = `${API_BASE_URL}${endpointPath}${query.size ? `?${query}` : ''}`
     const response = await fetch(endpoint, {
       method: 'POST',
-      body: formData,
+      body,
+      headers,
       signal: requestController.signal,
     })
 
@@ -149,7 +189,15 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
     if (sequence !== requestSequence)
       return
 
-    analysis.value = await response.json() as AnalyzeResponse
+    const result = await response.json() as AnalyzeResponse
+    analysis.value = source === 'sample'
+      ? {
+          ...result,
+          file_name: 'Cedar sample dataset',
+          file_type: 'json',
+          byte_size: sampleByteSize,
+        }
+      : result
     showDashboard.value = true
   }
   catch (error) {
@@ -161,6 +209,8 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
       : error instanceof Error ? error.message : 'The file could not be analyzed.'
     if (filtering)
       filterError.value = message
+    else if (source === 'sample')
+      sampleRequestError.value = message
     else
       requestError.value = message
   }
@@ -174,6 +224,14 @@ async function requestAnalysis(filters: DashboardFilters = {}, filtering = false
 }
 
 async function submitAnalysis(): Promise<void> {
+  activeSource.value = 'upload'
+  sampleRequestError.value = ''
+  await requestAnalysis()
+}
+
+async function submitSampleAnalysis(): Promise<void> {
+  activeSource.value = 'sample'
+  requestError.value = ''
   await requestAnalysis()
 }
 </script>
@@ -308,6 +366,36 @@ async function submitAnalysis(): Promise<void> {
             </Button>
           </CardFooter>
         </form>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-lg">
+            Try the Cedar sample data
+          </CardTitle>
+          <CardDescription>
+            Send the bundled JSON request through the same classification and KPI workflow.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent>
+          <Alert v-if="sampleRequestError" variant="destructive">
+            <CircleAlertIcon aria-hidden="true" />
+            <AlertTitle>Sample analysis could not start</AlertTitle>
+            <AlertDescription>{{ sampleRequestError }}</AlertDescription>
+          </Alert>
+          <p v-else class="text-sm leading-6 text-muted-foreground">
+            The request contains the Cedar workbook's 11 tables and 2,787 rows, already converted to the webhook JSON schema.
+          </p>
+        </CardContent>
+
+        <CardFooter>
+          <Button class="w-full" type="button" size="lg" :disabled="isSubmitting" @click="submitSampleAnalysis">
+            <Spinner v-if="isSubmitting && activeSource === 'sample'" data-icon="inline-start" />
+            <DatabaseIcon v-else data-icon="inline-start" />
+            {{ isSubmitting && activeSource === 'sample' ? 'Analyzing sample…' : 'Analyze sample data' }}
+          </Button>
+        </CardFooter>
       </Card>
 
     </div>
