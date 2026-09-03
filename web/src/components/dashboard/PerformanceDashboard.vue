@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, DownloadIcon, EyeIcon, FileTextIcon, TriangleAlertIcon } from '@lucide/vue'
 import cedarLogo from '@/assets/cedar-logo.png'
@@ -22,14 +23,10 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import DataInterpretationPage from '@/components/dashboard/DataInterpretationPage.vue'
-import EmployeeDetailPage from '@/components/dashboard/EmployeeDetailPage.vue'
 import DataInterpretationCard from '@/components/dashboard/DataInterpretationCard.vue'
 import TeamReportPreviewDialog from '@/components/dashboard/TeamReportPreviewDialog.vue'
 import { downloadKpiReportPdf, type DashboardKpi } from '@/lib/dashboard-report-pdf'
-import type { AIInsightResponse, DashboardFilters, DashboardResponse, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload } from '@/types/analysis'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+import type { DashboardFilters, DashboardResponse, EmployeeKpiResult } from '@/types/analysis'
 
 const props = defineProps<{
   analysis: DashboardResponse
@@ -39,6 +36,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   filtersChange: [filters: DashboardFilters]
 }>()
+const router = useRouter()
 
 const employee = ref('all')
 const team = ref('all')
@@ -47,16 +45,10 @@ const currentPage = ref(1)
 const pageSize = ref('10')
 const sortKey = ref<'name' | 'performance' | null>(null)
 const sortDirection = ref<'asc' | 'desc'>('asc')
-const insightsByEmployee = ref<Record<string, EmployeeAIInsight>>({})
-const insightLoadingEmployeeId = ref<string | null>(null)
-const insightError = ref('')
-const selectedEmployeeId = ref<string | null>(readEmployeeIdFromUrl())
-const dataInterpretationOpen = ref(readDataInterpretationFromUrl())
 const teamReportPreviewOpen = ref(false)
 const reportLoading = ref<DashboardKpi | null>(null)
 const reportError = ref('')
 let filterTimer: number | undefined
-let dashboardScrollY = 0
 
 const employeeOptions = computed(() => props.analysis.available_employees.filter(row =>
   team.value === 'all' || row.team === team.value,
@@ -122,15 +114,6 @@ const alertCountsByEmployee = computed(() => props.analysis.alerts.reduce<Record
   },
   {},
 ))
-const selectedEmployee = computed(() => selectedEmployeeId.value
-  ? props.analysis.results.find(row => row.employee_id === selectedEmployeeId.value) ?? null
-  : null)
-const selectedEmployeeAlerts = computed(() => selectedEmployee.value
-  ? props.analysis.alerts.filter(alert => alert.employee_id === selectedEmployee.value?.employee_id)
-  : [])
-const selectedEmployeeInsight = computed(() => selectedEmployee.value
-  ? insightsByEmployee.value[selectedEmployee.value.employee_id] ?? null
-  : null)
 const appliedPeriod = computed(() => {
   const filters = props.analysis.applied_filters
   return filters?.start_date && filters.end_date
@@ -163,23 +146,6 @@ watch([employee, team, period], () => {
 
 watch([filteredRows, pageSize], () => {
   currentPage.value = 1
-})
-
-watch(() => props.analysis.analysis_id, () => {
-  insightsByEmployee.value = {}
-  insightLoadingEmployeeId.value = null
-  insightError.value = ''
-  clearDetailUrl()
-})
-
-onMounted(() => {
-  window.addEventListener('popstate', handlePopState)
-  if (selectedEmployeeId.value && !selectedEmployee.value)
-    setEmployeeUrlFilter(null, 'replace')
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('popstate', handlePopState)
 })
 
 function buildFilters(): DashboardFilters {
@@ -236,154 +202,12 @@ async function generateKpiReport(kpi: DashboardKpi): Promise<void> {
   }
 }
 
-async function openEmployeeDetails(row: EmployeeKpiResult): Promise<void> {
-  insightError.value = ''
-  dashboardScrollY = window.scrollY
-  setEmployeeUrlFilter(row.employee_id, 'push')
-  await nextTick()
-  window.scrollTo({ top: 0 })
+function openEmployeeDetails(row: EmployeeKpiResult): void {
+  void router.push({ name: 'employee-detail', params: { employeeId: row.employee_id } })
 }
 
-async function openDataInterpretation(): Promise<void> {
-  dashboardScrollY = window.scrollY
-  setDataInterpretationUrl(true, 'push')
-  await nextTick()
-  window.scrollTo({ top: 0 })
-}
-
-async function closeEmployeeDetails(): Promise<void> {
-  if (window.history.state?.trackerEmployeeDetail === props.analysis.analysis_id) {
-    window.history.back()
-    return
-  }
-
-  setEmployeeUrlFilter(null, 'replace')
-  await nextTick()
-  window.scrollTo({ top: dashboardScrollY })
-}
-
-async function closeDataInterpretation(): Promise<void> {
-  if (window.history.state?.trackerDataInterpretation === props.analysis.analysis_id) {
-    window.history.back()
-    return
-  }
-
-  setDataInterpretationUrl(false, 'replace')
-  await nextTick()
-  window.scrollTo({ top: dashboardScrollY })
-}
-
-async function handlePopState(): Promise<void> {
-  const wasOpen = selectedEmployeeId.value !== null || dataInterpretationOpen.value
-  selectedEmployeeId.value = readEmployeeIdFromUrl()
-  dataInterpretationOpen.value = readDataInterpretationFromUrl()
-  await nextTick()
-
-  if (selectedEmployee.value || dataInterpretationOpen.value)
-    window.scrollTo({ top: 0 })
-  else if (wasOpen)
-    window.scrollTo({ top: dashboardScrollY })
-}
-
-function readEmployeeIdFromUrl(): string | null {
-  return new URL(window.location.href).searchParams.get('employee')
-}
-
-function readDataInterpretationFromUrl(): boolean {
-  const url = new URL(window.location.href)
-  return !url.searchParams.has('employee') && url.searchParams.get('view') === 'data-interpretation'
-}
-
-function setEmployeeUrlFilter(employeeId: string | null, mode: 'push' | 'replace'): void {
-  const url = new URL(window.location.href)
-  if (employeeId) {
-    url.searchParams.set('employee', employeeId)
-    url.searchParams.delete('view')
-  }
-  else {
-    url.searchParams.delete('employee')
-  }
-
-  if (mode === 'push') {
-    window.history.pushState(
-      { trackerEmployeeDetail: props.analysis.analysis_id },
-      '',
-      url,
-    )
-  }
-  else {
-    window.history.replaceState(
-      { trackerEmployeeDetail: null },
-      '',
-      url,
-    )
-  }
-  selectedEmployeeId.value = employeeId
-  if (employeeId)
-    dataInterpretationOpen.value = false
-}
-
-function setDataInterpretationUrl(open: boolean, mode: 'push' | 'replace'): void {
-  const url = new URL(window.location.href)
-  if (open) {
-    url.searchParams.set('view', 'data-interpretation')
-    url.searchParams.delete('employee')
-  }
-  else {
-    url.searchParams.delete('view')
-  }
-
-  const state = open
-    ? { trackerDataInterpretation: props.analysis.analysis_id }
-    : { trackerDataInterpretation: null }
-  window.history[mode === 'push' ? 'pushState' : 'replaceState'](state, '', url)
-  dataInterpretationOpen.value = open
-  if (open)
-    selectedEmployeeId.value = null
-}
-
-function clearDetailUrl(): void {
-  const url = new URL(window.location.href)
-  url.searchParams.delete('employee')
-  url.searchParams.delete('view')
-  window.history.replaceState({}, '', url)
-  selectedEmployeeId.value = null
-  dataInterpretationOpen.value = false
-}
-
-async function generateInsight(employeeId: string): Promise<void> {
-  if (insightsByEmployee.value[employeeId])
-    return
-
-  insightLoadingEmployeeId.value = employeeId
-  insightError.value = ''
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/insights`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        analysis_id: props.analysis.analysis_id,
-        employee_id: employeeId,
-      }),
-    })
-    if (!response.ok) {
-      const payload = await response.json() as ErrorPayload
-      throw new Error(payload.error?.message ?? 'AI guidance could not be generated.')
-    }
-    const payload = await response.json() as AIInsightResponse
-    insightsByEmployee.value = {
-      ...insightsByEmployee.value,
-      [employeeId]: payload.insight,
-    }
-  }
-  catch (error) {
-    insightError.value = error instanceof TypeError
-      ? 'The guidance service is temporarily unavailable. Please try again shortly.'
-      : error instanceof Error ? error.message : 'AI guidance could not be generated.'
-  }
-  finally {
-    insightLoadingEmployeeId.value = null
-  }
+function openDataInterpretation(): void {
+  void router.push({ name: 'data-interpretation' })
 }
 
 function parseDate(value: string): Date {
@@ -397,23 +221,7 @@ function formatDate(value: string): string {
 </script>
 
 <template>
-  <EmployeeDetailPage
-    v-if="selectedEmployee"
-    :employee="selectedEmployee"
-    :alerts="selectedEmployeeAlerts"
-    :insight="selectedEmployeeInsight"
-    :insight-loading="insightLoadingEmployeeId === selectedEmployee.employee_id"
-    :insight-error="insightError"
-    :reporting-period="analysis.applied_filters"
-    @back="closeEmployeeDetails"
-    @generate-insight="generateInsight"
-  />
-  <DataInterpretationPage
-    v-else-if="dataInterpretationOpen"
-    :mapping-summaries="analysis.mapping_summaries"
-    @back="closeDataInterpretation"
-  />
-  <main v-else class="min-h-svh bg-muted/30">
+  <main class="min-h-svh bg-muted/30">
     <header class="border-b bg-background">
       <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">

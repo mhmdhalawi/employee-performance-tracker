@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { CircleAlertIcon } from '@lucide/vue'
+import { RouterView } from 'vue-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,12 +14,11 @@ import {
 } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import LoginScreen from '@/components/auth/LoginScreen.vue'
-import PerformanceDashboard from '@/components/dashboard/PerformanceDashboard.vue'
 import type { DashboardFilters, DashboardResponse, ErrorPayload } from '@/types/analysis'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
-const isAuth = ref<boolean | undefined>(true)
+const isAuth = ref<boolean | undefined>(undefined)
 const dashboardRequestError = ref('')
 const analysis = ref<DashboardResponse | null>(null)
 const isSubmitting = ref(false)
@@ -101,13 +101,15 @@ watch(isAuth, (authenticated) => {
 
 <template>
   <LoginScreen v-if="isAuth !== true" @authenticated="isAuth = true" />
-  <PerformanceDashboard
-    v-else-if="analysis"
-    :analysis="analysis"
-    :is-filtering="isFiltering"
-    :filter-error="filterError"
-    @filters-change="requestStoredDashboard($event, true)"
-  />
+  <RouterView v-else-if="analysis" v-slot="{ Component }">
+    <component
+      :is="Component"
+      :analysis="analysis"
+      :is-filtering="isFiltering"
+      :filter-error="filterError"
+      @filters-change="requestStoredDashboard($event, true)"
+    />
+  </RouterView>
   <main v-else class="flex min-h-svh items-center bg-muted/30 px-4 py-8 sm:px-6">
     <Card class="mx-auto w-full max-w-lg">
       <CardHeader>
