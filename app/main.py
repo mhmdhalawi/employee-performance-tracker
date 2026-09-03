@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agent, health
+from app.api import agent, health, reports
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 
@@ -26,3 +26,4 @@ register_exception_handlers(app)
 
 app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(agent.router, prefix=settings.api_prefix)
+app.include_router(reports.router, prefix=settings.api_prefix)

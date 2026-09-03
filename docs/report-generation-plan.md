@@ -1,6 +1,6 @@
 # Report generation implementation plan
 
-Status: Proposed
+Status: Employee, team-summary, and KPI-summary report MVPs implemented; production authorization remains required
 
 ## Goal
 
@@ -9,13 +9,14 @@ must prepare every number, chart point, confidence value, date range, and eviden
 may optionally write a short narrative from approved findings, but it must never calculate or
 alter report values.
 
-The first release is a manager-previewed, downloadable two-page Employee Performance Report.
-KPI-specific, team, and data-quality reports follow only after that report is stable.
+The employee report uses a manager-previewed modal. The dashboard also provides direct browser
+downloads for the current filtered team snapshot and for Productivity, Compliance, and Quality.
+The richer data-quality report remains a future phase.
 
 ## Decisions required before implementation
 
-1. `AGENTS.md` currently lists PDF export as out of scope. This plan proposes moving on-demand
-   PDF export into scope; update the project boundary when implementation is approved.
+1. Browser-generated, on-demand PDF export is approved. Server-side PDF rendering remains out
+   of scope.
 2. Reports contain employee data. Do not expose report preview or download routes to a client
    deployment until the API has real authentication and authorization or the entire deployment
    is protected by an approved external access gateway.
@@ -70,10 +71,14 @@ Page 2 - evidence and action:
 
 ### Phase 2 - KPI-specific reports
 
-Add one-page reports for:
+The MVP adds one-page KPI summary reports for:
 
 - Productivity: completed versus target outputs, time efficiency, overdue outputs, trend, and
   evidence coverage.
+
+The current exports include the backend-calculated KPI average, configured weight, employee
+scores, evidence confidence, overall status, and weekly trend. More detailed sub-score and
+evidence breakdowns require additional typed backend fields and remain an enhancement.
 - Compliance: attendance checks, submitted reports, leave documentation, missing records, and
   confidence impact.
 - Quality: accuracy, first-pass approval, rework, recurring validated findings, reviewed outputs,
@@ -81,8 +86,9 @@ Add one-page reports for:
 
 ### Phase 3 - Manager and data-quality reports
 
-- Manager/Owner Team Report: filtered team summary, period movement, strengths, attention queue,
-  low-confidence cases separated from low performance, and deterministic priority grouping.
+- Manager/Owner Team Report: the MVP exports the filtered team summary, employee results, weekly
+  KPI trend, confidence, and withheld statuses. Strengths, an attention queue, and deterministic
+  priority grouping remain enhancements that require typed backend fields.
 - Data Quality Report: invalid, missing, duplicate, orphaned, unsupported, and blocked records;
   affected employees/KPIs; confidence impact; exact record IDs; and correction guidance.
 
@@ -100,8 +106,12 @@ part of the on-demand MVP.
 4. The preview shows whether an AI narrative is unavailable or omitted without blocking the
    deterministic report.
 5. The manager confirms **Download Cedar PDF**.
-6. The browser downloads a safe filename such as
+6. The browser creates the PDF from the validated preview snapshot and downloads a safe filename such as
    `cedar-employee-performance-EMP-005-2026-06-01-to-2026-08-22.pdf`.
+
+From the main dashboard, **Generate team report** downloads the current filtered team snapshot.
+Each Productivity, Compliance, and Quality summary card also exposes an accessible PDF-download
+action for that KPI and the same active filters.
 
 The first version should not add an independent report filter form. It should inherit the
 dashboard's employee and period scope to prevent the preview and dashboard from disagreeing.
@@ -155,39 +165,25 @@ Only `app/services/agent.py` may call a model. If `include_ai_narrative` is true
 5. Fall back to the deterministic report when AI is unconfigured, unavailable, or invalid. PDF
    generation must not depend on an API key.
 
-### PDF renderer
+### Browser PDF generator
 
-Add a focused renderer in `app/services/report_rendering.py` that accepts only
-`EmployeeReportData` and returns PDF bytes. Use ReportLab for the first implementation because it
-supports deterministic server-side layout without a browser or external system dependency.
+Add a focused TypeScript generator that accepts only `EmployeeReportData` and creates PDF bytes
+in the browser. The generator may format backend-provided values, but it must not calculate or
+reinterpret KPI results.
 
-- Add the dependency with `uv add reportlab`, then run `uvx library-skills --all` as required by
-  the project workflow.
-- Build reusable header, footer, KPI card, finding, confidence, trend, and disclaimer components.
-- Use backend-provided chart values. A simple ReportLab line chart or compact trend table is
-  sufficient; do not add a plotting dependency unless the native drawing support is inadequate.
-- Embed approved fonts and logo assets locally. Do not fetch assets at render time.
-- Keep output in memory for on-demand download. Use temporary files only for test rendering and
-  visual inspection.
-- Escape untrusted text, bound narrative lengths, sanitize filenames, and prevent imported values
-  from controlling paths or markup.
+- Build reusable header, footer, KPI card, finding, confidence, trend, and disclaimer sections.
+- Use only backend-provided chart and table values.
+- Bundle fonts and brand assets with the web app. Do not fetch assets at generation time.
+- Keep output in browser memory only long enough to download it.
+- Bound displayed text, sanitize filenames, and prevent imported values from controlling paths or markup.
 
 ### API contract
 
 Add a thin `app/api/reports.py` router under `/api/v1/reports`:
 
 - `POST /employee/preview` returns `EmployeeReportPreviewResponse`.
-- `POST /employee/pdf` returns `application/pdf` with an attachment `Content-Disposition`,
-  `Cache-Control: no-store`, and a safe filename.
-
-Both operations call the same report-data builder. The PDF endpoint adds rendering only, so the
-preview and downloaded document cannot use different calculations.
-
-The project convention requires `response_model` for API routes, while a binary PDF response
-cannot be represented usefully by a Pydantic response model. Before implementation, document a
-narrow convention for binary endpoints: declare an explicit PDF response class/media type and
-OpenAPI response schema while retaining Pydantic models for every JSON response. Do not encode the
-PDF as base64 JSON merely to satisfy the convention.
+The browser uses this exact preview response to create the PDF, so preview and download cannot
+use different calculations. The endpoint returns `Cache-Control: no-store`.
 
 ## Frontend design
 
@@ -198,7 +194,7 @@ Extend `EmployeeDetailPage.vue` and its parent orchestration:
 - Open an accessible preview dialog or page with loading, API-error, AI-unavailable, and
   insufficient-data states.
 - Display the exact resolved period and confidence gate before download.
-- Download the returned PDF blob without recalculating or modifying report data.
+- Create and download the PDF from the preview snapshot without recalculating or modifying report data.
 - Disable duplicate submissions while previewing or downloading.
 - Revoke temporary object URLs after download.
 - Keep the action usable on mobile and by keyboard.
@@ -223,42 +219,42 @@ type modules when implementation begins. Do not add KPI arithmetic to Vue.
 
 ### Milestone 1 - shared deterministic snapshot
 
-- [ ] Approve the scope and binary-response convention.
-- [ ] Add report request/response and renderer-data schemas.
-- [ ] Extract shared aggregation/filter resolution used by dashboard and reports.
-- [ ] Add typed target, KPI breakdown, evidence coverage, and prior-period values without changing
+- [x] Approve browser-generated PDF scope.
+- [x] Add report request/response and renderer-data schemas.
+- [x] Reuse aggregation/filter resolution used by the dashboard.
+- [x] Add typed KPI, evidence coverage, and prior-period values without changing
   existing calculations.
-- [ ] Build `EmployeeReportData` and unit tests.
+- [x] Build `EmployeeReportData` and regression tests.
 
 Exit condition: one service call produces a complete, deterministic report snapshot matching the
 same filtered dashboard result.
 
 ### Milestone 2 - two-page employee PDF
 
-- [ ] Add ReportLab and refresh dependency-provided skills.
-- [ ] Implement the Cedar report renderer and local assets.
-- [ ] Add deterministic narrative fallback and required disclaimer.
-- [ ] Add preview and PDF endpoints.
-- [ ] Render benchmark examples for scored and insufficient-data employees.
+- [x] Add the browser PDF dependency.
+- [x] Implement the Cedar report generator with bundled fonts.
+- [x] Add deterministic explanations and the required disclaimer.
+- [x] Add the typed preview endpoint.
+- [x] Render benchmark examples for scored and insufficient-data employees.
 
 Exit condition: a manager can preview and download a readable two-page employee PDF with no API
 key configured.
 
 ### Milestone 3 - frontend flow and hardening
 
-- [ ] Add Generate report, preview, and download controls to Employee Details.
+- [x] Add Generate report, preview, and download controls to Employee Details.
 - [ ] Add authenticated/authorized access controls or enforce the approved external gateway.
-- [ ] Validate filenames, evidence URLs, caching headers, response size, and failure behavior.
-- [ ] Verify desktop and mobile layouts and keyboard interaction.
+- [x] Validate filenames, evidence URLs, caching headers, and failure behavior.
+- [ ] Verify desktop and mobile layouts and keyboard interaction in an interactive browser.
 
 Exit condition: the end-to-end flow is safe for the intended pilot environment.
 
 ### Milestone 4 - report family expansion
 
-- [ ] Add the three KPI-specific templates.
-- [ ] Add the manager/team template.
+- [x] Add the three KPI summary templates.
+- [x] Add the manager/team summary template.
 - [ ] Add the data-quality template.
-- [ ] Reuse the same deterministic snapshot builders and visual components.
+- [x] Reuse the same deterministic dashboard snapshot and visual components.
 
 Exit condition: every report family applies identical filters, confidence rules, and evidence
 semantics.

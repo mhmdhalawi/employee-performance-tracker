@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, EyeIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, DownloadIcon, EyeIcon, FileTextIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
   Pagination,
   PaginationContent,
@@ -24,6 +25,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import DataInterpretationPage from '@/components/dashboard/DataInterpretationPage.vue'
 import EmployeeDetailPage from '@/components/dashboard/EmployeeDetailPage.vue'
 import DataInterpretationCard from '@/components/dashboard/DataInterpretationCard.vue'
+import TeamReportPreviewDialog from '@/components/dashboard/TeamReportPreviewDialog.vue'
+import { downloadKpiReportPdf, type DashboardKpi } from '@/lib/dashboard-report-pdf'
 import type { AIInsightResponse, DashboardFilters, DashboardResponse, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload } from '@/types/analysis'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
@@ -49,6 +52,9 @@ const insightLoadingEmployeeId = ref<string | null>(null)
 const insightError = ref('')
 const selectedEmployeeId = ref<string | null>(readEmployeeIdFromUrl())
 const dataInterpretationOpen = ref(readDataInterpretationFromUrl())
+const teamReportPreviewOpen = ref(false)
+const reportLoading = ref<DashboardKpi | null>(null)
+const reportError = ref('')
 let filterTimer: number | undefined
 let dashboardScrollY = 0
 
@@ -89,10 +95,10 @@ const lastVisibleRow = computed(() => Math.min(
   filteredRows.value.length,
 ))
 const summaryCards = computed(() => [
-  { label: 'Overall score', value: props.analysis.summary.average_overall_score, detail: 'Scored employees only', color: 'var(--primary)' },
-  { label: 'Productivity', value: props.analysis.summary.average_productivity_score, detail: '35% of overall', color: 'var(--chart-1)' },
-  { label: 'Compliance', value: props.analysis.summary.average_compliance_score, detail: '30% of overall', color: 'var(--chart-2)' },
-  { label: 'Quality', value: props.analysis.summary.average_quality_score, detail: '35% of overall', color: 'var(--chart-3)' },
+  { label: 'Overall score', value: props.analysis.summary.average_overall_score, detail: 'Scored employees only', color: 'var(--primary)', kpi: null },
+  { label: 'Productivity', value: props.analysis.summary.average_productivity_score, detail: '35% of overall', color: 'var(--chart-1)', kpi: 'productivity' as const },
+  { label: 'Compliance', value: props.analysis.summary.average_compliance_score, detail: '30% of overall', color: 'var(--chart-2)', kpi: 'compliance' as const },
+  { label: 'Quality', value: props.analysis.summary.average_quality_score, detail: '35% of overall', color: 'var(--chart-3)', kpi: 'quality' as const },
 ])
 
 interface DashboardTrendPoint {
@@ -214,6 +220,20 @@ function ariaSort(key: 'name' | 'performance'): 'ascending' | 'descending' | 'no
 
 function alertCount(employeeId: string): number {
   return alertCountsByEmployee.value[employeeId] ?? 0
+}
+
+async function generateKpiReport(kpi: DashboardKpi): Promise<void> {
+  reportLoading.value = kpi
+  reportError.value = ''
+  try {
+    await downloadKpiReportPdf(props.analysis, kpi)
+  }
+  catch {
+    reportError.value = `The ${kpi} report could not be generated. Please try again.`
+  }
+  finally {
+    reportLoading.value = null
+  }
 }
 
 async function openEmployeeDetails(row: EmployeeKpiResult): Promise<void> {
@@ -384,6 +404,7 @@ function formatDate(value: string): string {
     :insight="selectedEmployeeInsight"
     :insight-loading="insightLoadingEmployeeId === selectedEmployee.employee_id"
     :insight-error="insightError"
+    :reporting-period="analysis.applied_filters"
     @back="closeEmployeeDetails"
     @generate-insight="generateInsight"
   />
@@ -394,11 +415,15 @@ function formatDate(value: string): string {
   />
   <main v-else class="min-h-svh bg-muted/30">
     <header class="border-b bg-background">
-      <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">
           <div class="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ShieldCheckIcon class="size-4" aria-hidden="true" /></div>
           <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis.included_submission_count }} combined submission{{ analysis.included_submission_count === 1 ? '' : 's' }}</p></div>
         </div>
+        <Button :disabled="isFiltering || !filteredRows.length" @click="teamReportPreviewOpen = true">
+          <FileTextIcon data-icon="inline-start" />
+          Generate team report
+        </Button>
       </div>
     </header>
 
@@ -408,7 +433,7 @@ function formatDate(value: string): string {
           <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Employee performance</h1><Badge variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
           <p class="text-sm text-muted-foreground">Review KPI scores, evidence confidence, trends, and findings.</p>
         </div>
-        <div class="grid gap-3 sm:grid-cols-3">
+        <div class="flex flex-col lg:flex-row gap-3 lg:justify-end">
           <Select v-model="employee" :disabled="isFiltering"><SelectTrigger class="w-full sm:w-48"><SelectValue placeholder="Employee" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All employees</SelectItem><SelectItem v-for="row in employeeOptions" :key="row.employee_id" :value="row.employee_id">{{ employeeLabel(row) }}</SelectItem></SelectGroup></SelectContent></Select>
           <Select v-model="team" :disabled="isFiltering"><SelectTrigger class="w-full sm:w-44"><SelectValue placeholder="Team" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All teams</SelectItem><SelectItem v-for="item in teams" :key="item" :value="item">{{ item }}</SelectItem></SelectGroup></SelectContent></Select>
           <Select v-model="period" :disabled="isFiltering"><SelectTrigger class="w-full sm:w-40"><SelectValue placeholder="Period" /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="full">Full period</SelectItem><SelectItem value="4">Last 4 weeks</SelectItem><SelectItem value="8">Last 8 weeks</SelectItem><SelectItem value="12">Last 12 weeks</SelectItem></SelectGroup></SelectContent></Select>
@@ -416,9 +441,10 @@ function formatDate(value: string): string {
       </section>
 
       <Alert v-if="filterError" variant="destructive"><TriangleAlertIcon aria-hidden="true" /><AlertTitle>Dashboard could not update</AlertTitle><AlertDescription>{{ filterError }}</AlertDescription></Alert>
+      <Alert v-if="reportError" variant="destructive"><TriangleAlertIcon aria-hidden="true" /><AlertTitle>Report could not be created</AlertTitle><AlertDescription>{{ reportError }}</AlertDescription></Alert>
 
       <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card v-for="item in summaryCards" :key="item.label"><CardHeader class="pb-2"><CardDescription class="flex items-center gap-2"><span class="size-2 rounded-full" :style="{ backgroundColor: item.color }" />{{ item.label }}</CardDescription><CardTitle class="text-3xl" :style="{ color: item.color }">{{ score(item.value) }}</CardTitle></CardHeader><CardContent class="text-xs text-muted-foreground">{{ item.detail }}</CardContent></Card>
+        <Card v-for="item in summaryCards" :key="item.label"><CardHeader class="pb-2"><CardDescription class="flex items-center gap-2"><span class="size-2 rounded-full" :style="{ backgroundColor: item.color }" />{{ item.label }}</CardDescription><CardAction v-if="item.kpi"><Button variant="ghost" size="icon-sm" :disabled="reportLoading !== null || !filteredRows.length" :aria-label="`Download ${item.label} report`" :title="`Download ${item.label} report`" @click="generateKpiReport(item.kpi)"><Spinner v-if="reportLoading === item.kpi" /><DownloadIcon v-else /><span class="sr-only">Download {{ item.label }} report</span></Button></CardAction><CardTitle class="text-3xl" :style="{ color: item.color }">{{ score(item.value) }}</CardTitle></CardHeader><CardContent class="text-xs text-muted-foreground">{{ item.detail }}</CardContent></Card>
       </section>
 
       <DataInterpretationCard
@@ -470,5 +496,10 @@ function formatDate(value: string): string {
       </Card>
 
     </div>
+
+    <TeamReportPreviewDialog
+      v-model:open="teamReportPreviewOpen"
+      :analysis="analysis"
+    />
   </main>
 </template>

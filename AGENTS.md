@@ -405,6 +405,7 @@ Current endpoints:
 | `POST` | `/api/v1/analyze-tables` | ingest an incremental JSON upsert batch and return a `201` receipt |
 | `GET` | `/api/v1/dashboard` | recalculate the aggregated canonical dashboard with optional filters |
 | `POST` | `/api/v1/insights` | generate on-demand guidance for one employee from a temporary analysis context |
+| `POST` | `/api/v1/reports/employee/preview` | return a deterministic employee report snapshot for browser PDF generation |
 
 ---
 
@@ -480,4 +481,4 @@ snapshot.
 ## 12. Deliberately out of scope for now
 
 Backend authentication/multi-tenancy, background jobs, tombstone/delete events, authoritative
-period snapshots, PDF export, streaming AI responses, and rate limiting.
+period snapshots, server-side PDF rendering, streaming AI responses, and rate limiting.

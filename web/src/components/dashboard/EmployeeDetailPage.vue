@@ -1,22 +1,35 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   ArrowLeftIcon,
+  CalendarDaysIcon,
   CircleAlertIcon,
   Clock3Icon,
+  DatabaseIcon,
+  DownloadIcon,
+  FileTextIcon,
   FileSpreadsheetIcon,
   LightbulbIcon,
+  MinusIcon,
+  ShieldCheckIcon,
   SparklesIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
   TriangleAlertIcon,
 } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
-import type { EmployeeAIInsight, EmployeeKpiResult, PerformanceAlert } from '@/types/analysis'
+import { downloadEmployeeReportPdf } from '@/lib/employee-report-pdf'
+import type { AnalysisFilters, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload, PerformanceAlert } from '@/types/analysis'
+import type { EmployeeReportData, EmployeeReportPreviewResponse, EmployeeReportRequest } from '@/types/reports'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 
 const props = defineProps<{
   employee: EmployeeKpiResult
@@ -24,11 +37,18 @@ const props = defineProps<{
   insight: EmployeeAIInsight | null
   insightLoading: boolean
   insightError?: string
+  reportingPeriod: AnalysisFilters
 }>()
 const emit = defineEmits<{
   back: []
   generateInsight: [employeeId: string]
 }>()
+
+const reportPreviewOpen = ref(false)
+const reportPreview = ref<EmployeeReportData | null>(null)
+const reportLoading = ref(false)
+const reportDownloading = ref(false)
+const reportError = ref('')
 
 const complianceBreakdown = computed(() => {
   const match = props.employee.compliance_reason.match(
@@ -96,19 +116,98 @@ function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' 
     return 'secondary'
   return 'outline'
 }
+
+function reportRequest(): EmployeeReportRequest | null {
+  if (!props.reportingPeriod.start_date || !props.reportingPeriod.end_date)
+    return null
+  return {
+    employee_id: props.employee.employee_id,
+    start_date: props.reportingPeriod.start_date,
+    end_date: props.reportingPeriod.end_date,
+  }
+}
+
+async function generateReportPreview(): Promise<void> {
+  reportPreviewOpen.value = true
+  reportLoading.value = true
+  reportError.value = ''
+  reportPreview.value = null
+  const request = reportRequest()
+  if (!request) {
+    reportError.value = 'The dashboard has no resolved reporting period for this employee.'
+    reportLoading.value = false
+    return
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/reports/employee/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+    if (!response.ok) {
+      const payload = await response.json() as ErrorPayload
+      throw new Error(payload.error?.message ?? 'The report preview could not be generated.')
+    }
+    const payload = await response.json() as EmployeeReportPreviewResponse
+    reportPreview.value = payload.report
+  }
+  catch (error) {
+    reportError.value = error instanceof TypeError
+      ? 'The report service is temporarily unavailable. Please try again shortly.'
+      : error instanceof Error ? error.message : 'The report preview could not be generated.'
+  }
+  finally {
+    reportLoading.value = false
+  }
+}
+
+async function downloadReport(): Promise<void> {
+  if (!reportPreview.value || reportDownloading.value)
+    return
+  reportDownloading.value = true
+  reportError.value = ''
+  try {
+    await downloadEmployeeReportPdf(reportPreview.value)
+  }
+  catch {
+    reportError.value = 'The PDF could not be created in this browser.'
+  }
+  finally {
+    reportDownloading.value = false
+  }
+}
+
+function formatReportDate(value: string): string {
+  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })
+    .format(new Date(`${value}T00:00:00Z`))
+}
+
+function scoreChange(value: number | null): string {
+  if (value === null)
+    return 'Earlier-period data is unavailable'
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)} pts`
+}
 </script>
 
 <template>
   <main class="min-h-svh bg-muted/30">
     <header class="border-b bg-background">
-      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <Button variant="ghost" @click="emit('back')">
           <ArrowLeftIcon data-icon="inline-start" />
           Back to dashboard
         </Button>
-        <Badge :variant="employee.overall_score === null ? 'warning' : 'success'">
-          {{ employee.performance_tier ?? employee.result_status }}
-        </Badge>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <Button :disabled="reportLoading" @click="generateReportPreview">
+            <Spinner v-if="reportLoading" data-icon="inline-start" />
+            <FileTextIcon v-else data-icon="inline-start" />
+            Generate report
+          </Button>
+          <Badge :variant="employee.overall_score === null ? 'warning' : 'success'">
+            {{ employee.performance_tier ?? employee.result_status }}
+          </Badge>
+        </div>
       </div>
     </header>
 
@@ -312,5 +411,173 @@ function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' 
         </div>
       </div>
     </div>
+
+    <Dialog v-model:open="reportPreviewOpen">
+      <DialogContent class="max-h-[92svh] gap-0 overflow-hidden p-0 sm:max-w-5xl">
+        <DialogHeader class="px-6 pt-6 pb-5">
+          <div class="flex items-center gap-3">
+            <div class="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <FileTextIcon aria-hidden="true" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <DialogTitle>Employee performance report</DialogTitle>
+              <DialogDescription>
+                Review the report snapshot before creating the PDF in your browser.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div class="flex max-h-[calc(92svh-9rem)] flex-col gap-5 overflow-y-auto bg-muted/30 p-6">
+          <div v-if="reportLoading" class="flex min-h-64 items-center justify-center gap-3 text-sm text-muted-foreground">
+            <Spinner />
+            Preparing report preview…
+          </div>
+
+          <Alert v-else-if="reportError" variant="destructive">
+            <CircleAlertIcon aria-hidden="true" />
+            <AlertTitle>Report unavailable</AlertTitle>
+            <AlertDescription>{{ reportError }}</AlertDescription>
+          </Alert>
+
+          <template v-else-if="reportPreview">
+            <Alert v-if="reportPreview.overall_score === null" variant="warning">
+              <TriangleAlertIcon aria-hidden="true" />
+              <AlertTitle>Overall result withheld</AlertTitle>
+              <AlertDescription>
+                Evidence confidence is below the required threshold. Component KPI values remain
+                visible for auditability only.
+              </AlertDescription>
+            </Alert>
+
+            <Card>
+              <CardHeader class="gap-4 sm:flex sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex flex-col gap-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="text-sm font-medium text-muted-foreground">CEDAR PERFORMANCE</p>
+                    <Badge :variant="reportPreview.overall_score === null ? 'warning' : 'success'">
+                      {{ reportPreview.performance_tier ?? reportPreview.result_status }}
+                    </Badge>
+                  </div>
+                  <CardTitle class="text-3xl">
+                    {{ reportPreview.employee_name || reportPreview.employee_id }}
+                  </CardTitle>
+                  <CardDescription>
+                    {{ reportPreview.employee_id }} · {{ reportPreview.team ?? 'Team not provided' }}<template v-if="reportPreview.role"> · {{ reportPreview.role }}</template>
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" class="w-fit">
+                  <CalendarDaysIcon data-icon="inline-start" />
+                  {{ formatReportDate(reportPreview.period.start_date) }} – {{ formatReportDate(reportPreview.period.end_date) }}
+                </Badge>
+              </CardHeader>
+              <CardContent class="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                <section class="flex flex-col justify-between gap-6 rounded-lg bg-primary p-5 text-primary-foreground">
+                  <div class="flex flex-col gap-1">
+                    <p class="text-sm text-primary-foreground/75">Overall performance</p>
+                    <p class="text-5xl font-semibold tracking-tight tabular-nums">
+                      {{ score(reportPreview.overall_score) }}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <Badge v-if="reportPreview.overall_score_change !== null" variant="secondary">
+                      <TrendingUpIcon v-if="reportPreview.overall_score_change !== null && reportPreview.overall_score_change > 0" data-icon="inline-start" />
+                      <TrendingDownIcon v-else-if="reportPreview.overall_score_change !== null && reportPreview.overall_score_change < 0" data-icon="inline-start" />
+                      <MinusIcon v-else data-icon="inline-start" />
+                      {{ scoreChange(reportPreview.overall_score_change) }}
+                    </Badge>
+                    <span class="text-xs text-primary-foreground">
+                      {{ reportPreview.overall_score_change === null ? scoreChange(null) : 'versus prior comparable period' }}
+                    </span>
+                  </div>
+                </section>
+
+                <section class="flex flex-col justify-center gap-4">
+                  <div class="flex items-end justify-between gap-4">
+                    <div class="flex flex-col gap-1">
+                      <p class="text-sm text-muted-foreground">Evidence confidence</p>
+                      <p class="text-3xl font-semibold tabular-nums">{{ score(reportPreview.data_confidence) }}</p>
+                    </div>
+                    <Badge variant="secondary">Required {{ score(reportPreview.confidence_threshold) }}</Badge>
+                  </div>
+                  <Progress :model-value="reportPreview.data_confidence" />
+                  <p class="text-sm leading-6 text-muted-foreground">
+                    {{ reportPreview.confidence_explanation }}
+                  </p>
+                </section>
+              </CardContent>
+            </Card>
+
+            <div class="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
+              <Card>
+                <CardHeader>
+                  <CardTitle>KPI profile</CardTitle>
+                  <CardDescription>Component scores and their contribution to the overall result.</CardDescription>
+                </CardHeader>
+                <CardContent class="flex flex-col gap-5">
+                  <section v-for="kpi in reportPreview.kpis" :key="kpi.name" class="flex flex-col gap-2">
+                    <div class="flex items-end justify-between gap-4">
+                      <div class="flex flex-col gap-0.5">
+                        <h3 class="font-medium">{{ kpi.name }}</h3>
+                        <p class="text-xs text-muted-foreground">{{ kpi.weight }}% of overall</p>
+                      </div>
+                      <strong class="text-2xl tabular-nums">{{ score(kpi.score) }}</strong>
+                    </div>
+                    <Progress :model-value="kpi.score" />
+                  </section>
+                </CardContent>
+              </Card>
+
+              <div class="flex flex-col gap-5">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Evidence snapshot</CardTitle>
+                    <CardDescription>Traceability included in the report.</CardDescription>
+                  </CardHeader>
+                  <CardContent class="flex flex-col gap-4">
+                    <div class="flex items-center justify-between gap-4">
+                      <div class="flex items-center gap-2 text-sm text-muted-foreground">
+                        <DatabaseIcon aria-hidden="true" />
+                        Supporting records
+                      </div>
+                      <strong class="text-xl tabular-nums">{{ reportPreview.supporting_record_ids.length }}</strong>
+                    </div>
+                    <Separator />
+                    <div class="flex items-center justify-between gap-4">
+                      <div class="flex items-center gap-2 text-sm text-muted-foreground">
+                        <TriangleAlertIcon aria-hidden="true" />
+                        Validated findings
+                      </div>
+                      <Badge :variant="reportPreview.findings.length ? 'warning' : 'outline'">
+                        {{ reportPreview.findings.length }}
+                      </Badge>
+                    </div>
+                    <div v-if="reportPreview.findings.length" class="flex flex-wrap gap-2">
+                      <Badge v-for="finding in reportPreview.findings.slice(0, 3)" :key="finding.code" variant="outline" class="capitalize">
+                        {{ impactLabel(finding.scoring_impact) }}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Alert>
+                  <ShieldCheckIcon aria-hidden="true" />
+                  <AlertTitle>Manager review required</AlertTitle>
+                  <AlertDescription>{{ reportPreview.manager_review_notice }}</AlertDescription>
+                </Alert>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <DialogFooter v-if="reportPreview" class="m-0 rounded-none">
+          <Button :disabled="reportDownloading" @click="downloadReport">
+            <Spinner v-if="reportDownloading" data-icon="inline-start" />
+            <DownloadIcon v-else data-icon="inline-start" />
+            {{ reportDownloading ? 'Creating PDF…' : 'Download Cedar PDF' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </main>
 </template>

@@ -171,6 +171,74 @@ class AnalyzeApiIntegrationTests(TestCase):
             ["EMP-027"],
         )
 
+    def test_employee_report_preview_matches_filtered_dashboard(self) -> None:
+        submitted = self._post_benchmark_tables()
+        dashboard = self.client.get(
+            "/api/v1/dashboard?employee_id=EMP-001&period_weeks=4"
+        )
+        preview = self.client.post(
+            "/api/v1/reports/employee/preview",
+            json={"employee_id": "EMP-001", "period_weeks": 4},
+        )
+
+        self.assertEqual(submitted.status_code, 201)
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.headers["cache-control"], "no-store")
+        report = preview.json()["report"]
+        employee = dashboard.json()["results"][0]
+        self.assertEqual(report["overall_score"], employee["overall_score"])
+        self.assertEqual(report["data_confidence"], employee["data_confidence"])
+        self.assertEqual(
+            [item["score"] for item in report["kpis"]],
+            [
+                employee["productivity_score"],
+                employee["compliance_score"],
+                employee["quality_score"],
+            ],
+        )
+        self.assertEqual(
+            report["period"]["start_date"],
+            dashboard.json()["applied_filters"]["start_date"],
+        )
+        self.assertEqual(
+            report["period"]["end_date"],
+            dashboard.json()["applied_filters"]["end_date"],
+        )
+        self.assertIsNone(report["period"]["prior_start_date"])
+        self.assertIsNone(report["period"]["prior_end_date"])
+        self.assertEqual(preview.json()["pdf_generated_by"], "browser")
+
+    def test_employee_report_preserves_insufficient_data_gate(self) -> None:
+        self._post_benchmark_tables()
+        preview = self.client.post(
+            "/api/v1/reports/employee/preview",
+            json={
+                "employee_id": "EMP-027",
+                "start_date": "2026-05-25",
+                "end_date": "2026-08-22",
+            },
+        )
+
+        self.assertEqual(preview.status_code, 200)
+        report = preview.json()["report"]
+        self.assertIsNone(report["overall_score"])
+        self.assertIsNone(report["performance_tier"])
+        self.assertEqual(report["result_status"], "Insufficient data")
+        self.assertEqual(len(report["kpis"]), 3)
+
+    def test_employee_report_rejects_unknown_employee(self) -> None:
+        self._post_benchmark_tables()
+        preview = self.client.post(
+            "/api/v1/reports/employee/preview",
+            json={"employee_id": "EMP-999", "period_weeks": 4},
+        )
+
+        self.assertEqual(preview.status_code, 404)
+        self.assertEqual(
+            preview.json()["error"]["code"],
+            "employee_report_not_found",
+        )
+
     def test_json_submission_is_available_as_latest_dashboard(self) -> None:
         submitted = self._post_benchmark_tables()
 

@@ -62,6 +62,13 @@ class DashboardNotFoundError(AppError):
     code = "dashboard_not_found"
 
 
+class EmployeeReportNotFoundError(AppError):
+    """The requested employee cannot be included in a report."""
+
+    status_code = 404
+    code = "employee_report_not_found"
+
+
 class InsightContextExpiredError(AppError):
     """The temporary analysis context is missing or has expired."""
 
