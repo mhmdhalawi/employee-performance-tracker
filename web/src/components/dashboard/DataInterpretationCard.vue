@@ -87,7 +87,7 @@ function familyStyle(family: string): CSSProperties | undefined {
         <p>{{ needsAttention.length }} table{{ needsAttention.length === 1 ? '' : 's' }} need review because classification confidence is below high or the evidence is unsupported.</p>
       </div>
       <p v-else class="text-sm text-muted-foreground">
-        {{ relevant.length }} relevant tables across {{ mappingSummaries.length }} schema{{ mappingSummaries.length === 1 ? '' : 's' }} were matched to approved calculation inputs with high confidence.
+        {{ relevant.length }} relevant table{{ relevant.length === 1 ? '' : 's' }} matched approved calculation inputs with high confidence.
       </p>
     </CardContent>
   </Card>

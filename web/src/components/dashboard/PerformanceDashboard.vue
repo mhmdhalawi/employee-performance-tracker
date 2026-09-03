@@ -418,7 +418,7 @@ function formatDate(value: string): string {
       <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">
           <img :src="cedarLogo" alt="Cedar Digital Solutions" class="w-20 sm:w-24" />
-          <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis.included_submission_count }} combined submission{{ analysis.included_submission_count === 1 ? '' : 's' }}</p></div>
+          <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">Evidence-backed KPI review</p></div>
         </div>
         <Button :disabled="isFiltering || !filteredRows.length" @click="teamReportPreviewOpen = true">
           <FileTextIcon data-icon="inline-start" />

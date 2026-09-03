@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { CSSProperties } from 'vue'
+import { computed } from 'vue'
 import { ArrowLeftIcon, DatabaseIcon } from '@lucide/vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -7,12 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { SchemaMappingSummary, TableClassification } from '@/types/analysis'
 
-defineProps<{
+const props = defineProps<{
   mappingSummaries: SchemaMappingSummary[]
 }>()
 const emit = defineEmits<{
   back: []
 }>()
+
+const classifications = computed(() => props.mappingSummaries.flatMap(summary => summary.table_classifications))
 
 function familyLabel(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1)
@@ -68,13 +71,13 @@ function familyStyle(family: string): CSSProperties | undefined {
           <ArrowLeftIcon data-icon="inline-start" />
           Back to dashboard
         </Button>
-        <Badge variant="outline">{{ mappingSummaries.length }} source schema{{ mappingSummaries.length === 1 ? '' : 's' }}</Badge>
+        <Badge variant="outline">{{ classifications.length }} table{{ classifications.length === 1 ? '' : 's' }}</Badge>
       </div>
     </header>
 
     <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       <header class="flex flex-col gap-2">
-        <p class="text-sm font-medium text-muted-foreground">Combined canonical evidence</p>
+        <p class="text-sm font-medium text-muted-foreground">Calculation inputs</p>
         <h1 class="flex items-center gap-2 text-3xl font-semibold tracking-tight">
           <DatabaseIcon aria-hidden="true" />
           Data interpretation
@@ -84,16 +87,9 @@ function familyStyle(family: string): CSSProperties | undefined {
         </p>
       </header>
 
-      <section v-for="summary in mappingSummaries" :key="summary.schema_fingerprint" class="flex flex-col gap-4" aria-label="Interpreted source schema">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="min-w-0">
-            <h2 class="font-semibold">Schema {{ summary.schema_fingerprint.slice(0, 12) }}</h2>
-            <p class="text-sm text-muted-foreground">{{ summary.included_submission_count }} contributing submission{{ summary.included_submission_count === 1 ? '' : 's' }}</p>
-          </div>
-          <Badge variant="secondary">{{ summary.table_classifications.length }} tables</Badge>
-        </div>
+      <section aria-label="Interpreted source tables">
         <div class="columns-1 gap-6 lg:columns-2">
-        <Card v-for="item in summary.table_classifications" :key="item.source_name" class="mb-6 inline-block w-full break-inside-avoid">
+        <Card v-for="(item, index) in classifications" :key="`${item.source_name}-${index}`" class="mb-6 inline-block w-full break-inside-avoid">
           <CardHeader>
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0 flex-1">

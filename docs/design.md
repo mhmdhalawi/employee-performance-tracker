@@ -94,6 +94,11 @@ The five brand colors are not a complete semantic status system. Destructive err
 - Do not squeeze the full lockup and tagline into the current 36px header slot.
 - Keep the report action as the primary teal button; gold is not appropriate for the most common action.
 
+### Browser icon
+
+- Use the supplied Cedar logo artwork as the browser favicon so the product remains identifiable in tabs and bookmarks.
+- Replace the raster favicon with an official compact SVG mark when Cedar provides one; do not recreate or auto-trace the mark.
+
 ### Detail and interpretation pages
 
 - Repeat the compact mark only in a persistent product header, if one is introduced.
