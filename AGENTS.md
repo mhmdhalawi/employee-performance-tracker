@@ -91,7 +91,7 @@ require the user to attach it or authorize its local path in a new session.
 | Tabular data | pandas (+ openpyxl for `.xlsx`) |
 | LLM | `openai` SDK |
 | Agent layer | PydanticAI (`pydantic-ai-slim[openai]`) |
-| Frontend | Vue 3 + TypeScript + Vite (`web/`) |
+| Frontend | Vue 3 + TypeScript + Vite + Vue Router (`web/`) |
 | Frontend deps | **pnpm** (never npm or yarn) |
 | Frontend styling | Tailwind CSS v4 + shadcn-vue (Nova, neutral) |
 | Persistence | SQLite via the Python standard library; numbered SQL migrations |
@@ -208,8 +208,11 @@ tracker/
     ├── vite.config.ts        # Vite, Tailwind, and @ alias configuration
     └── src/
         ├── components/       # app and shadcn-vue components
+        ├── composables/       # shared Vue behavior, including dashboard navigation
         ├── lib/              # shared helpers and browser PDF generators
+        ├── router/           # Vue Router configuration and route metadata
         ├── types/reports.ts  # employee report API contract
+        ├── views/            # route-level employee and data-interpretation views
         ├── App.vue
         ├── main.ts
         └── style.css         # Tailwind import and global theme tokens
@@ -233,6 +236,9 @@ FastAPI `/api/v1` contract and must not import Python modules. Keep uploads, fil
 state, and presentation logic in Vue; keep source validation, KPI formulas, evidence
 confidence, trend calculation, and all other business arithmetic in Python.
 Employee, team, and reporting-period selections request filtered results from the backend.
+Vue Router owns browser navigation. The dashboard is served at `/`, employee details at
+`/employees/:employeeId`, and data interpretation at `/data-interpretation`; `/dashboard` and
+the previous root query-string detail URLs remain compatibility redirects.
 
 Use pnpm exclusively within `web/`. Do not commit `node_modules/`, `dist/`, `.pnpm-store/`,
 or other generated caches. The frontend may retain one structured analysis in browser memory,
@@ -340,11 +346,11 @@ rows. `/analyze` retains a compact validated explanation context in memory for 1
 does not call the explanation model. A separate, optional `/insights` request generates
 guidance for one employee, and Python rejects employee or record citations that do not
 validate. The Vue client presents employee results with alert counts and sorting, KPI trends,
-and a responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
+and a responsive routed employee detail page containing traceable alerts and on-demand AI guidance.
 Employee Details also previews and downloads an employee PDF for the active period. The main
 dashboard previews a team report and downloads team or per-KPI PDF summaries from its current
 filtered response.
-The dashboard also exposes a compact data-interpretation summary and detail sheet for table
+The dashboard also exposes a compact data-interpretation summary and routed detail page for table
 classifications, confidence, approved calculator invocations, and field bindings grouped by
 contributing schema. The Vue app opens the aggregated persisted dashboard directly; the upload
 and sample-data entry cards have been removed from the frontend. Week presets are resolved by

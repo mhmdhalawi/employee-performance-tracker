@@ -15,16 +15,18 @@ those foundations are canonical, later submissions may contain only new evidence
 example, a quality-review-only batch can join stored employees by `employee_id`; it does not need
 to repeat the employee or target tables.
 
-The frontend lives in `web/` and uses Vue 3, TypeScript, Vite, Tailwind CSS v4, and
-shadcn-vue. The backend remains authoritative for validation, KPI calculations, evidence
+The frontend lives in `web/` and uses Vue 3, TypeScript, Vite, Vue Router, Tailwind CSS v4,
+and shadcn-vue. The backend remains authoritative for validation, KPI calculations, evidence
 confidence, and trend calculations.
 
 The browser client opens the aggregated persisted analysis and provides employee, team, and
 backend-resolved reporting-period filters backed by API requests; backend-calculated summary KPIs;
 sortable, paginated employee results with alert counts; weekly KPI trends; and a
-responsive employee detail sheet containing traceable alerts and on-demand AI guidance. A
-data-interpretation card and detail sheet group each contributing schema's KPI classifications,
+responsive employee detail page containing traceable alerts and on-demand AI guidance. A
+data-interpretation card and routed detail page group each contributing schema's KPI classifications,
 confidence, selected calculators, and validated source-column bindings.
+The dashboard uses `/`, with employee details at `/employees/:employeeId` and data interpretation
+at `/data-interpretation`.
 Employee Details can preview and download a two-page employee report. The dashboard can preview
 and download a filtered team report and can directly download Productivity, Compliance, or
 Quality summaries. PDFs are generated on demand in the browser from backend-calculated snapshots;
