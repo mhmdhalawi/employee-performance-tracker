@@ -3,11 +3,11 @@ import type { DashboardResponse, EmployeeKpiResult, KpiTrendPoint } from '@/type
 
 export type DashboardKpi = 'productivity' | 'compliance' | 'quality'
 
-const cedar = '#174C3C'
-const cedarLight = '#E8F0ED'
-const ink = '#17201D'
-const muted = '#5F6D67'
-const line = '#D8E1DD'
+const cedar = '#078181'
+const cedarLight = '#E7F3F3'
+const ink = '#0D0D0D'
+const muted = '#555B59'
+const line = '#D8DDDC'
 
 const kpiDetails: Record<DashboardKpi, { label: string, weight: number, description: string }> = {
   productivity: {

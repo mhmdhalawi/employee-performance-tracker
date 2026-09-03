@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { CircleAlertIcon, LockKeyholeIcon, LogInIcon } from '@lucide/vue'
+import { CircleAlertIcon, LogInIcon } from '@lucide/vue'
+import cedarLogo from '@/assets/cedar-logo.png'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -44,9 +45,7 @@ function submitLogin(): void {
   <main class="flex min-h-svh items-center bg-muted/30 px-4 py-8 sm:px-6">
     <div class="mx-auto flex w-full max-w-md flex-col gap-6">
       <header class="flex flex-col items-center gap-3 text-center">
-        <div class="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-          <LockKeyholeIcon class="size-5" aria-hidden="true" />
-        </div>
+        <img :src="cedarLogo" alt="Cedar Digital Solutions" class="w-52 max-w-[70vw]" />
         <div class="flex flex-col gap-1">
           <p class="text-sm font-medium text-muted-foreground">
             Employee performance

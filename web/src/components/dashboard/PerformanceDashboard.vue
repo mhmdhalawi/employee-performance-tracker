@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, DownloadIcon, EyeIcon, FileTextIcon, ShieldCheckIcon, TriangleAlertIcon } from '@lucide/vue'
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, DownloadIcon, EyeIcon, FileTextIcon, TriangleAlertIcon } from '@lucide/vue'
+import cedarLogo from '@/assets/cedar-logo.png'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -416,7 +417,7 @@ function formatDate(value: string): string {
     <header class="border-b bg-background">
       <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">
-          <div class="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ShieldCheckIcon class="size-4" aria-hidden="true" /></div>
+          <img :src="cedarLogo" alt="Cedar Digital Solutions" class="w-20 sm:w-24" />
           <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis.included_submission_count }} combined submission{{ analysis.included_submission_count === 1 ? '' : 's' }}</p></div>
         </div>
         <Button :disabled="isFiltering || !filteredRows.length" @click="teamReportPreviewOpen = true">
