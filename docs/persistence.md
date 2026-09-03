@@ -118,6 +118,19 @@ mode, foreign keys, a five-second busy timeout, and short-lived transactional co
 Insight contexts remain bounded and process-local for 15 minutes. Each dashboard calculation
 creates a fresh `analysis_id`; `/insights` remains the only optional dashboard-initiated model call.
 
+## Report data and retention
+
+`POST /api/v1/reports/employee/preview` reads canonical state through the same filtered dashboard
+materialization path and returns a renderer-ready snapshot with `Cache-Control: no-store`. It does
+not add a report table, save the preview, or persist a PDF. The optional prior-period comparison is
+recalculated from canonical evidence when a complete, non-overlapping prior period falls within
+available coverage.
+
+The browser generates employee, team, and KPI PDFs with `pdfmake`. Team and KPI reports consume
+the current filtered `DashboardResponse` directly, so they create no additional backend reads or
+stored artifacts. Saved reports, download history, scheduled delivery, and retention/deletion
+policies require a future persistence design and are not part of the current implementation.
+
 ## Railway production
 
 Railway's normal service filesystem is ephemeral. Attach one Railway Volume to the FastAPI

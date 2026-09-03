@@ -25,6 +25,10 @@ sortable, paginated employee results with alert counts; weekly KPI trends; and a
 responsive employee detail sheet containing traceable alerts and on-demand AI guidance. A
 data-interpretation card and detail sheet group each contributing schema's KPI classifications,
 confidence, selected calculators, and validated source-column bindings.
+Employee Details can preview and download a two-page employee report. The dashboard can preview
+and download a filtered team report and can directly download Productivity, Compliance, or
+Quality summaries. PDFs are generated on demand in the browser from backend-calculated snapshots;
+the application does not store generated report files.
 The backend has no authentication/session layer. The frontend no longer includes upload or
 sample-data entry cards; use Postman or a webhook to submit JSON tables, then refresh the frontend.
 
@@ -120,6 +124,16 @@ dependencies, and `library-skills` discovers skills bundled by those installed p
 | `POST` | `/api/v1/analyze-tables` | Ingest an incremental JSON batch and return a `201` submission receipt |
 | `GET` | `/api/v1/dashboard` | Recalculate the combined canonical dashboard or a backend-filtered view |
 | `POST` | `/api/v1/insights` | Generate optional guidance for one employee from the temporary validated analysis context |
+| `POST` | `/api/v1/reports/employee/preview` | Build a deterministic employee report snapshot for browser PDF generation |
+
+Employee report requests accept an `employee_id` plus either `period_weeks=4|8|12` or an explicit
+inclusive `start_date`/`end_date` pair. The response uses the same canonical dashboard path and
+confidence gate as the filtered UI and is marked `Cache-Control: no-store`. Team and KPI exports
+reuse the current filtered dashboard response and therefore do not have separate report APIs.
+
+Reports contain employee data, while this MVP has no authentication or authorization layer.
+Protect a deployed instance with an approved external access gateway. The reports are intended
+for coaching and manager review, not as the sole basis for employment decisions.
 
 Send webhook retries with a stable deployment-wide idempotency key:
 

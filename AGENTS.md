@@ -168,10 +168,12 @@ tracker/
 │   ├── main.py               # app, middleware, exception handlers, routers
 │   ├── api/                  # FastAPI routes — thin: parse, call one service, return
 │   │   ├── agent.py          # analysis, persisted dashboard, and insight endpoints
-│   │   └── health.py         # GET /health
+│   │   ├── health.py         # GET /health
+│   │   └── reports.py        # deterministic employee report-preview endpoint
 │   ├── schemas/              # Pydantic request/response + internal models ONLY
 │   │   ├── agent.py          # AskRequest, AskResponse
 │   │   ├── performance.py    # generic calculator evidence records and tool results
+│   │   ├── reports.py        # renderer-ready employee report contract
 │   │   ├── tables.py         # JSON table request models
 │   │   └── uploads.py        # catalog, upload, and analysis response models
 │   ├── services/             # all business logic lives here
@@ -179,6 +181,7 @@ tracker/
 │   │   ├── aggregation.py    # canonical merge, serialization, and materialization
 │   │   ├── imports.py        # mechanical upload parsing and inspection
 │   │   ├── performance.py    # validation and deterministic KPI calculations
+│   │   ├── reports.py        # employee snapshot built from filtered dashboard results
 │   │   ├── submissions.py    # canonical submission writes and persisted dashboard reads
 │   │   ├── tables.py         # mechanical JSON table-to-catalog conversion
 │   │   └── uploads.py        # extension and size validation
@@ -199,7 +202,8 @@ tracker/
     ├── vite.config.ts        # Vite, Tailwind, and @ alias configuration
     └── src/
         ├── components/       # app and shadcn-vue components
-        ├── lib/utils.ts      # shared cn() class helper
+        ├── lib/              # shared helpers and browser PDF generators
+        ├── types/reports.ts  # employee report API contract
         ├── App.vue
         ├── main.ts
         └── style.css         # Tailwind import and global theme tokens
@@ -239,6 +243,37 @@ Use utility classes primarily for layout, prefer `gap-*` over `space-x-*`/`space
 `size-*` when width and height match, and use `cn()` for conditional classes. Preserve the
 accessibility composition required by shadcn-vue, including titles for dialogs/sheets and
 fallbacks for avatars.
+
+### Report architecture
+
+Reports are transient, manager-reviewed exports generated in the browser with `pdfmake`; the
+backend does not render or store PDF files. Employee Details requests a typed, renderer-ready
+snapshot from `POST /api/v1/reports/employee/preview`, previews that exact snapshot, and passes it
+unchanged to `web/src/lib/employee-report-pdf.ts`. The report service obtains its values by calling
+the same canonical dashboard materialization and filter path as `/dashboard`, including an
+optional prior comparable period. It filters clickable evidence links to absolute `https` URLs
+and returns `Cache-Control: no-store`; an unknown or non-renderable employee returns the typed
+`employee_report_not_found` error.
+
+Team and KPI summary exports do not have separate backend endpoints. The dashboard passes its
+current filtered `DashboardResponse` directly to `web/src/lib/dashboard-report-pdf.ts`. The team
+preview and all downloaded reports must preserve backend-provided scores, trends, confidence,
+withheld overall results, resolved dates, and employee scope without browser-side KPI arithmetic.
+Every PDF includes a manager-review notice. Report filenames are sanitized, PDF dependencies are
+loaded only when an export is requested, object URLs are revoked after download, and generated
+files are not retained by the application.
+
+The implemented report family comprises a two-page portrait employee report, a landscape team
+summary, and landscape Productivity, Compliance, and Quality summaries. Saved/history reports,
+scheduled delivery, a data-quality report, server-side rendering, and authorization remain
+unimplemented. Because reports contain employee data and the backend has no authorization layer,
+protect any deployed instance with an approved external access gateway.
+
+Backend integration tests cover employee-preview/dashboard parity, insufficient-data gating, and
+unknown employees. The TypeScript production build verifies the browser generators compile, but
+there is no automated PDF layout regression suite. For renderer changes, download scored and
+insufficient-data examples and visually inspect every page, including long names, findings,
+tables, wrapping, page breaks, and sanitized filenames.
 
 ---
 
@@ -300,6 +335,9 @@ does not call the explanation model. A separate, optional `/insights` request ge
 guidance for one employee, and Python rejects employee or record citations that do not
 validate. The Vue client presents employee results with alert counts and sorting, KPI trends,
 and a responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
+Employee Details also previews and downloads an employee PDF for the active period. The main
+dashboard previews a team report and downloads team or per-KPI PDF summaries from its current
+filtered response.
 The dashboard also exposes a compact data-interpretation summary and detail sheet for table
 classifications, confidence, approved calculator invocations, and field bindings grouped by
 contributing schema. The Vue app opens the aggregated persisted dashboard directly; the upload
@@ -433,7 +471,8 @@ timestamps take precedence, with completion time used only when neither is provi
 
 Uploads through `/analyze` remain request-scoped and are not persisted. Insight contexts remain
 in a bounded 15-minute in-memory cache; `/dashboard` creates a fresh context when it restores a
-snapshot.
+snapshot. Report previews are calculated on demand from canonical state; neither preview payloads
+nor browser-generated PDFs are persisted.
 
 ---
 

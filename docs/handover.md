@@ -27,7 +27,7 @@ validation, filtering, and deterministic scoring path.
   immutable audit history, idempotency, overlapping upserts, corrections, source-version ordering,
   concurrent identity protection, persisted plans, partial evidence batches that reuse canonical
   foundations, mixed-schema safeguards, backend period presets, employee/team/date filters,
-  invalid rows, malformed files, and invalid filters.
+  employee report parity and confidence gating, invalid rows, malformed files, and invalid filters.
 
 The fixture is intentionally synthetic. It reproduces the agreed acceptance guardrails without
 copying employee-level content from the confidential source workbook.
@@ -47,6 +47,13 @@ copying employee-level content from the confidential source workbook.
 5. Replay the first idempotency key and confirm the original receipt is returned without another
    submission. Send a changed existing record ID and confirm its one canonical row changes once.
 6. Restart the API and repeat the dashboard reads. No mapping-model call should occur.
+7. Request `POST /api/v1/reports/employee/preview` for a scored employee and an insufficient-data
+   employee. Confirm the snapshot matches the same filtered dashboard values, carries
+   `Cache-Control: no-store`, and withholds overall score and tier without hiding component KPIs.
+
+In the browser, Employee Details previews and downloads the employee snapshot. The team-report
+preview and the team/KPI download actions consume the current filtered dashboard response. All
+PDFs are generated locally with `pdfmake`; no generated file is persisted by the backend.
 
 `web/data/request.json` and `web/data/request2.json` are full manual fixtures for this flow;
 `request2.json` contains changed evidence plus additional attendance duplicates.
@@ -64,7 +71,7 @@ Aggregation run: 2026-09-03, Python 3.14, Windows.
 
 ```text
 ----------------------------------------------------------------------
-Ran 50 tests
+Ran 53 tests
 
 OK
 ```
@@ -74,3 +81,9 @@ submission flow, and the 60%
 confidence gate for EMP-027 through EMP-030. EMP-027 and EMP-029 are the only allowed parity
 exceptions: production retains duplicate exclusion, with documented workbook compliance
 differences of 0.2304 and 0.3789 respectively.
+
+`pnpm build` also passed on 2026-09-03. It type-checked the employee, team, and KPI browser PDF
+generators and produced their lazy-loaded `pdfmake`/font chunks. Vite reports those PDF chunks as
+larger than 500 kB; they remain dynamically imported and are loaded only when a report is created.
+There is no automated PDF visual-regression suite, so renderer changes still require manual page
+inspection for both scored and insufficient-data examples.
