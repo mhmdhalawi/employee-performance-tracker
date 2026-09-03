@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, datetime, time
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -9,6 +9,8 @@ class Employee(BaseModel):
     employee_name: str | None = None
     team: str | None = None
     role: str | None = None
+    source_version: int | None = Field(default=None, ge=0)
+    source_updated_at: datetime | None = None
 
 
 class PerformanceTarget(BaseModel):
@@ -16,6 +18,8 @@ class PerformanceTarget(BaseModel):
     target_outputs_90d: float = Field(gt=0)
     target_avg_effort_hours: float = Field(gt=0)
     minimum_confidence: float = Field(default=0.70, ge=0, le=1)
+    source_version: int | None = Field(default=None, ge=0)
+    source_updated_at: datetime | None = None
 
 
 class WorkOutputEvidence(BaseModel):
@@ -28,6 +32,8 @@ class WorkOutputEvidence(BaseModel):
     actual_effort_hours: float | None = Field(default=None, gt=0)
     verification_status: str
     evidence_link: str | None = None
+    source_version: int | None = Field(default=None, ge=0)
+    source_updated_at: datetime | None = None
 
 
 class AttendanceComplianceEvidence(BaseModel):
@@ -43,6 +49,8 @@ class AttendanceComplianceEvidence(BaseModel):
     scheduled_end: time | None = None
     actual_end: time | None = None
     confidence_score: float = Field(ge=0, le=1)
+    source_version: int | None = Field(default=None, ge=0)
+    source_updated_at: datetime | None = None
 
 
 class SubmissionComplianceEvidence(BaseModel):
@@ -53,6 +61,8 @@ class SubmissionComplianceEvidence(BaseModel):
     outcome: str
     completeness_ratio: float = Field(ge=0, le=1)
     verification_status: str
+    source_version: int | None = Field(default=None, ge=0)
+    source_updated_at: datetime | None = None
 
 
 class LeaveComplianceEvidence(BaseModel):
@@ -63,6 +73,8 @@ class LeaveComplianceEvidence(BaseModel):
     end_date: date
     outcome: str
     documentation_complete: bool
+    source_version: int | None = Field(default=None, ge=0)
+    source_updated_at: datetime | None = None
 
 
 class QualityEvidence(BaseModel):
@@ -74,6 +86,8 @@ class QualityEvidence(BaseModel):
     first_pass_approved: bool
     rework_hours: float = Field(ge=0)
     verification_status: str
+    source_version: int | None = Field(default=None, ge=0)
+    source_updated_at: datetime | None = None
 
 
 class PerformanceEvidenceDataset(BaseModel):

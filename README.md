@@ -5,20 +5,26 @@ It ingests CSV/Excel uploads or JSON tables, gives a bounded catalog synopsis to
 for KPI-family classification and calculator planning, validates the bound records, and calculates employee Productivity,
 Compliance, and Quality scores deterministically in Python.
 
-`POST /api/v1/analyze-tables` persists unfiltered JSON requests, validated mapping plans, and
-complete dashboard responses in SQLite. `GET /api/v1/dashboard` restores the latest completed
-analysis or recalculates its employee, team, and date-filtered view in Python.
+`POST /api/v1/analyze-tables` ingests incremental JSON upsert batches, retains their raw requests
+and audit analyses, and publishes canonical evidence in SQLite. `GET /api/v1/dashboard` combines
+all current canonical records and recalculates its employee, team, or period-filtered view in
+Python.
+
+The first KPI-bearing JSON submission must include employee and performance-target tables. Once
+those foundations are canonical, later submissions may contain only new evidence tables. For
+example, a quality-review-only batch can join stored employees by `employee_id`; it does not need
+to repeat the employee or target tables.
 
 The frontend lives in `web/` and uses Vue 3, TypeScript, Vite, Tailwind CSS v4, and
 shadcn-vue. The backend remains authoritative for validation, KPI calculations, evidence
 confidence, and trend calculations.
 
-The browser client opens the latest persisted analysis and provides employee, team, and
-reporting-period filters backed by API requests;
-summary KPIs; sortable, paginated employee results with alert counts; weekly KPI trends; and a
+The browser client opens the aggregated persisted analysis and provides employee, team, and
+backend-resolved reporting-period filters backed by API requests; backend-calculated summary KPIs;
+sortable, paginated employee results with alert counts; weekly KPI trends; and a
 responsive employee detail sheet containing traceable alerts and on-demand AI guidance. A
-data-interpretation card and detail sheet show each table's KPI classification, confidence,
-selected calculator, and validated source-column bindings.
+data-interpretation card and detail sheet group each contributing schema's KPI classifications,
+confidence, selected calculators, and validated source-column bindings.
 The backend has no authentication/session layer. The frontend no longer includes upload or
 sample-data entry cards; use Postman or a webhook to submit JSON tables, then refresh the frontend.
 
@@ -111,9 +117,40 @@ dependencies, and `library-skills` discovers skills bundled by those installed p
 | `GET` | `/api/v1/health` | Liveness and whether AI is configured |
 | `POST` | `/api/v1/ask` | Test the configured model with a plain prompt |
 | `POST` | `/api/v1/analyze` | Upload, classify, validate, and analyze CSV/XLSX performance data |
-| `POST` | `/api/v1/analyze-tables` | Analyze JSON tables and persist an unfiltered canonical submission |
-| `GET` | `/api/v1/dashboard` | Load the latest persisted dashboard or a backend-filtered view |
+| `POST` | `/api/v1/analyze-tables` | Ingest an incremental JSON batch and return a `201` submission receipt |
+| `GET` | `/api/v1/dashboard` | Recalculate the combined canonical dashboard or a backend-filtered view |
 | `POST` | `/api/v1/insights` | Generate optional guidance for one employee from the temporary validated analysis context |
+
+Send webhook retries with a stable deployment-wide idempotency key:
+
+```http
+POST /api/v1/analyze-tables
+Idempotency-Key: payroll-export-2026-09-02
+Content-Type: application/json
+```
+
+A successful synchronous ingestion returns `201 Created`:
+
+```json
+{
+  "submission_id": "4d5c0d52-0000-4000-8000-000000000000",
+  "status": "completed",
+  "received_at": "2026-09-02T08:30:00Z",
+  "coverage_start": "2026-09-01",
+  "coverage_end": "2026-09-02"
+}
+```
+
+Dashboard filters always trigger one backend recalculation. Use `period_weeks=4`, `8`, or `12`,
+or explicit inclusive dates, but not both:
+
+```http
+GET /api/v1/dashboard?team=Operations&period_weeks=4
+```
+
+Mapping caches store only validated semantic bindings. A cache hit can avoid an LLM request, but
+every accepted submission is still written to SQLite and every dashboard request still rebuilds,
+filters, validates, and calculates the current canonical dataset in Python.
 
 ## Development guide
 

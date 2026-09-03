@@ -52,6 +52,7 @@ from app.schemas.uploads import (
 )
 from app.schemas.tables import AnalyzeTablesRequest
 from app.services import catalog
+from app.services.aggregation import canonicalize_batch
 from app.services.datasets import build_performance_dataset
 from app.services.imports import parse_upload
 from app.services.performance import (
@@ -77,7 +78,8 @@ forced into a role. Source column names do not need to match normalized field na
 semantically equivalent fields, such as target_projects_90d to target_outputs_90d and
 target_avg_hours to target_avg_effort_hours. Return lower confidence when semantics are ambiguous. Bind optional
 validation and calculation fields whenever supported. For attendance, bind scheduled_start,
-actual_start, lunch_out, lunch_in, scheduled_end, and actual_end when those columns exist. Do not calculate,
+actual_start, lunch_out, lunch_in, scheduled_end, and actual_end when those columns exist. Bind
+source_version and source_updated_at when those ordering fields are present. Do not calculate,
 validate source records, invent values, provide rationales, or explain scores. Python derives
 selected tables and display rationales. Column signals are mechanically derived hints, not
 business conclusions. Return only the compact structured output.
@@ -114,6 +116,14 @@ class InsightEmployeeContext:
 class CachedInsightContext:
     created_at: datetime
     employees: dict[str, InsightEmployeeContext]
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisArtifacts:
+    schema_fingerprint: str
+    calculation_plan: CalculationPlan
+    performance_dataset: PerformanceEvidenceDataset
+    response: AnalysisResponse
 
 
 _insight_context_cache: OrderedDict[str, CachedInsightContext] = OrderedDict()
@@ -192,7 +202,28 @@ async def analyze_tables(
     calculation_plan: CalculationPlan | None = None,
 ) -> AnalysisResponse:
     """Analyze validated JSON tables through the shared catalog workflow."""
-    return await analyze_catalog(
+    artifacts = await analyze_tables_artifacts(
+        request,
+        employee_id=employee_id,
+        team=team,
+        start_date=start_date,
+        end_date=end_date,
+        calculation_plan=calculation_plan,
+    )
+    return artifacts.response
+
+
+async def analyze_tables_artifacts(
+    request: AnalyzeTablesRequest,
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    calculation_plan: CalculationPlan | None = None,
+    available_foundation_calculators: set[str] | None = None,
+) -> AnalysisArtifacts:
+    """Return validated ingestion artifacts and the deterministic batch analysis."""
+    return await analyze_catalog_artifacts(
         catalog_from_tables(request),
         import_issues=[],
         employee_id=employee_id,
@@ -200,6 +231,8 @@ async def analyze_tables(
         start_date=start_date,
         end_date=end_date,
         calculation_plan=calculation_plan,
+        canonicalize_batch_records=True,
+        available_foundation_calculators=available_foundation_calculators,
     )
 
 
@@ -213,10 +246,34 @@ async def analyze_catalog(
     calculation_plan: CalculationPlan | None = None,
 ) -> AnalysisResponse:
     """Classify and calculate a transport-neutral source catalog."""
+    artifacts = await analyze_catalog_artifacts(
+        source_catalog,
+        import_issues,
+        employee_id=employee_id,
+        team=team,
+        start_date=start_date,
+        end_date=end_date,
+        calculation_plan=calculation_plan,
+    )
+    return artifacts.response
+
+
+async def analyze_catalog_artifacts(
+    source_catalog: DataCatalog,
+    import_issues: list[ImportIssue],
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    calculation_plan: CalculationPlan | None = None,
+    canonicalize_batch_records: bool = False,
+    available_foundation_calculators: set[str] | None = None,
+) -> AnalysisArtifacts:
+    """Resolve a plan, bind canonical evidence, and construct a deterministic response."""
     if start_date and end_date and start_date > end_date:
         raise InvalidAnalysisFilterError("start_date must be on or before end_date.")
     workbook_context = _build_workbook_context(source_catalog)
-    schema_fingerprint = _schema_fingerprint(source_catalog)
+    schema_fingerprint = catalog_schema_fingerprint(source_catalog)
     analysis = (
         calculation_plan.model_copy(deep=True)
         if calculation_plan is not None
@@ -227,6 +284,7 @@ async def analyze_catalog(
         for validation in catalog.validate_classifications(
             source_catalog,
             analysis.table_classifications,
+            available_foundation_calculators=available_foundation_calculators,
         )
     ):
         analysis = None
@@ -245,6 +303,7 @@ async def analyze_catalog(
                 for validation in catalog.validate_classifications(
                     source_catalog,
                     analysis.table_classifications,
+                    available_foundation_calculators=available_foundation_calculators,
                 )
                 if not validation.valid
             ]
@@ -268,6 +327,7 @@ async def analyze_catalog(
         final_validations = catalog.validate_classifications(
             source_catalog,
             analysis.table_classifications,
+            available_foundation_calculators=available_foundation_calculators,
         )
         invalid_final_validations = [
             validation for validation in final_validations if not validation.valid
@@ -282,7 +342,54 @@ async def analyze_catalog(
         source_catalog,
         analysis.table_classifications,
     )
-    validation_findings = validate_dataset(performance_dataset)
+    batch_findings: list[ValidationFinding] = []
+    if canonicalize_batch_records:
+        performance_dataset, batch_findings = canonicalize_batch(performance_dataset)
+    all_import_issues = [*import_issues, *mapping_issues]
+    response = build_analysis_response(
+        performance_dataset,
+        analysis,
+        import_issues=all_import_issues,
+        employee_id=employee_id,
+        team=team,
+        start_date=start_date,
+        end_date=end_date,
+        additional_validation_findings=batch_findings,
+        model=get_settings().openai_model,
+        total_tokens=usage.total_tokens,
+        model_requests=usage.requests,
+        mapping_cache_hit=mapping_cache_hit,
+    )
+    return AnalysisArtifacts(
+        schema_fingerprint=schema_fingerprint,
+        calculation_plan=analysis,
+        performance_dataset=performance_dataset,
+        response=response,
+    )
+
+
+def build_analysis_response(
+    performance_dataset: PerformanceEvidenceDataset,
+    analysis: CalculationPlan,
+    import_issues: list[ImportIssue],
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    period_weeks: int | None = None,
+    additional_validation_findings: list[ValidationFinding] | None = None,
+    additional_limitations: list[str] | None = None,
+    limitation_classifications: list[TableClassification] | None = None,
+    model: str | None = None,
+    total_tokens: int = 0,
+    model_requests: int = 0,
+    mapping_cache_hit: bool = True,
+) -> AnalysisResponse:
+    """Construct one deterministic response from a validated evidence dataset."""
+    validation_findings = [
+        *validate_dataset(performance_dataset),
+        *(additional_validation_findings or []),
+    ]
     overview = inspect_dataset(performance_dataset)
     available_teams = overview.teams
     if team and team.casefold() not in {value.casefold() for value in available_teams}:
@@ -305,7 +412,6 @@ async def analyze_catalog(
         end_date=effective_end,
         validation_findings=validation_findings,
     )
-    import_issues = [*import_issues, *mapping_issues]
     result_employee_ids = {kpi.employee_id for kpi in kpi_results}
     employee_by_id = {
         employee.employee_id: employee for employee in performance_dataset.employees
@@ -321,6 +427,8 @@ async def analyze_catalog(
         if (
             finding.employee_id in result_employee_ids
             and (
+                finding.scoring_impact == "blocks_score"
+                or
                 not finding.record_ids
                 or bool(set(finding.record_ids) & included_record_ids)
             )
@@ -374,10 +482,11 @@ async def analyze_catalog(
     )
     limitations = _build_limitations(
         performance_dataset,
-        analysis.table_classifications,
+        limitation_classifications or analysis.table_classifications,
         import_issues,
         scoped_findings,
     )
+    limitations.extend(additional_limitations or [])
     analysis_id = _cache_insight_context(employee_results)
 
     return AnalysisResponse(
@@ -388,8 +497,9 @@ async def analyze_catalog(
         applied_filters=AnalysisFilters(
             employee_id=employee_id,
             team=team,
-            start_date=start_date or overview.date_start,
-            end_date=end_date or overview.date_end,
+            start_date=effective_start or overview.date_start,
+            end_date=effective_end or overview.date_end,
+            period_weeks=period_weeks,
         ),
         available_teams=available_teams,
         trends=calculate_weekly_kpi_trends(
@@ -410,9 +520,9 @@ async def analyze_catalog(
         selected_tables=analysis.selected_tables,
         table_classifications=analysis.table_classifications,
         limitations=limitations,
-        model=get_settings().openai_model,
-        total_tokens=usage.total_tokens,
-        model_requests=usage.requests,
+        model=model or get_settings().openai_model,
+        total_tokens=total_tokens,
+        model_requests=model_requests,
         mapping_cache_hit=mapping_cache_hit,
     )
 
@@ -442,6 +552,11 @@ def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
     total_count = len(kpi_results)
     insufficient_count = len(insufficient_ids)
     scored_count = total_count - insufficient_count
+    scored_overall = [
+        result.overall_score
+        for result in kpi_results
+        if result.overall_score is not None
+    ]
     narrative = (
         f"Analyzed {total_count} employees. {scored_count} received an overall "
         f"performance result; {insufficient_count} were marked Insufficient data "
@@ -453,8 +568,22 @@ def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
         insufficient_data_count=insufficient_count,
         insufficient_data_employee_ids=insufficient_ids,
         performance_tier_counts=dict(sorted(tier_counts.items())),
+        average_overall_score=_average(scored_overall),
+        average_productivity_score=_average(
+            [result.productivity_score for result in kpi_results]
+        ),
+        average_compliance_score=_average(
+            [result.compliance_score for result in kpi_results]
+        ),
+        average_quality_score=_average(
+            [result.quality_score for result in kpi_results]
+        ),
         narrative=narrative,
     )
+
+
+def _average(values: list[float]) -> float | None:
+    return round(sum(values) / len(values), 2) if values else None
 
 
 def _build_insight_context(
@@ -912,7 +1041,7 @@ def _is_sensitive_example_column(column_name: str) -> bool:
     return any(marker in normalized for marker in sensitive_markers)
 
 
-def _schema_fingerprint(
+def catalog_schema_fingerprint(
     upload_catalog: DataCatalog,
 ) -> str:
     schema_only = {

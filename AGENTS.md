@@ -158,7 +158,8 @@ tracker/
 │   ├── handover.md           # reproducible acceptance-test handover
 │   └── persistence.md        # SQLite, dashboard, filtering, and Railway deployment flow
 ├── migrations/
-│   └── 001_initial.sql       # submissions, mapping plans, and analysis snapshots
+│   ├── 001_initial.sql       # submissions, mapping plans, and analysis snapshots
+│   └── 002_aggregated_evidence.sql # idempotency, plan snapshots, canonical current state
 ├── storage/                  # ignored local SQLite files; only .gitkeep is committed
 ├── pyproject.toml            # deps + build config
 ├── uv.lock                   # Python dependency lock
@@ -175,6 +176,7 @@ tracker/
 │   │   └── uploads.py        # catalog, upload, and analysis response models
 │   ├── services/             # all business logic lives here
 │   │   ├── agent.py          # PydanticAI classification/planning agent + analysis workflow
+│   │   ├── aggregation.py    # canonical merge, serialization, and materialization
 │   │   ├── imports.py        # mechanical upload parsing and inspection
 │   │   ├── performance.py    # validation and deterministic KPI calculations
 │   │   ├── submissions.py    # canonical submission writes and persisted dashboard reads
@@ -279,11 +281,17 @@ classifications to be overwritten. Calculation services may process complete sel
 in Python without sending the source rows to the model.
 
 **Current implementation boundary:** `/analyze` remains a request-scoped upload workflow.
-`/analyze-tables` performs the same validated analysis and persists unfiltered JSON requests,
-calculation plans, and responses. `/dashboard` restores the latest completed snapshot or
-recalculates a filtered view from its stored request and plan. Both analysis paths build the
+`/analyze-tables` treats each validated JSON request as an incremental upsert batch, preserves its
+raw request and audit analysis, publishes canonical current-state evidence, and returns a typed
+submission receipt. `/dashboard` combines canonical records from all contributing completed
+submissions and recalculates every filtered view. Both analysis paths build the
 generic evidence dataset, run deterministic source-data validation, and calculate KPI scores,
 evidence confidence, gated overall scores, and tiers.
+The first JSON submission that invokes KPI calculators must provide both employee and performance-
+target foundations. Later partial submissions may contain only new KPI evidence: plan validation
+can satisfy those two foundation requirements from completed canonical `employee` and
+`performance_target` records already in SQLite. The combined dashboard still reports unknown
+employee IDs, missing targets, and missing evidence deterministically.
 The response contains employee-specific findings, supporting record IDs, a validation
 summary, unmatched/global findings, KPI results, applied filters, deterministic weekly trends,
 and a deterministic summary derived from the final results; it does not return parsed source
@@ -293,11 +301,12 @@ guidance for one employee, and Python rejects employee or record citations that 
 validate. The Vue client presents employee results with alert counts and sorting, KPI trends,
 and a responsive employee detail sheet containing traceable alerts and on-demand AI guidance.
 The dashboard also exposes a compact data-interpretation summary and detail sheet for table
-classifications, confidence, approved calculator invocations, and field bindings. The Vue app
-opens the persisted dashboard directly; the upload and sample-data entry cards have been removed
-from the frontend.
-Phases 2 through 5 are complete, with the documented EMP-027/EMP-029 benchmark exception described in
-`docs/benchmark.md`.
+classifications, confidence, approved calculator invocations, and field bindings grouped by
+contributing schema. The Vue app opens the aggregated persisted dashboard directly; the upload
+and sample-data entry cards have been removed from the frontend. Week presets are resolved by
+the backend against the latest business date in canonical evidence.
+The incremental multi-submission aggregation plan is implemented, with the documented
+EMP-027/EMP-029 benchmark exception described in `docs/benchmark.md`.
 
 ---
 
@@ -311,11 +320,18 @@ calculator invocations and bindings; it has no row-access or calculation tools i
 Python validates the returned plan and makes one targeted repair request with safe per-column
 examples only when structural validation fails. Validated plans are cached in memory by a
 schema-only fingerprint so repeated recognized layouts can skip the model while the server
-process remains running. Canonical JSON analyses also store the plan in SQLite; filtered
-`/dashboard` reads reuse that persisted plan after restarts without calling the mapping model. Full record
+process remains running. Canonical JSON ingestions store both the reusable plan and an immutable
+per-submission plan snapshot in SQLite. Aggregated `/dashboard` reads materialize validated
+canonical evidence directly and never call the mapping model. Full record
 validation and calculations run deterministically in Python. A bounded on-demand explanation
 request may receive one employee's result status and validated findings, but never raw source
 rows or complete KPI calculation inputs.
+
+A mapping-cache hit skips only semantic classification. It never skips submission persistence,
+canonical upserts, record validation, duplicate handling, or deterministic KPI calculation.
+Without an idempotency key, identical requests are separate audited submissions even when they
+reuse one mapping plan. A smaller unseen schema may also be faster on a cache miss because its
+catalog synopsis, token usage, binding work, and canonical write set are smaller.
 
 After Python validates an agent-proposed classification and calculator plan, the deterministic service uses
 `validate_dataset`, `calculate_kpis`, `get_supporting_evidence`, and
@@ -386,8 +402,8 @@ Current endpoints:
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
 | `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
 | `POST` | `/api/v1/analyze` | upload, classify, validate, and return employee KPI results with findings |
-| `POST` | `/api/v1/analyze-tables` | classify JSON tables and persist an unfiltered canonical submission |
-| `GET` | `/api/v1/dashboard` | return the latest persisted dashboard or recalculate its filtered view |
+| `POST` | `/api/v1/analyze-tables` | ingest an incremental JSON upsert batch and return a `201` receipt |
+| `GET` | `/api/v1/dashboard` | recalculate the aggregated canonical dashboard with optional filters |
 | `POST` | `/api/v1/insights` | generate on-demand guidance for one employee from a temporary analysis context |
 
 ---
@@ -395,17 +411,24 @@ Current endpoints:
 ## 9. Persistence
 
 Unfiltered JSON submissions sent to `/analyze-tables` are durably stored in local SQLite. The
-database keeps the complete validated request, validated calculation plan, and complete canonical
-`AnalysisResponse`. `/dashboard` returns the latest completed snapshot; filtered dashboard reads
-recalculate from its request with the persisted plan and deterministic Python calculators.
+database keeps every complete request, an immutable calculation-plan snapshot, the audit
+`AnalysisResponse`, and one current canonical version per `(record_type, record_id)`.
+`/dashboard` materializes those canonical records into one `PerformanceEvidenceDataset` and
+recalculates with deterministic Python calculators. Later records upsert earlier identities;
+omission never deletes a record, and tombstones are not supported.
+Partial KPI batches may reuse canonical employees and performance targets from earlier completed
+submissions; they do not need to repeat those tables. This allowance applies only when both
+foundation record types actually exist in current canonical state. It does not weaken employee-ID,
+target, or evidence validation in the aggregated dashboard.
 
 The default path is `storage/tracker.sqlite3`, configurable with `DATABASE_PATH`. Keep SQLite on
 local disk. Railway production requires a Volume mounted at `/data` and
 `DATABASE_PATH=/data/tracker.sqlite3`; a Railway variable alone does not provide persistence.
-Migrations live in `migrations/`, and database/WAL files must remain ignored by Git. Repeated
-identical requests are accepted as separate submissions; the mapping cache reuses only semantic
-bindings and never skips validation or KPI calculation. See `docs/persistence.md` for the full
-request lifecycle, Railway setup, cache boundaries, and cross-submission history boundary.
+Migrations live in `migrations/`, and database/WAL files must remain ignored by Git. An optional
+deployment-wide `Idempotency-Key` prevents whole-request replays. Overlapping batches remain safe
+because stable record identities are atomic SQLite upserts. Source versions or source update
+timestamps take precedence, with completion time used only when neither is provided. See
+`docs/persistence.md` for the full request lifecycle and Railway setup.
 
 Uploads through `/analyze` remain request-scoped and are not persisted. Insight contexts remain
 in a bounded 15-minute in-memory cache; `/dashboard` creates a fresh context when it restores a
@@ -456,5 +479,5 @@ snapshot.
 
 ## 12. Deliberately out of scope for now
 
-Backend authentication/multi-tenancy, background jobs, cross-submission historical aggregation, PDF export,
-streaming AI responses, and rate limiting.
+Backend authentication/multi-tenancy, background jobs, tombstone/delete events, authoritative
+period snapshots, PDF export, streaming AI responses, and rate limiting.

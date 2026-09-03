@@ -1,20 +1,21 @@
 from datetime import date
 
-from fastapi import APIRouter, UploadFile
+from fastapi import APIRouter, Header, UploadFile, status
 
 from app.core.config import get_settings
 from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
     AIInsightRequest,
     AIInsightResponse,
-    AnalysisResponse,
     AnalyzeUploadResponse,
+    DashboardResponse,
+    SubmissionReceipt,
 )
 from app.services.agent import (
     analyze_upload,
     generate_employee_insight,
 )
-from app.services.submissions import analyze_and_store_tables, get_latest_dashboard
+from app.services.submissions import analyze_and_store_tables, get_aggregated_dashboard
 
 router = APIRouter(tags=["agent"])
 
@@ -45,33 +46,33 @@ async def analyze_agent(
     )
 
 
-@router.post("/analyze-tables", response_model=AnalysisResponse)
+@router.post(
+    "/analyze-tables",
+    response_model=SubmissionReceipt,
+    status_code=status.HTTP_201_CREATED,
+)
 async def analyze_table_data(
     request: AnalyzeTablesRequest,
-    employee_id: str | None = None,
-    team: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-) -> AnalysisResponse:
+    idempotency_key: str | None = Header(default=None, min_length=1, max_length=200),
+) -> SubmissionReceipt:
     return await analyze_and_store_tables(
         request,
-        employee_id=employee_id,
-        team=team,
-        start_date=start_date,
-        end_date=end_date,
+        idempotency_key=idempotency_key,
     )
 
 
-@router.get("/dashboard", response_model=AnalysisResponse)
+@router.get("/dashboard", response_model=DashboardResponse)
 async def latest_dashboard(
     employee_id: str | None = None,
     team: str | None = None,
+    period_weeks: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
-) -> AnalysisResponse:
-    return await get_latest_dashboard(
+) -> DashboardResponse:
+    return await get_aggregated_dashboard(
         employee_id=employee_id,
         team=team,
+        period_weeks=period_weeks,
         start_date=start_date,
         end_date=end_date,
     )

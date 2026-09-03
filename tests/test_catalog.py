@@ -78,6 +78,16 @@ class CalculationPlanValidationTests(TestCase):
             ["load_employees", "load_performance_targets"],
         )
 
+        persisted_foundation_validations = validate_classifications(
+            catalog,
+            classifications,
+            available_foundation_calculators={
+                "load_employees",
+                "load_performance_targets",
+            },
+        )
+        self.assertTrue(all(item.valid for item in persisted_foundation_validations))
+
     def test_agent_plan_expansion_derives_non_scoring_fields(self) -> None:
         expanded = _expand_agent_plan(
             AgentCalculationPlan(

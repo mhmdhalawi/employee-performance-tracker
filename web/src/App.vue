@@ -14,13 +14,13 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import LoginScreen from '@/components/auth/LoginScreen.vue'
 import PerformanceDashboard from '@/components/dashboard/PerformanceDashboard.vue'
-import type { AnalyzeResponse, DashboardFilters, ErrorPayload } from '@/types/analysis'
+import type { DashboardFilters, DashboardResponse, ErrorPayload } from '@/types/analysis'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 const isAuth = ref<boolean | undefined>(undefined)
 const dashboardRequestError = ref('')
-const analysis = ref<AnalyzeResponse | null>(null)
+const analysis = ref<DashboardResponse | null>(null)
 const isSubmitting = ref(false)
 const isFiltering = ref(false)
 const filterError = ref('')
@@ -70,13 +70,7 @@ async function requestStoredDashboard(
     if (sequence !== requestSequence)
       return
 
-    const result = await response.json() as AnalyzeResponse
-    analysis.value = {
-      ...result,
-      file_name: 'Latest stored submission',
-      file_type: 'json',
-      byte_size: 0,
-    }
+    analysis.value = await response.json() as DashboardResponse
   }
   catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError')

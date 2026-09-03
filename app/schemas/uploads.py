@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
@@ -194,6 +194,10 @@ class AnalysisSummary(BaseModel):
     insufficient_data_count: int = Field(ge=0)
     insufficient_data_employee_ids: list[str]
     performance_tier_counts: dict[str, int]
+    average_overall_score: float | None = None
+    average_productivity_score: float | None = None
+    average_compliance_score: float | None = None
+    average_quality_score: float | None = None
     narrative: str
 
 
@@ -202,6 +206,28 @@ class AnalysisFilters(BaseModel):
     team: str | None = None
     start_date: date | None = None
     end_date: date | None = None
+    period_weeks: Literal[4, 8, 12] | None = None
+
+
+class SubmissionReceipt(BaseModel):
+    submission_id: str
+    status: Literal["pending", "completed", "failed"]
+    received_at: datetime
+    coverage_start: date | None = None
+    coverage_end: date | None = None
+
+
+class EmployeeFilterOption(BaseModel):
+    employee_id: str
+    employee_name: str | None = None
+    team: str | None = None
+
+
+class SchemaMappingSummary(BaseModel):
+    schema_fingerprint: str
+    included_submission_count: int = Field(ge=1)
+    selected_tables: list[str]
+    table_classifications: list[TableClassification]
 
 
 class AIInsightStatement(BaseModel):
@@ -246,6 +272,27 @@ class AnalysisResponse(BaseModel):
     total_tokens: int
     model_requests: int
     mapping_cache_hit: bool
+
+
+class DashboardResponse(BaseModel):
+    analysis_id: str
+    results: list[EmployeeKpiScores]
+    summary: AnalysisSummary
+    dataset_overview: DatasetOverview
+    applied_filters: AnalysisFilters
+    available_employees: list[EmployeeFilterOption]
+    available_teams: list[str]
+    trends: list[KpiTrendPoint]
+    alerts: list[PerformanceAlert]
+    import_issues: list[ImportIssue]
+    validation_summary: ValidationSummary
+    global_validation_findings: list[ValidationFinding]
+    limitations: list[str]
+    coverage_start: date | None
+    coverage_end: date | None
+    included_submission_count: int = Field(ge=1)
+    latest_submission_at: datetime
+    mapping_summaries: list[SchemaMappingSummary]
 
 
 class AnalyzeUploadResponse(AnalysisResponse):

@@ -5,11 +5,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { TableClassification } from '@/types/analysis'
+import type { SchemaMappingSummary, TableClassification } from '@/types/analysis'
 
 defineProps<{
-  classifications: TableClassification[]
-  fileName: string
+  mappingSummaries: SchemaMappingSummary[]
 }>()
 const emit = defineEmits<{
   back: []
@@ -69,13 +68,13 @@ function familyStyle(family: string): CSSProperties | undefined {
           <ArrowLeftIcon data-icon="inline-start" />
           Back to dashboard
         </Button>
-        <Badge variant="outline">{{ classifications.length }} source tables</Badge>
+        <Badge variant="outline">{{ mappingSummaries.length }} source schema{{ mappingSummaries.length === 1 ? '' : 's' }}</Badge>
       </div>
     </header>
 
     <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       <header class="flex flex-col gap-2">
-        <p class="text-sm font-medium text-muted-foreground">{{ fileName }}</p>
+        <p class="text-sm font-medium text-muted-foreground">Combined canonical evidence</p>
         <h1 class="flex items-center gap-2 text-3xl font-semibold tracking-tight">
           <DatabaseIcon aria-hidden="true" />
           Data interpretation
@@ -85,8 +84,16 @@ function familyStyle(family: string): CSSProperties | undefined {
         </p>
       </header>
 
-      <section aria-label="Interpreted source tables" class="columns-1 gap-6 lg:columns-2">
-        <Card v-for="item in classifications" :key="item.source_name" class="mb-6 inline-block w-full break-inside-avoid">
+      <section v-for="summary in mappingSummaries" :key="summary.schema_fingerprint" class="flex flex-col gap-4" aria-label="Interpreted source schema">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="min-w-0">
+            <h2 class="font-semibold">Schema {{ summary.schema_fingerprint.slice(0, 12) }}</h2>
+            <p class="text-sm text-muted-foreground">{{ summary.included_submission_count }} contributing submission{{ summary.included_submission_count === 1 ? '' : 's' }}</p>
+          </div>
+          <Badge variant="secondary">{{ summary.table_classifications.length }} tables</Badge>
+        </div>
+        <div class="columns-1 gap-6 lg:columns-2">
+        <Card v-for="item in summary.table_classifications" :key="item.source_name" class="mb-6 inline-block w-full break-inside-avoid">
           <CardHeader>
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
@@ -129,6 +136,7 @@ function familyStyle(family: string): CSSProperties | undefined {
             </p>
           </CardContent>
         </Card>
+        </div>
       </section>
     </div>
   </main>

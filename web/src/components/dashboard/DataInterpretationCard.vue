@@ -5,19 +5,20 @@ import { ArrowRightIcon, DatabaseIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import type { TableClassification } from '@/types/analysis'
+import type { SchemaMappingSummary } from '@/types/analysis'
 
 const props = defineProps<{
-  classifications: TableClassification[]
+  mappingSummaries: SchemaMappingSummary[]
 }>()
 const emit = defineEmits<{
   viewDetails: []
 }>()
 
-const relevant = computed(() => props.classifications.filter(item =>
+const classifications = computed(() => props.mappingSummaries.flatMap(item => item.table_classifications))
+const relevant = computed(() => classifications.value.filter(item =>
   item.kpi_family !== 'irrelevant' && item.kpi_family !== 'unsupported',
 ))
-const needsAttention = computed(() => props.classifications.filter(item =>
+const needsAttention = computed(() => classifications.value.filter(item =>
   item.kpi_family === 'unsupported' || item.confidence !== 'high',
 ))
 
@@ -77,7 +78,7 @@ function familyStyle(family: string): CSSProperties | undefined {
 
     <CardContent class="flex flex-col gap-4">
       <div class="flex flex-wrap gap-2">
-        <Badge v-for="item in relevant" :key="item.source_name" :variant="familyVariant(item.kpi_family)" :style="familyStyle(item.kpi_family)">
+        <Badge v-for="(item, index) in relevant" :key="`${item.source_name}-${index}`" :variant="familyVariant(item.kpi_family)" :style="familyStyle(item.kpi_family)">
           {{ item.source_name }} · {{ familyLabel(item.kpi_family) }}
         </Badge>
       </div>
@@ -86,7 +87,7 @@ function familyStyle(family: string): CSSProperties | undefined {
         <p>{{ needsAttention.length }} table{{ needsAttention.length === 1 ? '' : 's' }} need review because classification confidence is below high or the evidence is unsupported.</p>
       </div>
       <p v-else class="text-sm text-muted-foreground">
-        {{ relevant.length }} relevant tables were matched to approved calculation inputs with high confidence.
+        {{ relevant.length }} relevant tables across {{ mappingSummaries.length }} schema{{ mappingSummaries.length === 1 ? '' : 's' }} were matched to approved calculation inputs with high confidence.
       </p>
     </CardContent>
   </Card>

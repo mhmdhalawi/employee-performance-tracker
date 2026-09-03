@@ -24,12 +24,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import DataInterpretationPage from '@/components/dashboard/DataInterpretationPage.vue'
 import EmployeeDetailPage from '@/components/dashboard/EmployeeDetailPage.vue'
 import DataInterpretationCard from '@/components/dashboard/DataInterpretationCard.vue'
-import type { AIInsightResponse, AnalyzeResponse, DashboardFilters, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload } from '@/types/analysis'
+import type { AIInsightResponse, DashboardFilters, DashboardResponse, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload } from '@/types/analysis'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 
 const props = defineProps<{
-  analysis: AnalyzeResponse
+  analysis: DashboardResponse
   isFiltering?: boolean
   filterError?: string
 }>()
@@ -44,7 +44,6 @@ const currentPage = ref(1)
 const pageSize = ref('10')
 const sortKey = ref<'name' | 'performance' | null>(null)
 const sortDirection = ref<'asc' | 'desc'>('asc')
-const allEmployeeOptions = ref<EmployeeKpiResult[]>(props.analysis.results)
 const insightsByEmployee = ref<Record<string, EmployeeAIInsight>>({})
 const insightLoadingEmployeeId = ref<string | null>(null)
 const insightError = ref('')
@@ -53,13 +52,10 @@ const dataInterpretationOpen = ref(readDataInterpretationFromUrl())
 let filterTimer: number | undefined
 let dashboardScrollY = 0
 
-const employeeOptions = computed(() => allEmployeeOptions.value.filter(row =>
+const employeeOptions = computed(() => props.analysis.available_employees.filter(row =>
   team.value === 'all' || row.team === team.value,
 ))
-const filteredRows = computed(() => props.analysis.results.filter(row =>
-  (employee.value === 'all' || row.employee_id === employee.value)
-  && (team.value === 'all' || row.team === team.value),
-))
+const filteredRows = computed(() => props.analysis.results)
 const sortedRows = computed(() => {
   if (!sortKey.value)
     return filteredRows.value
@@ -92,18 +88,11 @@ const lastVisibleRow = computed(() => Math.min(
   currentPage.value * numericPageSize.value,
   filteredRows.value.length,
 ))
-const scoredRows = computed(() => filteredRows.value.filter(row => row.overall_score !== null))
-const averages = computed(() => ({
-  overall: average(scoredRows.value.map(row => row.overall_score)),
-  productivity: average(filteredRows.value.map(row => row.productivity_score)),
-  compliance: average(filteredRows.value.map(row => row.compliance_score)),
-  quality: average(filteredRows.value.map(row => row.quality_score)),
-}))
 const summaryCards = computed(() => [
-  { label: 'Overall score', value: averages.value.overall, detail: 'Scored employees only', color: 'var(--primary)' },
-  { label: 'Productivity', value: averages.value.productivity, detail: '35% of overall', color: 'var(--chart-1)' },
-  { label: 'Compliance', value: averages.value.compliance, detail: '30% of overall', color: 'var(--chart-2)' },
-  { label: 'Quality', value: averages.value.quality, detail: '35% of overall', color: 'var(--chart-3)' },
+  { label: 'Overall score', value: props.analysis.summary.average_overall_score, detail: 'Scored employees only', color: 'var(--primary)' },
+  { label: 'Productivity', value: props.analysis.summary.average_productivity_score, detail: '35% of overall', color: 'var(--chart-1)' },
+  { label: 'Compliance', value: props.analysis.summary.average_compliance_score, detail: '30% of overall', color: 'var(--chart-2)' },
+  { label: 'Quality', value: props.analysis.summary.average_quality_score, detail: '35% of overall', color: 'var(--chart-3)' },
 ])
 
 interface DashboardTrendPoint {
@@ -193,30 +182,16 @@ function buildFilters(): DashboardFilters {
     filters.employee_id = employee.value
   if (team.value !== 'all')
     filters.team = team.value
-  if (period.value !== 'full' && props.analysis.dataset_overview.date_end) {
-    const weeks = Number.parseInt(period.value, 10)
-    const end = parseDate(props.analysis.dataset_overview.date_end)
-    const start = new Date(end)
-    start.setUTCDate(start.getUTCDate() - weeks * 7 + 1)
-    const datasetStart = props.analysis.dataset_overview.date_start
-      ? parseDate(props.analysis.dataset_overview.date_start)
-      : start
-    filters.start_date = formatIsoDate(start < datasetStart ? datasetStart : start)
-    filters.end_date = props.analysis.dataset_overview.date_end
-  }
+  if (period.value !== 'full')
+    filters.period_weeks = Number.parseInt(period.value, 10) as 4 | 8 | 12
   return filters
-}
-
-function average(values: Array<number | null>): number | null {
-  const valid = values.filter((value): value is number => value !== null)
-  return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null
 }
 
 function score(value: number | null): string {
   return value === null ? '—' : `${value.toFixed(1)}%`
 }
 
-function employeeLabel(row: EmployeeKpiResult): string {
+function employeeLabel(row: { employee_id: string, employee_name: string | null }): string {
   return row.employee_name || row.employee_id
 }
 
@@ -399,9 +374,6 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(parseDate(value))
 }
 
-function formatIsoDate(value: Date): string {
-  return value.toISOString().slice(0, 10)
-}
 </script>
 
 <template>
@@ -417,8 +389,7 @@ function formatIsoDate(value: Date): string {
   />
   <DataInterpretationPage
     v-else-if="dataInterpretationOpen"
-    :classifications="analysis.table_classifications"
-    :file-name="analysis.file_name"
+    :mapping-summaries="analysis.mapping_summaries"
     @back="closeDataInterpretation"
   />
   <main v-else class="min-h-svh bg-muted/30">
@@ -426,7 +397,7 @@ function formatIsoDate(value: Date): string {
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <div class="flex items-center gap-3">
           <div class="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ShieldCheckIcon class="size-4" aria-hidden="true" /></div>
-          <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis.file_name }}</p></div>
+          <div><p class="font-semibold">Performance dashboard</p><p class="text-xs text-muted-foreground">{{ analysis.included_submission_count }} combined submission{{ analysis.included_submission_count === 1 ? '' : 's' }}</p></div>
         </div>
       </div>
     </header>
@@ -451,7 +422,7 @@ function formatIsoDate(value: Date): string {
       </section>
 
       <DataInterpretationCard
-        :classifications="analysis.table_classifications"
+        :mapping-summaries="analysis.mapping_summaries"
         @view-details="openDataInterpretation"
       />
 

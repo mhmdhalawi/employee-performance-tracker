@@ -2,6 +2,10 @@ export interface AnalysisSummary {
   total_employee_count: number
   scored_employee_count: number
   insufficient_data_count: number
+  average_overall_score: number | null
+  average_productivity_score: number | null
+  average_compliance_score: number | null
+  average_quality_score: number | null
   narrative: string
 }
 
@@ -10,6 +14,7 @@ export interface AnalysisFilters {
   team: string | null
   start_date: string | null
   end_date: string | null
+  period_weeks: 4 | 8 | 12 | null
 }
 
 export interface DatasetOverview {
@@ -104,27 +109,38 @@ export interface DashboardFilters {
   team?: string
   start_date?: string
   end_date?: string
+  period_weeks?: 4 | 8 | 12
 }
 
-export interface AnalyzeResponse {
+export interface EmployeeFilterOption {
+  employee_id: string
+  employee_name: string | null
+  team: string | null
+}
+
+export interface SchemaMappingSummary {
+  schema_fingerprint: string
+  included_submission_count: number
+  selected_tables: string[]
+  table_classifications: TableClassification[]
+}
+
+export interface DashboardResponse {
   analysis_id: string
-  file_name: string
-  file_type: string
-  byte_size: number
   results: EmployeeKpiResult[]
   summary: AnalysisSummary
   dataset_overview: DatasetOverview
   applied_filters: AnalysisFilters
+  available_employees: EmployeeFilterOption[]
   available_teams: string[]
   trends: KpiTrendPoint[]
   alerts: PerformanceAlert[]
   limitations: string[]
-  selected_tables: string[]
-  table_classifications: TableClassification[]
-  model: string | null
-  total_tokens: number
-  model_requests: number
-  mapping_cache_hit: boolean
+  coverage_start: string | null
+  coverage_end: string | null
+  included_submission_count: number
+  latest_submission_at: string
+  mapping_summaries: SchemaMappingSummary[]
 }
 
 export interface TableClassification {

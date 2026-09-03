@@ -108,6 +108,8 @@ def inspect_tables(
 def validate_classifications(
     catalog: DataCatalog,
     classifications: list[TableClassification],
+    *,
+    available_foundation_calculators: set[str] | None = None,
 ) -> list[ClassificationValidation]:
     """Validate the complete table classification and execution plan."""
     validations: list[ClassificationValidation] = []
@@ -159,7 +161,9 @@ def validate_classifications(
         for calculator in invoked_calculators
     ):
         missing_foundations = sorted(
-            {"load_employees", "load_performance_targets"} - invoked_calculators
+            {"load_employees", "load_performance_targets"}
+            - invoked_calculators
+            - (available_foundation_calculators or set())
         )
         if missing_foundations:
             validations.append(
@@ -173,7 +177,7 @@ def validate_classifications(
                     invalid_calculators=[],
                     message=(
                         "A KPI calculation plan requires employee and performance-target "
-                        "loaders before deterministic scoring."
+                        "loaders in the current plan or persisted canonical foundations."
                     ),
                 )
             )
