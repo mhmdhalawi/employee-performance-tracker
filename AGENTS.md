@@ -4,6 +4,11 @@ This file is the primary development guide for the FastAPI backend and Vue web a
 before writing code.
 If something here conflicts with a request, mention the conflict and follow the request.
 
+Read `docs/design.md` before work that changes the frontend's visual design, Cedar branding,
+logo usage, theme tokens, charts, sign-in/loading/error states, or browser-generated PDF
+presentation. It records the current design context and open decisions, but remains a discussion
+draft and does not by itself authorize implementation.
+
 ---
 
 ## 1. What this service does
@@ -155,6 +160,7 @@ tracker/
 ├── docs/
 │   ├── benchmark.md          # stable workbook context and confirmed benchmark exceptions
 │   ├── data-dictionary.md    # normalized deterministic calculator fields and formulas
+│   ├── design.md             # Cedar visual direction, accessibility rules, and open decisions
 │   ├── handover.md           # reproducible acceptance-test handover
 │   └── persistence.md        # SQLite, dashboard, filtering, and Railway deployment flow
 ├── migrations/
