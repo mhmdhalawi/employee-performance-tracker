@@ -142,8 +142,50 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertNotIn("model_usage", body)
         self.assertNotIn("timings", body)
 
+    def test_filtered_upload_persists_full_source_and_audit(self) -> None:
+        import json
+        from base64 import b64decode
+
+        response = self._post_benchmark("?employee_id=EMP-001")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["results"]), 1)
+        dashboard = self.client.get("/api/v1/dashboard")
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(len(dashboard.json()["results"]), 30)
+        with database_connection() as connection:
+            row = connection.execute("SELECT status, request_json FROM submissions").fetchone()
+            audit = connection.execute("SELECT response_json FROM analysis_runs").fetchone()
+        self.assertEqual(row["status"], "completed")
+        source = json.loads(row["request_json"])
+        self.assertTrue(b64decode(source["contents_base64"]).startswith(b"PK"))
+        self.assertEqual(len(json.loads(audit["response_json"])["results"]), 30)
+        first_results = dashboard.json()["results"]
+        agent_service._mapping_cache.clear()
+        with patch.object(agent_service, "_run_mapping_agent", AsyncMock(side_effect=AssertionError("cached plan expected"))):
+            repeated = self.client.post(
+                "/api/v1/analyze",
+                files={"file": ("cedar.xlsx", benchmark_xlsx())},
+            )
+        self.assertEqual(repeated.status_code, 200)
+        self.assertTrue(repeated.json()["mapping_cache_hit"])
+        self.assertEqual(self.client.get("/api/v1/dashboard").json()["results"], first_results)
+
+    def test_failed_upload_does_not_publish_evidence(self) -> None:
+        from app.core.errors import AIError
+
+        with patch.object(agent_service, "_run_mapping_agent", AsyncMock(side_effect=AIError("test failure"))):
+            response = self.client.post(
+                "/api/v1/analyze", files={"file": ("cedar.xlsx", benchmark_xlsx())},
+            )
+        self.assertGreaterEqual(response.status_code, 400)
+        self.assertEqual(self.client.get("/api/v1/dashboard").status_code, 404)
+        with database_connection() as connection:
+            self.assertEqual(connection.execute("SELECT status FROM submissions").fetchone()["status"], "failed")
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM canonical_records").fetchone()[0], 0)
+
     def test_json_tables_match_the_upload_analysis(self) -> None:
-        upload_body = self._post_benchmark().json()
+        self.assertEqual(self._post_benchmark().status_code, 200)
+        upload_body = self.client.get("/api/v1/dashboard").json()
         agent_service._mapping_cache.clear()
         response = self._post_benchmark_tables()
 
@@ -157,7 +199,7 @@ class AnalyzeApiIntegrationTests(TestCase):
             "trends",
         ):
             self.assertEqual(table_body[field], upload_body[field], field)
-        self.assertEqual(table_body["included_submission_count"], 1)
+        self.assertEqual(table_body["included_submission_count"], 2)
         self.assertEqual(len(table_body["mapping_summaries"]), 1)
 
     def test_json_dashboard_supports_existing_filters(self) -> None:

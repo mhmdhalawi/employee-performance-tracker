@@ -143,3 +143,17 @@ DATABASE_PATH=/data/tracker.sqlite3
 The variable alone does not provide persistence. Keep the service at one replica because Railway
 Volumes are single-service storage, and enable Volume backups. If a non-root container receives
 volume permission errors, set `RAILWAY_RUN_UID=0`; otherwise leave it unset.
+
+## File uploads
+
+`POST /api/v1/analyze` also publishes incremental canonical evidence using the same
+SQLite completion transaction as JSON ingestion. It stores the original file as base64,
+file metadata, and the full parsed catalog in the submission JSON, then saves the validated
+plan and unfiltered audit response. CSV and XLSX validation still runs before storage.
+Failed analyses retain a failed submission without publishing evidence.
+
+Uploads keep their `200` analysis response and existing query filters. Those filters only
+limit the returned view; the entire batch is persisted. Persisted foundations and mapping
+plans are reusable across both ingestion endpoints. Repeated uploads create separate audit
+submissions and upsert stable record identities. The upload endpoint does not accept an
+idempotency key; the JSON endpoint retains its existing idempotency behavior.

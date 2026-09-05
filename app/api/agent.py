@@ -12,10 +12,13 @@ from app.schemas.uploads import (
     SubmissionReceipt,
 )
 from app.services.agent import (
-    analyze_upload,
     generate_employee_insight,
 )
-from app.services.submissions import analyze_and_store_tables, get_aggregated_dashboard
+from app.services.submissions import (
+    analyze_and_store_tables,
+    analyze_and_store_upload,
+    get_aggregated_dashboard,
+)
 
 router = APIRouter(tags=["agent"])
 
@@ -35,7 +38,7 @@ async def analyze_agent(
 ) -> AnalyzeUploadResponse:
     settings = get_settings()
     contents = await file.read(settings.upload_max_bytes + 1)
-    return await analyze_upload(
+    return await analyze_and_store_upload(
         file.filename,
         contents,
         settings.upload_max_bytes,

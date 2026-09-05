@@ -13,6 +13,17 @@ draft and does not by itself authorize implementation.
 
 ## 1. What this service does
 
+The core product gives clients two supported ways to supply employee-performance data:
+
+- **Upload a file:** send a CSV or Excel (`.xlsx`) file to `POST /api/v1/analyze`.
+- **Send data directly:** submit JSON tables and rows to `POST /api/v1/analyze-tables`.
+
+Both options run the shared classification, validation, and deterministic calculation workflow,
+persist their submissions and canonical evidence in SQLite, and feed the same aggregated
+dashboard. Clients can use either option or combine them; both use the same record-identity
+and upsert rules. Preserve both ingestion options when evolving the product. The current Vue
+dashboard has no upload or data-entry controls; these two options are available through the API.
+
 A FastAPI backend that:
 
 1. Accepts either a **CSV/Excel workbook** or JSON tables with their rows.
@@ -21,7 +32,8 @@ A FastAPI backend that:
    selects approved calculators, and proposes calculator-specific field bindings**.
 4. Validates the agent's plan and bound records, then performs all arithmetic
    deterministically in Python.
-5. Persists unfiltered JSON submissions, validated plans, and canonical responses in SQLite.
+5. Persists file uploads and unfiltered JSON submissions, validated plans, audit responses,
+   and canonical evidence in SQLite.
 6. Returns structured employee results with employee ID/name when available, the three KPI
    scores, evidence confidence, gated overall performance and tier, a deterministic summary,
    limitations, and supporting evidence.
@@ -327,14 +339,14 @@ columns; it returns only corrected classifications, which Python merges without 
 classifications to be overwritten. Calculation services may process complete selected datasets
 in Python without sending the source rows to the model.
 
-**Current implementation boundary:** `/analyze` remains a request-scoped upload workflow.
+**Current implementation boundary:** `/analyze` persists uploads and publishes canonical evidence while returning its existing analysis response.
 `/analyze-tables` treats each validated JSON request as an incremental upsert batch, preserves its
 raw request and audit analysis, publishes canonical current-state evidence, and returns a typed
 submission receipt. `/dashboard` combines canonical records from all contributing completed
 submissions and recalculates every filtered view. Both analysis paths build the
 generic evidence dataset, run deterministic source-data validation, and calculate KPI scores,
 evidence confidence, gated overall scores, and tiers.
-The first JSON submission that invokes KPI calculators must provide both employee and performance-
+The first submission through either ingestion option that invokes KPI calculators must provide both employee and performance-
 target foundations. Later partial submissions may contain only new KPI evidence: plan validation
 can satisfy those two foundation requirements from completed canonical `employee` and
 `performance_target` records already in SQLite. The combined dashboard still reports unknown
@@ -481,7 +493,7 @@ because stable record identities are atomic SQLite upserts. Source versions or s
 timestamps take precedence, with completion time used only when neither is provided. See
 `docs/persistence.md` for the full request lifecycle and Railway setup.
 
-Uploads through `/analyze` remain request-scoped and are not persisted. Insight contexts remain
+Uploads through `/analyze` persist the original bytes as base64 and the parsed catalog in SQLite, plus the unfiltered audit analysis, validated plan, and canonical evidence. Response filters never limit publication. Insight contexts remain
 in a bounded 15-minute in-memory cache; `/dashboard` creates a fresh context when it restores a
 snapshot. Report previews are calculated on demand from canonical state; neither preview payloads
 nor browser-generated PDFs are persisted.

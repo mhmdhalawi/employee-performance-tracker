@@ -1,3 +1,5 @@
+import json
+from base64 import b64encode
 from datetime import date, datetime, timedelta
 from hashlib import sha256
 from uuid import uuid4
@@ -15,12 +17,15 @@ from app.core.storage import (
 )
 from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
+    AnalyzeUploadResponse,
+    ImportIssue,
     CalculationPlan,
     DashboardResponse,
     EmployeeFilterOption,
     SubmissionReceipt,
 )
 from app.services.agent import (
+    analyze_catalog_artifacts,
     analyze_tables_artifacts,
     build_analysis_response,
     catalog_schema_fingerprint,
@@ -30,6 +35,7 @@ from app.services.aggregation import (
     materialize_aggregation,
 )
 from app.services.performance import inspect_dataset
+from app.services.imports import parse_upload
 from app.services.tables import catalog_from_tables
 
 
@@ -97,6 +103,103 @@ async def analyze_and_store_tables(
         fail_submission(submission_id, str(exc))
         raise
     return _submission_receipt(receipt)
+
+
+async def analyze_and_store_upload(
+    file_name: str | None,
+    contents: bytes,
+    maximum_bytes: int,
+    employee_id: str | None = None,
+    team: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> AnalyzeUploadResponse:
+    """Publish all uploaded evidence and return the requested analysis view."""
+    source = parse_upload(file_name, contents, maximum_bytes)
+    if start_date and end_date and start_date > end_date:
+        raise InvalidAnalysisFilterError("start_date must be on or before end_date.")
+    submission_id = str(uuid4())
+    fingerprint = catalog_schema_fingerprint(source)
+    request_json = json.dumps({
+        "file_name": source.file_name,
+        "file_type": source.file_type,
+        "contents_base64": b64encode(contents).decode("ascii"),
+        "catalog": source.model_dump(mode="json"),
+    })
+    create_submission(
+        submission_id=submission_id,
+        request_json=request_json,
+        request_sha256=sha256(request_json.encode()).hexdigest(),
+        schema_fingerprint=fingerprint,
+        table_count=len(source.tables),
+        row_count=sum(table.row_count for table in source.tables),
+    )
+    try:
+        plan_json = load_mapping_plan(fingerprint)
+        artifacts = await analyze_catalog_artifacts(
+            source,
+            import_issues=[
+                ImportIssue(
+                    code="header_not_found",
+                    message="No row with at least two non-empty header values was found.",
+                    source_name=table.source_name,
+                )
+                for table in source.tables if table.header_row is None
+            ],
+            calculation_plan=CalculationPlan.model_validate_json(plan_json) if plan_json else None,
+            canonicalize_batch_records=True,
+            available_foundation_calculators=_available_foundation_calculators(),
+        )
+        response = artifacts.response
+        filtered = response
+        if employee_id or team or start_date or end_date:
+            filtered = build_analysis_response(
+                artifacts.performance_dataset,
+                artifacts.calculation_plan,
+                import_issues=response.import_issues,
+                employee_id=employee_id,
+                team=team,
+                start_date=start_date,
+                end_date=end_date,
+                additional_validation_findings=[
+                    finding
+                    for finding in [
+                        *response.global_validation_findings,
+                        *(finding for result in response.results for finding in result.validation_findings),
+                    ]
+                    if finding.code in {
+                        "duplicate_canonical_record", "conflicting_canonical_record",
+                        "duplicate_record_content",
+                    }
+                ],
+                model=response.model,
+                total_tokens=response.total_tokens,
+                model_requests=response.model_requests,
+                mapping_cache_hit=response.mapping_cache_hit,
+            )
+        complete_submission(
+            submission_id=submission_id,
+            schema_fingerprint=fingerprint,
+            calculation_plan_json=artifacts.calculation_plan.model_dump_json(),
+            analysis_id=response.analysis_id,
+            coverage_start=_date_string(response.dataset_overview.date_start),
+            coverage_end=_date_string(response.dataset_overview.date_end),
+            model=response.model,
+            total_tokens=response.total_tokens,
+            model_requests=response.model_requests,
+            mapping_cache_hit=response.mapping_cache_hit,
+            response_json=response.model_dump_json(),
+            canonical_records=canonical_record_writes(artifacts.performance_dataset),
+        )
+    except Exception as exc:
+        fail_submission(submission_id, str(exc))
+        raise
+    return AnalyzeUploadResponse(
+        **filtered.model_dump(),
+        file_name=source.file_name,
+        file_type=source.file_type,
+        byte_size=source.byte_size,
+    )
 
 
 async def get_aggregated_dashboard(
