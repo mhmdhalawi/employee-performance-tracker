@@ -214,7 +214,12 @@ async def get_aggregated_dashboard(
         raise InvalidAnalysisFilterError(
             "period_weeks cannot be combined with start_date or end_date."
         )
-    if period_weeks is not None and period_weeks not in {4, 8, 12}:
+    if (
+        period_weeks is not None
+        and period_weeks != 4
+        and period_weeks != 8
+        and period_weeks != 12
+    ):
         raise InvalidAnalysisFilterError("period_weeks must be 4, 8, or 12.")
     if start_date is not None and end_date is not None and start_date > end_date:
         raise InvalidAnalysisFilterError("start_date must be on or before end_date.")

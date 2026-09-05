@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from hashlib import sha256
 from secrets import token_urlsafe
+from typing import Literal
 
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import (
@@ -34,11 +35,12 @@ from app.schemas.performance import (
     PerformanceEvidenceDataset,
     ValidationFinding,
 )
+from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
     AgentCalculationPlan,
     AIInsightResponse,
-    AnalysisResponse,
     AnalysisFilters,
+    AnalysisResponse,
     AnalysisSummary,
     AnalyzeUploadResponse,
     CalculationPlan,
@@ -50,7 +52,6 @@ from app.schemas.uploads import (
     ImportIssue,
     TableClassification,
 )
-from app.schemas.tables import AnalyzeTablesRequest
 from app.services import catalog
 from app.services.aggregation import canonicalize_batch
 from app.services.datasets import build_performance_dataset
@@ -376,7 +377,7 @@ def build_analysis_response(
     team: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
-    period_weeks: int | None = None,
+    period_weeks: Literal[4, 8, 12] | None = None,
     additional_validation_findings: list[ValidationFinding] | None = None,
     additional_limitations: list[str] | None = None,
     limitation_classifications: list[TableClassification] | None = None,
@@ -428,8 +429,7 @@ def build_analysis_response(
             finding.employee_id in result_employee_ids
             and (
                 finding.scoring_impact == "blocks_score"
-                or
-                not finding.record_ids
+                or not finding.record_ids
                 or bool(set(finding.record_ids) & included_record_ids)
             )
         )
