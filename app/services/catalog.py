@@ -17,6 +17,7 @@ from app.schemas.uploads import (
     CellValue,
     ClassificationValidation,
     ColumnDescription,
+    DataCatalog,
     DistinctValues,
     RowPage,
     TableAnalysis,
@@ -24,7 +25,6 @@ from app.schemas.uploads import (
     TableDescription,
     TableInspection,
     TableProfile,
-    DataCatalog,
 )
 
 _CALCULATOR_CONTRACTS: dict[str, tuple[type[BaseModel], str]] = {
@@ -156,10 +156,7 @@ def validate_classifications(
         for classification in classifications
         for invocation in classification.calculator_invocations
     }
-    if any(
-        calculator.startswith("calculate_")
-        for calculator in invoked_calculators
-    ):
+    if any(calculator.startswith("calculate_") for calculator in invoked_calculators):
         missing_foundations = sorted(
             {"load_employees", "load_performance_targets"}
             - invoked_calculators
@@ -210,7 +207,10 @@ def get_rows(
     ]
     if sort_by:
         matching_rows.sort(
-            key=lambda row: (row.get(sort_by) is None, str(row.get(sort_by)).casefold()),
+            key=lambda row: (
+                row.get(sort_by) is None,
+                str(row.get(sort_by)).casefold(),
+            ),
             reverse=descending,
         )
     page_rows = [
@@ -231,10 +231,7 @@ def profile_data(catalog: DataCatalog, table_name: str) -> TableProfile:
     table = _table(catalog, table_name)
     descriptions = [_describe_column(table, column) for column in table.columns]
     duplicate_count = len(table.rows) - len(
-        {
-            tuple(row.get(column) for column in table.columns)
-            for row in table.rows
-        }
+        {tuple(row.get(column) for column in table.columns) for row in table.rows}
     )
     return TableProfile(
         source_name=table.source_name,
@@ -320,9 +317,7 @@ def validate_classification(
     """Validate a classification and its calculator-specific field bindings."""
     table = _table(catalog, classification.source_name)
     if classification.kpi_family in {"irrelevant", "unsupported"}:
-        valid = (
-            not classification.calculator_invocations
-        )
+        valid = not classification.calculator_invocations
         return ClassificationValidation(
             source_name=table.source_name,
             kpi_family=classification.kpi_family,
@@ -330,10 +325,14 @@ def validate_classification(
             unknown_source_columns=[],
             duplicate_source_columns=[],
             missing_required_fields=[],
-            invalid_calculators=([] if valid else [
-                invocation.calculator
-                for invocation in classification.calculator_invocations
-            ]),
+            invalid_calculators=(
+                []
+                if valid
+                else [
+                    invocation.calculator
+                    for invocation in classification.calculator_invocations
+                ]
+            ),
             message=(
                 "Non-evidence table classification is valid."
                 if valid
@@ -390,7 +389,9 @@ def _table(catalog: DataCatalog, table_name: str) -> CatalogTable:
         if table.source_name == table_name:
             return table
     available = ", ".join(table.source_name for table in catalog.tables)
-    raise ValueError(f"Table '{table_name}' was not found. Available tables: {available}.")
+    raise ValueError(
+        f"Table '{table_name}' was not found. Available tables: {available}."
+    )
 
 
 def _require_columns(table: CatalogTable, columns: list[str]) -> None:
@@ -448,13 +449,10 @@ def _is_number(value: CellValue) -> bool:
 
 def _looks_like_id(description: ColumnDescription, row_count: int) -> bool:
     normalized_name = description.name.casefold().replace("_", "").replace(" ", "")
-    return (
-        normalized_name.endswith("id")
-        or (
-            row_count > 0
-            and description.missing_count == 0
-            and description.unique_count == row_count
-        )
+    return normalized_name.endswith("id") or (
+        row_count > 0
+        and description.missing_count == 0
+        and description.unique_count == row_count
     )
 
 
