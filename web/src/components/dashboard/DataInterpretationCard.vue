@@ -48,7 +48,7 @@ function familyStyle(family: string): CSSProperties | undefined {
   if (!color)
     return undefined
   return {
-    color,
+    color: family === 'compliance' ? 'var(--compliance-foreground)' : color,
     backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
     borderColor: `color-mix(in oklab, ${color} 28%, transparent)`,
   }
@@ -65,7 +65,7 @@ function familyStyle(family: string): CSSProperties | undefined {
             Data interpretation
           </CardTitle>
           <CardDescription>
-            See how uploaded tables were classified before deterministic calculation.
+            Review how source tables support the KPI results.
           </CardDescription>
         </div>
 
@@ -77,18 +77,19 @@ function familyStyle(family: string): CSSProperties | undefined {
     </CardHeader>
 
     <CardContent class="flex flex-col gap-4">
-      <div class="flex flex-wrap gap-2">
+      <details v-if="relevant.length"><summary class="cursor-pointer text-sm">View {{ relevant.length }} source tables</summary><div class="mt-3 flex flex-wrap gap-2">
         <Badge v-for="(item, index) in relevant" :key="`${item.source_name}-${index}`" :variant="familyVariant(item.kpi_family)" :style="familyStyle(item.kpi_family)">
           {{ item.source_name }} · {{ familyLabel(item.kpi_family) }}
         </Badge>
-      </div>
+      </div></details>
       <div v-if="needsAttention.length" class="flex items-start gap-2 text-sm text-warning-foreground">
         <TriangleAlertIcon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <p>{{ needsAttention.length }} table{{ needsAttention.length === 1 ? '' : 's' }} need review because classification confidence is below high or the evidence is unsupported.</p>
       </div>
-      <p v-else class="text-sm text-muted-foreground">
+      <p v-else-if="relevant.length" class="text-sm text-muted-foreground">
         {{ relevant.length }} relevant table{{ relevant.length === 1 ? '' : 's' }} matched approved calculation inputs with high confidence.
       </p>
+      <p v-if="!classifications.length" class="text-sm text-muted-foreground">No source classifications are available.</p>
     </CardContent>
   </Card>
 </template>

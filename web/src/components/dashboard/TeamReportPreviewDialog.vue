@@ -13,7 +13,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import ReportPreviewContent from '@/components/dashboard/ReportPreviewContent.vue'
 import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -75,7 +76,8 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
 
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)">
-    <DialogContent class="max-h-[92svh] gap-0 overflow-hidden p-0 sm:max-w-6xl">
+    <ReportPreviewContent>
+      <template #header>
       <DialogHeader class="px-6 pt-6 pb-5">
         <div class="flex items-center gap-3">
           <div class="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -87,8 +89,9 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
           </div>
         </div>
       </DialogHeader>
+      </template>
 
-      <div class="flex max-h-[calc(92svh-9rem)] flex-col gap-5 overflow-y-auto bg-muted/30 p-6">
+
         <Alert v-if="error" variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>Report unavailable</AlertTitle>
@@ -116,7 +119,7 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
               <CardTitle class="text-3xl">{{ analysis.applied_filters.team || 'All teams' }}</CardTitle>
               <CardDescription>Current dashboard filters are applied to every value in this preview.</CardDescription>
             </div>
-            <Badge v-if="analysis.applied_filters.start_date && analysis.applied_filters.end_date" variant="outline" class="w-fit">
+            <Badge v-if="analysis.applied_filters.start_date && analysis.applied_filters.end_date" variant="outline" class="w-fit whitespace-normal">
               <CalendarDaysIcon data-icon="inline-start" />
               {{ formatDate(analysis.applied_filters.start_date) }} – {{ formatDate(analysis.applied_filters.end_date) }}
             </Badge>
@@ -124,10 +127,10 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
           <CardContent class="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_repeat(2,minmax(0,0.7fr))]">
             <section class="flex flex-col justify-between gap-5 rounded-lg bg-primary p-5 text-primary-foreground">
               <div class="flex flex-col gap-1">
-                <p class="text-sm text-primary-foreground/75">Average overall score</p>
+                <p class="text-sm text-primary-foreground">Average overall score</p>
                 <p class="text-5xl font-semibold tracking-tight tabular-nums">{{ score(analysis.summary.average_overall_score) }}</p>
               </div>
-              <p class="text-xs text-primary-foreground/80">Scored employees only</p>
+              <p class="text-xs text-primary-foreground">Scored employees only</p>
             </section>
             <section class="flex flex-col justify-center gap-2 rounded-lg border p-5">
               <p class="text-sm text-muted-foreground">Scored results</p>
@@ -192,8 +195,7 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
             This report supports coaching and manager review. It must not be used alone for hiring, termination, promotion, compensation, or disciplinary decisions.
           </AlertDescription>
         </Alert>
-      </div>
-
+      <template #footer>
       <DialogFooter class="m-0 rounded-none">
         <Button :disabled="downloading" @click="downloadReport">
           <Spinner v-if="downloading" data-icon="inline-start" />
@@ -201,6 +203,7 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
           {{ downloading ? 'Creating PDF…' : 'Download Cedar PDF' }}
         </Button>
       </DialogFooter>
-    </DialogContent>
+      </template>
+    </ReportPreviewContent>
   </Dialog>
 </template>

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { CSSProperties } from 'vue'
 import { computed } from 'vue'
-import { ArrowLeftIcon, DatabaseIcon } from '@lucide/vue'
+import { DatabaseIcon } from '@lucide/vue'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { SchemaMappingSummary, TableClassification } from '@/types/analysis'
@@ -56,7 +56,7 @@ function familyStyle(family: string): CSSProperties | undefined {
   if (!color)
     return undefined
   return {
-    color,
+    color: family === 'compliance' ? 'var(--compliance-foreground)' : color,
     backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
     borderColor: `color-mix(in oklab, ${color} 28%, transparent)`,
   }
@@ -65,15 +65,9 @@ function familyStyle(family: string): CSSProperties | undefined {
 
 <template>
   <main class="min-h-svh bg-muted/30">
-    <header class="border-b bg-background">
-      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-        <Button variant="ghost" @click="emit('back')">
-          <ArrowLeftIcon data-icon="inline-start" />
-          Back to dashboard
-        </Button>
+    <PerformanceHeader back @back="emit('back')">
         <Badge variant="outline">{{ classifications.length }} table{{ classifications.length === 1 ? '' : 's' }}</Badge>
-      </div>
-    </header>
+    </PerformanceHeader>
 
     <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       <header class="flex flex-col gap-2">
@@ -87,11 +81,12 @@ function familyStyle(family: string): CSSProperties | undefined {
         </p>
       </header>
 
+      <p v-if="!classifications.length" class="py-8 text-muted-foreground">No source classifications are available for these results.</p>
       <section aria-label="Interpreted source tables">
         <div class="columns-1 gap-6 lg:columns-2">
         <Card v-for="(item, index) in classifications" :key="`${item.source_name}-${index}`" class="mb-6 inline-block w-full break-inside-avoid">
           <CardHeader>
-            <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
               <div class="min-w-0 flex-1">
                 <CardTitle class="break-words">{{ item.source_name }}</CardTitle>
                 <CardDescription class="mt-1 leading-6">{{ item.rationale }}</CardDescription>

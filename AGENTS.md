@@ -6,8 +6,9 @@ If something here conflicts with a request, mention the conflict and follow the 
 
 Read `docs/design.md` before work that changes the frontend's visual design, Cedar branding,
 logo usage, theme tokens, charts, sign-in/loading/error states, or browser-generated PDF
-presentation. It records the current design context and open decisions, but remains a discussion
-draft and does not by itself authorize implementation.
+presentation. It records implemented direction alongside unresolved proposals; those proposals
+do not by themselves authorize implementation. Read `docs/ux-guidelines.md` for shared component
+ownership, filter state, navigation, and interaction behavior.
 
 ---
 
@@ -173,6 +174,7 @@ tracker/
 │   ├── benchmark.md          # stable workbook context and confirmed benchmark exceptions
 │   ├── data-dictionary.md    # normalized deterministic calculator fields and formulas
 │   ├── design.md             # Cedar visual direction, accessibility rules, and open decisions
+│   ├── ux-guidelines.md        # shared frontend components, state, and interaction behavior
 │   ├── handover.md           # reproducible acceptance-test handover
 │   └── persistence.md        # SQLite, dashboard, filtering, and Railway deployment flow
 ├── migrations/

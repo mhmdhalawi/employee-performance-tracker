@@ -1,13 +1,40 @@
-# Cedar visual design proposal
+# Cedar visual design context
 
-Status: discussion draft  
+Status: implemented UI direction with remaining brand proposals
 Scope: Vue dashboard, sign-in screen, loading/error states, and browser-generated PDF reports
+
+## Implemented direction — 2026-09-05
+
+The frontend review and browser reassessment were approved for implementation. This section records the resulting UI decisions; the original brand proposal below remains background for unresolved artwork/font decisions.
+
+- Keep white headers and surfaces, Geist interface text, Cedar teal primary actions, and restrained gold attention treatment. A shared `PerformanceHeader.vue` repeats the existing Cedar artwork and back navigation across dashboard, employee, and interpretation routes. No new artwork or full teal header is introduced.
+- The dashboard uses two compact summary columns on phones and four on wide screens. Employee review precedes detailed source interpretation. Below the desktop breakpoint, employee cards preserve every KPI plus overall/status, confidence, findings, and the details action without horizontal scrolling.
+- Null chart scores appear as gaps. A visible legend and distinct dash patterns identify series; an expandable table exposes exact backend weekly values and explicit missing-data labels. Chart scope follows backend employee/team/period filters.
+- Report previews use `ReportPreviewContent.vue`: a bounded modal, fixed header/footer regions, and one scrolling content body with non-shrinking cards. The application page itself keeps natural document scrolling.
+- Runtime CSS variables in `web/src/style.css` remain the canonical web token source (runtime-owned mapping). The Tailwind `@theme inline` adapter exposes semantic utility colors. `--compliance-foreground: #80520b` supplies readable small compliance labels on pale gold surfaces; `--chart-2: #c18426` remains the line color. The dark label value is `#f1bd64`.
+- `Progress.vue` owns the warning tone used for withheld employee confidence. `style.css` owns global scrollbar colors and reduced-motion behavior. Explicit status text remains mandatory.
+- Both PDF generators already use `#078181` and retain their existing rendering in this pass. Their constants still mirror web palette values manually; a shared browser/PDF token export is a future maintenance change requiring PDF visual verification.
+
+See [UX guidelines](ux-guidelines.md) for state and component ownership and [the test handover](handover.md#frontend-verification--2026-09-05) for completed browser checks and verification limits.
+
+Remaining follow-ups include sign-in refinements, official compact/reversed logo artwork, PDF token consolidation and layout verification, and measured bundle splitting. Condensing employee explanations and grouping multiple source schemas remain optional; preserve all evidence text and backend meaning when revisiting them.
+
+### Reconciliation with the original proposal
+
+| Original observation/proposal | Current evidence | Resolution |
+| --- | --- | --- |
+| Generic blue controls and placeholder identity | Runtime already used Cedar teal and supplied PNG before this pass | Preserve implemented branding; the baseline descriptions below are historical |
+| PDF dark green `#174C3C` | Both generators already use `#078181` | No PDF palette change needed |
+| Predominantly white dashboard | Confirmed readable in desktop/mobile review | Retain white header; improve shared identity and density |
+| Gold chart and label treatment | Small ochre labels lacked normal-text contrast | Separate readable text foreground from chart-line color |
+
+## Original brand proposal and unresolved assets
 
 ## Goal
 
 Bring the Cedar Digital Solutions identity into the performance app without reducing readability or making KPI and status colors ambiguous. The supplied teal Cedar logo is the proposed product logo. The accompanying brand board supplies five base colors: teal, golden yellow, black, white, and a light gray.
 
-This document records the proposed direction only. It does not authorize implementation or replace the source artwork.
+The following proposal does not replace source artwork. Unresolved fonts, official gray, and alternate logo assets remain proposals; the implemented direction above records the approved UI scope.
 
 
 Recommended asset set:
@@ -108,12 +135,12 @@ The five brand colors are not a complete semantic status system. Destructive err
 
 - Replace the text-only `CEDAR` header with an optimized logo lockup if pdfmake image quality and bundle size are acceptable.
 - Until that is verified, use teal `CEDAR` text as a reliable fallback.
-- Align report constants with the same palette tokens. The PDF generators currently use dark green `#174C3C`, which does not match the supplied `#078181` teal.
+- The PDF generators now use Cedar teal `#078181`. A shared token export could replace manually mirrored constants after PDF verification.
 - Use gold only for small emphasis areas and attention notices; preserve black text and printable contrast.
 
 ## Component-level application
 
-| Area | Current direction | Proposed Cedar treatment |
+| Area | Historical pre-branding baseline | Proposed Cedar treatment |
 | --- | --- | --- |
 | Sign-in identity | Generic lock icon | Full Cedar lockup on a calm white/gray field |
 | Dashboard identity | Shield icon in a blue primary tile | Compact teal Cedar mark and black title text |

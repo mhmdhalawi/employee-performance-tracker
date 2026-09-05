@@ -9,13 +9,13 @@ import {
 import { cn } from '@/lib/utils'
 
 const props = withDefaults(
-  defineProps<ProgressRootProps & { class?: HTMLAttributes['class'] }>(),
+  defineProps<ProgressRootProps & { class?: HTMLAttributes['class'], tone?: 'default' | 'warning' }>(),
   {
     modelValue: 0,
   },
 )
 
-const delegatedProps = reactiveOmit(props, 'class')
+const delegatedProps = reactiveOmit(props, 'class', 'tone')
 </script>
 
 <template>
@@ -31,7 +31,7 @@ const delegatedProps = reactiveOmit(props, 'class')
   >
     <ProgressIndicator
       data-slot="progress-indicator"
-      class="bg-primary size-full flex-1 transition-all"
+      :class="cn('size-full flex-1 transition-transform motion-reduce:transition-none', props.tone === 'warning' ? 'bg-warning' : 'bg-primary')"
       :style="`transform: translateX(-${100 - (props.modelValue ?? 0)}%);`"
     />
   </ProgressRoot>

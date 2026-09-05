@@ -87,3 +87,27 @@ generators and produced their lazy-loaded `pdfmake`/font chunks. Vite reports th
 larger than 500 kB; they remain dynamically imported and are loaded only when a report is created.
 There is no automated PDF visual-regression suite, so renderer changes still require manual page
 inspection for both scored and insufficient-data examples.
+
+## Frontend verification — 2026-09-05
+
+The dashboard fixes follow [the visual direction](design.md) and [UX guidelines](ux-guidelines.md). `pnpm build` passed TypeScript checking and the production build; Vite's large-chunk warning remains. The frontend-design-premium strict static audit reported zero findings, and `git diff --check` passed. These checks do not replace rendered accessibility or PDF testing.
+
+Playwright checks ran against the local frontend and API at ports 5173 and 8000:
+
+| Coverage | Observed result |
+| --- | --- |
+| Responsive dashboard at 390, 768, 1024, and 1440px widths | Filters fit; mobile employee cards preserve metrics; no document horizontal overflow |
+| Team → employee → back; page 2 and overall-sort return | Applied team, result scope, page, and sort remain aligned |
+| Failed filter request → Retry filters | Previous applied selection and results remain visible; retry applies the requested scope |
+| Trend fixture `[0, 20, null, 40, 60, null]` | Two separate SVG line segments, real zero retained, and two explicit missing-data labels |
+| Team and employee previews on desktop/phone | Cards display fully; body scrolls; footer remains reachable |
+| Withheld employee preview at 390 × 520 | Settled dialog stays within the viewport with its download action contained |
+| Failed employee preview → Retry preview | Snapshot reload succeeds |
+| Empty dashboard and long employee-name fixtures | Explicit empty messages, disabled team export, wrapping names, and no page overflow |
+| Select keyboard interaction | End/Enter selects a team; Escape returns focus to the trigger |
+| Mobile interpretation | Source identity occupies full card width without document overflow |
+| Reduced-motion emulation | Preference activates; global CSS override inspected |
+
+Failure and edge-case fixtures used temporary browser response interception. All interceptions were removed; checks did not modify SQLite or source evidence and made no model requests. These were live browser checks, not a newly committed automated browser suite. The backend regression suite was not rerun for this frontend-only pass.
+
+Actual PDF pages, sign-in, screen readers, a full 200% zoom matrix, physical touch devices, and dark mode were not verified in this pass. PDF generators were unchanged; future renderer changes still require every-page visual inspection of scored and insufficient-data exports. Remaining design proposals are maintained in `design.md`.

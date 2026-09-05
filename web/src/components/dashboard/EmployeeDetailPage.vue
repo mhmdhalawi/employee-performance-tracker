@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import {
-  ArrowLeftIcon,
   CalendarDaysIcon,
   CircleAlertIcon,
   Clock3Icon,
@@ -21,7 +20,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import ReportPreviewContent from '@/components/dashboard/ReportPreviewContent.vue'
+import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
@@ -192,13 +193,7 @@ function scoreChange(value: number | null): string {
 
 <template>
   <main class="min-h-svh bg-muted/30">
-    <header class="border-b bg-background">
-      <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <Button variant="ghost" @click="emit('back')">
-          <ArrowLeftIcon data-icon="inline-start" />
-          Back to dashboard
-        </Button>
-        <div class="flex flex-wrap items-center justify-end gap-2">
+    <PerformanceHeader back @back="emit('back')">
           <Button :disabled="reportLoading" @click="generateReportPreview">
             <Spinner v-if="reportLoading" data-icon="inline-start" />
             <FileTextIcon v-else data-icon="inline-start" />
@@ -207,9 +202,7 @@ function scoreChange(value: number | null): string {
           <Badge :variant="employee.overall_score === null ? 'warning' : 'success'">
             {{ employee.performance_tier ?? employee.result_status }}
           </Badge>
-        </div>
-      </div>
-    </header>
+    </PerformanceHeader>
 
     <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       <header class="flex flex-col gap-2">
@@ -222,6 +215,8 @@ function scoreChange(value: number | null): string {
         </p>
       </header>
 
+      <p v-if="reportingPeriod.start_date && reportingPeriod.end_date" class="text-sm text-muted-foreground">Reporting period: {{ formatReportDate(reportingPeriod.start_date) }} – {{ formatReportDate(reportingPeriod.end_date) }}</p>
+
       <Card>
         <CardHeader class="gap-4 sm:flex sm:flex-row sm:items-center sm:justify-between">
           <div class="flex flex-col gap-1">
@@ -233,7 +228,7 @@ function scoreChange(value: number | null): string {
               <span class="text-muted-foreground">Evidence confidence</span>
               <span class="font-medium tabular-nums">{{ employee.data_confidence.toFixed(1) }}%</span>
             </div>
-            <Progress :model-value="employee.data_confidence" />
+            <Progress :model-value="employee.data_confidence" :tone="employee.overall_score === null ? 'warning' : 'default'" aria-label="Evidence confidence" />
             <p class="text-xs text-muted-foreground">
               Required threshold: {{ employee.confidence_threshold.toFixed(1) }}%
             </p>
@@ -381,7 +376,7 @@ function scoreChange(value: number | null): string {
 
           <Card>
             <CardHeader>
-              <CardTitle>Alerts</CardTitle>
+              <CardTitle>Findings</CardTitle>
               <CardDescription>Validated findings and their supporting evidence.</CardDescription>
               <CardAction><Badge variant="secondary">{{ alerts.length }}</Badge></CardAction>
             </CardHeader>
@@ -391,7 +386,7 @@ function scoreChange(value: number | null): string {
                 <FileSpreadsheetIcon v-else aria-hidden="true" />
                 <AlertTitle class="capitalize">
                   {{ alertCodeLabel(alert.code) }}
-                  <Badge variant="outline">{{ alert.occurrence_count }}</Badge>
+                  <Badge variant="outline">{{ alert.occurrence_count }} occurrences</Badge>
                 </AlertTitle>
                 <AlertDescription class="flex flex-col gap-2 [&_p]:mb-0">
                   <Badge :variant="impactVariant(alert.scoring_impact)">{{ impactLabel(alert.scoring_impact) }}</Badge>
@@ -405,7 +400,7 @@ function scoreChange(value: number | null): string {
                   <a v-if="alert.evidence_links[0]" class="text-primary underline-offset-4 hover:underline" :href="alert.evidence_links[0]" target="_blank" rel="noreferrer">Open evidence</a>
                 </AlertDescription>
               </Alert>
-              <p v-if="!alerts.length" class="py-8 text-center text-sm text-muted-foreground">No alerts for this employee.</p>
+              <p v-if="!alerts.length" class="py-8 text-center text-sm text-muted-foreground">No findings for this employee.</p>
             </CardContent>
           </Card>
         </div>
@@ -413,7 +408,8 @@ function scoreChange(value: number | null): string {
     </div>
 
     <Dialog v-model:open="reportPreviewOpen">
-      <DialogContent class="max-h-[92svh] gap-0 overflow-hidden p-0 sm:max-w-5xl">
+      <ReportPreviewContent>
+      <template #header>
         <DialogHeader class="px-6 pt-6 pb-5">
           <div class="flex items-center gap-3">
             <div class="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -427,8 +423,9 @@ function scoreChange(value: number | null): string {
             </div>
           </div>
         </DialogHeader>
+      </template>
 
-        <div class="flex max-h-[calc(92svh-9rem)] flex-col gap-5 overflow-y-auto bg-muted/30 p-6">
+
           <div v-if="reportLoading" class="flex min-h-64 items-center justify-center gap-3 text-sm text-muted-foreground">
             <Spinner />
             Preparing report preview…
@@ -437,7 +434,7 @@ function scoreChange(value: number | null): string {
           <Alert v-else-if="reportError" variant="destructive">
             <CircleAlertIcon aria-hidden="true" />
             <AlertTitle>Report unavailable</AlertTitle>
-            <AlertDescription>{{ reportError }}</AlertDescription>
+            <AlertDescription class="flex flex-col gap-2"><p>{{ reportError }}</p><Button variant="outline" class="w-fit" @click="generateReportPreview">Retry preview</Button></AlertDescription>
           </Alert>
 
           <template v-else-if="reportPreview">
@@ -466,7 +463,7 @@ function scoreChange(value: number | null): string {
                     {{ reportPreview.employee_id }} · {{ reportPreview.team ?? 'Team not provided' }}<template v-if="reportPreview.role"> · {{ reportPreview.role }}</template>
                   </CardDescription>
                 </div>
-                <Badge variant="outline" class="w-fit">
+                <Badge variant="outline" class="w-fit whitespace-normal">
                   <CalendarDaysIcon data-icon="inline-start" />
                   {{ formatReportDate(reportPreview.period.start_date) }} – {{ formatReportDate(reportPreview.period.end_date) }}
                 </Badge>
@@ -474,7 +471,7 @@ function scoreChange(value: number | null): string {
               <CardContent class="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
                 <section class="flex flex-col justify-between gap-6 rounded-lg bg-primary p-5 text-primary-foreground">
                   <div class="flex flex-col gap-1">
-                    <p class="text-sm text-primary-foreground/75">Overall performance</p>
+                    <p class="text-sm text-primary-foreground">Overall performance</p>
                     <p class="text-5xl font-semibold tracking-tight tabular-nums">
                       {{ score(reportPreview.overall_score) }}
                     </p>
@@ -500,7 +497,7 @@ function scoreChange(value: number | null): string {
                     </div>
                     <Badge variant="secondary">Required {{ score(reportPreview.confidence_threshold) }}</Badge>
                   </div>
-                  <Progress :model-value="reportPreview.data_confidence" />
+                  <Progress :model-value="reportPreview.data_confidence" :tone="reportPreview.overall_score === null ? 'warning' : 'default'" aria-label="Report evidence confidence" />
                   <p class="text-sm leading-6 text-muted-foreground">
                     {{ reportPreview.confidence_explanation }}
                   </p>
@@ -568,8 +565,7 @@ function scoreChange(value: number | null): string {
               </div>
             </div>
           </template>
-        </div>
-
+        <template #footer>
         <DialogFooter v-if="reportPreview" class="m-0 rounded-none">
           <Button :disabled="reportDownloading" @click="downloadReport">
             <Spinner v-if="reportDownloading" data-icon="inline-start" />
@@ -577,7 +573,8 @@ function scoreChange(value: number | null): string {
             {{ reportDownloading ? 'Creating PDF…' : 'Download Cedar PDF' }}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </template>
+      </ReportPreviewContent>
     </Dialog>
   </main>
 </template>

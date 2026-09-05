@@ -28,9 +28,14 @@
   --warning-foreground: #0d0d0d;
   --border: #d8dddc;
   --input: #c5c7c6;
+  --scrollbar-thumb: #7d8582;
+  --scrollbar-track: #f3f5f4;
+  --scrollbar-hover: #555b59;
+  --scrollbar-active: #078181;
   --ring: #078181;
   --chart-1: #078181;
   --chart-2: #c18426;
+  --compliance-foreground: #80520b;
   --chart-3: #0d0d0d;
   --chart-4: #f1bd64;
   --chart-5: #7d8582;
@@ -67,9 +72,14 @@
   --warning-foreground: #0d0d0d;
   --border: #343937;
   --input: #4a504e;
+  --scrollbar-thumb: #7d8582;
+  --scrollbar-track: #242726;
+  --scrollbar-hover: #b4b9b7;
+  --scrollbar-active: #10a0a0;
   --ring: #10a0a0;
   --chart-1: #10a0a0;
   --chart-2: #f1bd64;
+  --compliance-foreground: #f1bd64;
   --chart-3: #c5c7c6;
   --chart-4: #ffffff;
   --chart-5: #7d8582;
@@ -130,6 +140,8 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    scrollbar-width: auto;
   }
 
   body {
@@ -138,11 +150,23 @@
   }
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: 3px solid var(--scrollbar-track); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+  ::-webkit-scrollbar-thumb:active { background: var(--scrollbar-active); }
+}
+
+@media (forced-colors: active) {
+  * { scrollbar-color: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

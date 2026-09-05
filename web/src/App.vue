@@ -67,12 +67,14 @@ async function requestStoredDashboard(
 
     if (!response.ok)
       throw new Error(await readErrorMessage(response))
+    const result = await response.json() as DashboardResponse
     if (sequence !== requestSequence)
       return
-
-    analysis.value = await response.json() as DashboardResponse
+    analysis.value = result
   }
   catch (error) {
+    if (sequence !== requestSequence)
+      return
     if (error instanceof DOMException && error.name === 'AbortError')
       return
 
@@ -102,6 +104,7 @@ watch(isAuth, (authenticated) => {
 <template>
   <LoginScreen v-if="isAuth !== true" @authenticated="isAuth = true" />
   <RouterView v-else-if="analysis" v-slot="{ Component }">
+    <KeepAlive include="PerformanceDashboard">
     <component
       :is="Component"
       :analysis="analysis"
@@ -109,6 +112,7 @@ watch(isAuth, (authenticated) => {
       :filter-error="filterError"
       @filters-change="requestStoredDashboard($event, true)"
     />
+    </KeepAlive>
   </RouterView>
   <main v-else class="flex min-h-svh items-center bg-muted/30 px-4 py-8 sm:px-6">
     <Card class="mx-auto w-full max-w-lg">
@@ -129,7 +133,7 @@ watch(isAuth, (authenticated) => {
         </Alert>
         <div v-else class="flex items-center gap-3 text-sm text-muted-foreground">
           <Spinner />
-          <span>Loading the latest completed submission…</span>
+          <span>Loading saved employee results…</span>
         </div>
       </CardContent>
 
