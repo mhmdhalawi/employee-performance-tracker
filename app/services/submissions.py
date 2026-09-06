@@ -18,10 +18,10 @@ from app.core.storage import (
 from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
     AnalyzeUploadResponse,
-    ImportIssue,
     CalculationPlan,
     DashboardResponse,
     EmployeeFilterOption,
+    ImportIssue,
     SubmissionReceipt,
 )
 from app.services.agent import (
@@ -34,8 +34,8 @@ from app.services.aggregation import (
     canonical_record_writes,
     materialize_aggregation,
 )
-from app.services.performance import inspect_dataset
 from app.services.imports import parse_upload
+from app.services.performance import inspect_dataset
 from app.services.tables import catalog_from_tables
 
 
@@ -120,12 +120,14 @@ async def analyze_and_store_upload(
         raise InvalidAnalysisFilterError("start_date must be on or before end_date.")
     submission_id = str(uuid4())
     fingerprint = catalog_schema_fingerprint(source)
-    request_json = json.dumps({
-        "file_name": source.file_name,
-        "file_type": source.file_type,
-        "contents_base64": b64encode(contents).decode("ascii"),
-        "catalog": source.model_dump(mode="json"),
-    })
+    request_json = json.dumps(
+        {
+            "file_name": source.file_name,
+            "file_type": source.file_type,
+            "contents_base64": b64encode(contents).decode("ascii"),
+            "catalog": source.model_dump(mode="json"),
+        }
+    )
     create_submission(
         submission_id=submission_id,
         request_json=request_json,
@@ -144,9 +146,12 @@ async def analyze_and_store_upload(
                     message="No row with at least two non-empty header values was found.",
                     source_name=table.source_name,
                 )
-                for table in source.tables if table.header_row is None
+                for table in source.tables
+                if table.header_row is None
             ],
-            calculation_plan=CalculationPlan.model_validate_json(plan_json) if plan_json else None,
+            calculation_plan=CalculationPlan.model_validate_json(plan_json)
+            if plan_json
+            else None,
             canonicalize_batch_records=True,
             available_foundation_calculators=_available_foundation_calculators(),
         )
@@ -165,10 +170,16 @@ async def analyze_and_store_upload(
                     finding
                     for finding in [
                         *response.global_validation_findings,
-                        *(finding for result in response.results for finding in result.validation_findings),
+                        *(
+                            finding
+                            for result in response.results
+                            for finding in result.validation_findings
+                        ),
                     ]
-                    if finding.code in {
-                        "duplicate_canonical_record", "conflicting_canonical_record",
+                    if finding.code
+                    in {
+                        "duplicate_canonical_record",
+                        "conflicting_canonical_record",
                         "duplicate_record_content",
                     }
                 ],

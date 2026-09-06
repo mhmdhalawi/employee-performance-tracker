@@ -1,7 +1,7 @@
+import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from hashlib import sha256
-import json
 
 from pydantic import BaseModel
 
@@ -21,6 +21,16 @@ from app.schemas.performance import (
     WorkOutputEvidence,
 )
 from app.schemas.uploads import CalculationPlan, SchemaMappingSummary
+
+type CanonicalRecord = (
+    Employee
+    | PerformanceTarget
+    | WorkOutputEvidence
+    | AttendanceComplianceEvidence
+    | SubmissionComplianceEvidence
+    | LeaveComplianceEvidence
+    | QualityEvidence
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,15 +117,17 @@ def canonicalize_batch(
     dataset: PerformanceEvidenceDataset,
 ) -> tuple[PerformanceEvidenceDataset, list[ValidationFinding]]:
     """Collapse same-ID replays, reject same-ID conflicts, and flag content duplicates."""
-    updates: dict[str, list[BaseModel]] = {}
+    updates: dict[str, list[CanonicalRecord]] = {}
     findings: list[ValidationFinding] = []
     for spec in _RECORD_SPECS:
         records = list(getattr(dataset, spec.collection_name))
-        grouped: dict[str, list[BaseModel]] = {}
+        grouped: dict[str, list[CanonicalRecord]] = {}
         for record in records:
-            grouped.setdefault(str(getattr(record, spec.identity_field)), []).append(record)
+            grouped.setdefault(str(getattr(record, spec.identity_field)), []).append(
+                record
+            )
 
-        accepted: list[BaseModel] = []
+        accepted: list[CanonicalRecord] = []
         for record_id, versions in grouped.items():
             first = versions[0]
             if all(version == first for version in versions[1:]):
@@ -128,7 +140,7 @@ def canonicalize_batch(
                             message=(
                                 "Identical same-ID rows in this batch were collapsed before publication."
                             ),
-                            employee_id=str(getattr(first, "employee_id")),
+                            employee_id=str(first.employee_id),
                             record_ids=[record_id],
                             source_type=spec.record_type,
                             scoring_impact="excluded_from_scoring",
@@ -137,7 +149,7 @@ def canonicalize_batch(
                 continue
 
             for employee_id in sorted(
-                {str(getattr(version, "employee_id")) for version in versions}
+                {str(version.employee_id) for version in versions}
             ):
                 findings.append(
                     ValidationFinding(
@@ -174,7 +186,7 @@ def canonical_record_writes(
                 CanonicalRecordWrite(
                     record_type=spec.record_type,
                     record_id=str(getattr(record, spec.identity_field)),
-                    employee_id=str(getattr(record, "employee_id")),
+                    employee_id=str(record.employee_id),
                     period_start=_date_string(start),
                     period_end=_date_string(end),
                     payload_json=record.model_dump_json(),
@@ -248,9 +260,9 @@ def materialize_aggregation(
 
 def _content_duplicate_findings(
     spec: RecordSpec,
-    records: list[BaseModel],
+    records: list[CanonicalRecord],
 ) -> list[ValidationFinding]:
-    grouped: dict[str, list[BaseModel]] = {}
+    grouped: dict[str, list[CanonicalRecord]] = {}
     for record in records:
         content = record.model_dump(exclude={"record_id"}, mode="json")
         fingerprint = sha256(
@@ -262,12 +274,10 @@ def _content_duplicate_findings(
     for duplicates in grouped.values():
         if len(duplicates) < 2:
             continue
-        employee_ids = {str(getattr(item, "employee_id")) for item in duplicates}
+        employee_ids = {str(item.employee_id) for item in duplicates}
         for employee_id in sorted(employee_ids):
             employee_records = [
-                item
-                for item in duplicates
-                if str(getattr(item, "employee_id")) == employee_id
+                item for item in duplicates if str(item.employee_id) == employee_id
             ]
             if len(employee_records) < 2:
                 continue
@@ -281,7 +291,8 @@ def _content_duplicate_findings(
                     ),
                     employee_id=employee_id,
                     record_ids=[
-                        str(getattr(item, "record_id")) for item in employee_records
+                        str(getattr(item, spec.identity_field))
+                        for item in employee_records
                     ],
                     source_type=spec.record_type,
                     scoring_impact="none",
@@ -295,9 +306,7 @@ def _mapped_fields(plan: CalculationPlan) -> dict[str, set[str]]:
     for classification in plan.table_classifications:
         for invocation in classification.calculator_invocations:
             collection_name = _COLLECTION_BY_CALCULATOR[invocation.calculator]
-            mapped.setdefault(collection_name, set()).update(
-                invocation.field_bindings
-            )
+            mapped.setdefault(collection_name, set()).update(invocation.field_bindings)
     return mapped
 
 
