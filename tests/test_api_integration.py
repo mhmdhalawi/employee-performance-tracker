@@ -144,7 +144,8 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertNotIn("timings", body)
 
     def test_insights_endpoint_is_not_exposed(self) -> None:
-        self.assertNotIn("/api/v1/insights", self.client.get("/openapi.json").json()["paths"])
+        paths = self.client.get("/openapi.json").json()["paths"]
+        self.assertNotIn("/api/v1/insights", paths)
         response = self.client.post(
             "/api/v1/insights",
             json={"analysis_id": "removed", "employee_id": "EMP-001"},

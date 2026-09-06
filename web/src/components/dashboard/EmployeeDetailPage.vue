@@ -252,21 +252,6 @@ function scoreChange(value: number | null): string {
 
       <div class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
         <div class="grid min-w-0 content-start gap-6">
-          <Card class="lg:min-h-44">
-            <CardHeader>
-              <CardTitle class="flex items-center gap-2">
-                <FileSpreadsheetIcon aria-hidden="true" />
-                Evidence confidence
-              </CardTitle>
-              <CardDescription>
-                Confidence is the lowest coverage across the required evidence sources.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p class="text-sm leading-6 text-muted-foreground">{{ employee.confidence_reason }}</p>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle class="flex items-center gap-2">
