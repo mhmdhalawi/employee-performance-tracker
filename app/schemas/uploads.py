@@ -229,31 +229,7 @@ class SchemaMappingSummary(BaseModel):
     table_classifications: list[TableClassification]
 
 
-class AIInsightStatement(BaseModel):
-    message: str = Field(min_length=1, max_length=500)
-    record_ids: list[str] = Field(min_length=1, max_length=5)
-
-
-class EmployeeAIInsight(BaseModel):
-    employee_id: str = Field(min_length=1)
-    explanation: AIInsightStatement
-    recommendations: list[AIInsightStatement] = Field(min_length=1, max_length=2)
-
-
-class AIInsightRequest(BaseModel):
-    analysis_id: str = Field(min_length=1)
-    employee_id: str = Field(min_length=1)
-
-
-class AIInsightResponse(BaseModel):
-    insight: EmployeeAIInsight
-    model: str
-    total_tokens: int = Field(ge=0)
-    model_requests: int = Field(ge=0)
-
-
 class AnalysisResponse(BaseModel):
-    analysis_id: str
     results: list[EmployeeKpiScores]
     summary: AnalysisSummary
     dataset_overview: DatasetOverview
@@ -274,7 +250,6 @@ class AnalysisResponse(BaseModel):
 
 
 class DashboardResponse(BaseModel):
-    analysis_id: str
     results: list[EmployeeKpiScores]
     summary: AnalysisSummary
     dataset_overview: DatasetOverview

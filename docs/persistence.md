@@ -115,9 +115,6 @@ the shared mapped fields and returns a limitation instead of silently changing c
 Migrations `001_initial.sql` and `002_aggregated_evidence.sql` apply automatically. SQLite uses WAL
 mode, foreign keys, a five-second busy timeout, and short-lived transactional connections.
 
-Insight contexts remain bounded and process-local for 15 minutes. Each dashboard calculation
-creates a fresh `analysis_id`; `/insights` remains the only optional dashboard-initiated model call.
-
 ## Report data and retention
 
 `POST /api/v1/reports/employee/preview` reads canonical state through the same filtered dashboard

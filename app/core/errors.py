@@ -69,19 +69,6 @@ class EmployeeReportNotFoundError(AppError):
     code = "employee_report_not_found"
 
 
-class InsightContextExpiredError(AppError):
-    """The temporary analysis context is missing or has expired."""
-
-    status_code = 410
-    code = "insight_context_expired"
-
-
-class InsightUnavailableError(AppError):
-    """An employee has no supported findings for AI guidance."""
-
-    code = "insight_unavailable"
-
-
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:

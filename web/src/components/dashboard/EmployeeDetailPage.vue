@@ -8,10 +8,8 @@ import {
   DownloadIcon,
   FileTextIcon,
   FileSpreadsheetIcon,
-  LightbulbIcon,
   MinusIcon,
   ShieldCheckIcon,
-  SparklesIcon,
   TrendingDownIcon,
   TrendingUpIcon,
   TriangleAlertIcon,
@@ -27,7 +25,7 @@ import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { downloadEmployeeReportPdf } from '@/lib/employee-report-pdf'
-import type { AnalysisFilters, EmployeeAIInsight, EmployeeKpiResult, ErrorPayload, PerformanceAlert } from '@/types/analysis'
+import type { AnalysisFilters, EmployeeKpiResult, ErrorPayload, PerformanceAlert } from '@/types/analysis'
 import type { EmployeeReportData, EmployeeReportPreviewResponse, EmployeeReportRequest } from '@/types/reports'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
@@ -35,14 +33,10 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000
 const props = defineProps<{
   employee: EmployeeKpiResult
   alerts: PerformanceAlert[]
-  insight: EmployeeAIInsight | null
-  insightLoading: boolean
-  insightError?: string
   reportingPeriod: AnalysisFilters
 }>()
 const emit = defineEmits<{
   back: []
-  generateInsight: [employeeId: string]
 }>()
 
 const reportPreviewOpen = ref(false)
@@ -326,54 +320,6 @@ function scoreChange(value: number | null): string {
         </div>
 
         <div class="grid min-w-0 content-start gap-6">
-          <Card class="lg:min-h-44">
-            <CardHeader>
-              <CardTitle>AI guidance</CardTitle>
-              <CardDescription>Generated on demand from this employee’s validated findings.</CardDescription>
-            </CardHeader>
-            <CardContent class="flex flex-col gap-4">
-              <Button
-                v-if="alerts.length && !insight"
-                class="w-full sm:w-fit"
-                :disabled="insightLoading"
-                @click="emit('generateInsight', employee.employee_id)"
-              >
-                <Spinner v-if="insightLoading" data-icon="inline-start" />
-                <SparklesIcon v-else data-icon="inline-start" />
-                {{ insightLoading ? 'Generating guidance…' : 'Generate AI guidance' }}
-              </Button>
-              <Alert v-if="insightError" variant="destructive">
-                <CircleAlertIcon aria-hidden="true" />
-                <AlertTitle>AI guidance could not be generated</AlertTitle>
-                <AlertDescription>{{ insightError }}</AlertDescription>
-              </Alert>
-              <Alert v-if="insight">
-                <LightbulbIcon aria-hidden="true" />
-                <AlertTitle>Explanation</AlertTitle>
-                <AlertDescription class="flex flex-col gap-4">
-                  <div class="flex flex-col gap-2">
-                    <p>{{ insight.explanation.message }}</p>
-                    <div class="flex flex-wrap gap-1">
-                      <Badge v-for="recordId in insight.explanation.record_ids" :key="recordId" variant="secondary">{{ recordId }}</Badge>
-                    </div>
-                  </div>
-                  <div>
-                    <p class="font-medium text-foreground">Recommended next steps</p>
-                    <ul class="mt-1 flex list-disc flex-col gap-2 pl-5">
-                      <li v-for="recommendation in insight.recommendations" :key="recommendation.message">
-                        {{ recommendation.message }}
-                        <span class="mt-1 flex flex-wrap gap-1">
-                          <Badge v-for="recordId in recommendation.record_ids" :key="recordId" variant="outline">{{ recordId }}</Badge>
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
-                </AlertDescription>
-              </Alert>
-              <p v-if="!alerts.length" class="text-sm text-muted-foreground">AI guidance is available only when validated findings exist.</p>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle>Findings</CardTitle>

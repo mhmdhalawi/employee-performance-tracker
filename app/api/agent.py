@@ -5,14 +5,9 @@ from fastapi import APIRouter, Header, UploadFile, status
 from app.core.config import get_settings
 from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
-    AIInsightRequest,
-    AIInsightResponse,
     AnalyzeUploadResponse,
     DashboardResponse,
     SubmissionReceipt,
-)
-from app.services.agent import (
-    generate_employee_insight,
 )
 from app.services.submissions import (
     analyze_and_store_tables,
@@ -21,11 +16,6 @@ from app.services.submissions import (
 )
 
 router = APIRouter(tags=["agent"])
-
-
-@router.post("/insights", response_model=AIInsightResponse)
-async def generate_insight(request: AIInsightRequest) -> AIInsightResponse:
-    return await generate_employee_insight(request.analysis_id, request.employee_id)
 
 
 @router.post("/analyze", response_model=AnalyzeUploadResponse)

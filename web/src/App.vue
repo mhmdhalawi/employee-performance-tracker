@@ -18,7 +18,7 @@ import type { DashboardFilters, DashboardResponse, ErrorPayload } from '@/types/
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
-const isAuth = ref<boolean | undefined>(undefined)
+const isAuth = ref<boolean | undefined>(true)
 const dashboardRequestError = ref('')
 const analysis = ref<DashboardResponse | null>(null)
 const isSubmitting = ref(false)

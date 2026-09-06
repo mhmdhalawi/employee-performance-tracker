@@ -89,7 +89,7 @@ async def analyze_and_store_tables(
             submission_id=submission_id,
             schema_fingerprint=schema_fingerprint,
             calculation_plan_json=artifacts.calculation_plan.model_dump_json(),
-            analysis_id=response.analysis_id,
+            analysis_id=str(uuid4()),
             coverage_start=_date_string(response.dataset_overview.date_start),
             coverage_end=_date_string(response.dataset_overview.date_end),
             model=response.model,
@@ -181,7 +181,7 @@ async def analyze_and_store_upload(
             submission_id=submission_id,
             schema_fingerprint=fingerprint,
             calculation_plan_json=artifacts.calculation_plan.model_dump_json(),
-            analysis_id=response.analysis_id,
+            analysis_id=str(uuid4()),
             coverage_start=_date_string(response.dataset_overview.date_start),
             coverage_end=_date_string(response.dataset_overview.date_end),
             model=response.model,
@@ -279,7 +279,6 @@ async def get_aggregated_dashboard(
         ),
     )
     return DashboardResponse(
-        analysis_id=response.analysis_id,
         results=response.results,
         summary=response.summary,
         dataset_overview=response.dataset_overview,

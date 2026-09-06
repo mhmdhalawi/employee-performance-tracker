@@ -187,7 +187,7 @@ tracker/
 ├── app/
 │   ├── main.py               # app, middleware, exception handlers, routers
 │   ├── api/                  # FastAPI routes — thin: parse, call one service, return
-│   │   ├── agent.py          # analysis, persisted dashboard, and insight endpoints
+│   │   ├── agent.py          # analysis and persisted dashboard endpoints
 │   │   ├── health.py         # GET /health
 │   │   └── reports.py        # deterministic employee report-preview endpoint
 │   ├── schemas/              # Pydantic request/response + internal models ONLY
@@ -356,11 +356,8 @@ employee IDs, missing targets, and missing evidence deterministically.
 The response contains employee-specific findings, supporting record IDs, a validation
 summary, unmatched/global findings, KPI results, applied filters, deterministic weekly trends,
 and a deterministic summary derived from the final results; it does not return parsed source
-rows. `/analyze` retains a compact validated explanation context in memory for 15 minutes but
-does not call the explanation model. A separate, optional `/insights` request generates
-guidance for one employee, and Python rejects employee or record citations that do not
-validate. The Vue client presents employee results with alert counts and sorting, KPI trends,
-and a responsive routed employee detail page containing traceable alerts and on-demand AI guidance.
+rows. The Vue client presents employee results with alert counts and sorting, KPI trends,
+and a responsive routed employee detail page containing traceable alerts.
 Employee Details also previews and downloads an employee PDF for the active period. The main
 dashboard previews a team report and downloads team or per-KPI PDF summaries from its current
 filtered response.
@@ -423,8 +420,7 @@ traceable to its supporting source records.
 Only the agent module may call a model. Nothing else, ever.
 
 The planning agent **may** interpret the bounded synopsis, classify tables by KPI family, select
-approved calculators, and propose field bindings. The explanation agent **may** explain final calculated results and recommend
-constructive, low-risk next steps from validated findings. Agents **may not** calculate or
+approved calculators, and propose field bindings. The agent **may not** calculate or
 alter KPI values, validate source records, invent data or causes, or make high-impact
 employment recommendations.
 
@@ -439,11 +435,8 @@ than asking nicely in the prompt. Classification confidence communicates semanti
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
 The `/analyze` and `/analyze-tables` workflows construct a request-scoped synopsis when no valid
-mapping plan is cached. After Python calculates results, it caches a bounded explanation
-context without calling the explanation agent. `/insights` retrieves one employee from that temporary context,
-calls the explanation agent, and validates every citation before returning it. Neither agent
-has an upload dependency or function tools. `/ask` remains a separate plain connectivity test
-with no upload data.
+mapping plan is cached. The planning agent has no upload dependency or function tools. `/ask`
+remains a separate plain connectivity test with no upload data.
 
 ---
 
@@ -468,7 +461,6 @@ Current endpoints:
 | `POST` | `/api/v1/analyze` | upload, classify, validate, and return employee KPI results with findings |
 | `POST` | `/api/v1/analyze-tables` | ingest an incremental JSON upsert batch and return a `201` receipt |
 | `GET` | `/api/v1/dashboard` | recalculate the aggregated canonical dashboard with optional filters |
-| `POST` | `/api/v1/insights` | generate on-demand guidance for one employee from a temporary analysis context |
 | `POST` | `/api/v1/reports/employee/preview` | return a deterministic employee report snapshot for browser PDF generation |
 
 ---
@@ -495,9 +487,7 @@ because stable record identities are atomic SQLite upserts. Source versions or s
 timestamps take precedence, with completion time used only when neither is provided. See
 `docs/persistence.md` for the full request lifecycle and Railway setup.
 
-Uploads through `/analyze` persist the original bytes as base64 and the parsed catalog in SQLite, plus the unfiltered audit analysis, validated plan, and canonical evidence. Response filters never limit publication. Insight contexts remain
-in a bounded 15-minute in-memory cache; `/dashboard` creates a fresh context when it restores a
-snapshot. Report previews are calculated on demand from canonical state; neither preview payloads
+Uploads through `/analyze` persist the original bytes as base64 and the parsed catalog in SQLite, plus the unfiltered audit analysis, validated plan, and canonical evidence. Response filters never limit publication. Report previews are calculated on demand from canonical state; neither preview payloads
 nor browser-generated PDFs are persisted.
 
 ---

@@ -135,12 +135,21 @@ class AnalyzeApiIntegrationTests(TestCase):
         response = self._post_benchmark()
         self.assertEqual(response.status_code, 200)
         body = response.json()
+        self.assertNotIn("analysis_id", body)
         self.assertEqual(body["summary"]["total_employee_count"], 30)
         self.assertEqual(body["summary"]["insufficient_data_employee_ids"], ["EMP-027", "EMP-028", "EMP-029", "EMP-030"])
         self.assertEqual(body["validation_summary"]["excluded_record_count"], 4)
         self.assertEqual(body["model_requests"], 0)
         self.assertNotIn("model_usage", body)
         self.assertNotIn("timings", body)
+
+    def test_insights_endpoint_is_not_exposed(self) -> None:
+        self.assertNotIn("/api/v1/insights", self.client.get("/openapi.json").json()["paths"])
+        response = self.client.post(
+            "/api/v1/insights",
+            json={"analysis_id": "removed", "employee_id": "EMP-001"},
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_filtered_upload_persists_full_source_and_audit(self) -> None:
         import json

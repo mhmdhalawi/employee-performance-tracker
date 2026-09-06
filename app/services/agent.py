@@ -1,10 +1,9 @@
 import json
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date
 from functools import lru_cache
 from hashlib import sha256
-from secrets import token_urlsafe
 from typing import Literal
 
 from pydantic_ai import Agent
@@ -25,8 +24,6 @@ from app.core.config import get_settings
 from app.core.errors import (
     AIError,
     AIUnavailableError,
-    InsightContextExpiredError,
-    InsightUnavailableError,
     InvalidAnalysisFilterError,
 )
 from app.schemas.performance import (
@@ -38,7 +35,6 @@ from app.schemas.performance import (
 from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
     AgentCalculationPlan,
-    AIInsightResponse,
     AnalysisFilters,
     AnalysisResponse,
     AnalysisSummary,
@@ -48,7 +44,6 @@ from app.schemas.uploads import (
     ClassificationValidation,
     ColumnDescription,
     DataCatalog,
-    EmployeeAIInsight,
     ImportIssue,
     TableClassification,
 )
@@ -102,37 +97,8 @@ calculates all scores and evidence confidence. Do not perform those tasks, repla
 missing evidence with zero, or return explanations or display rationales.
 """
 
-INSIGHTS_AGENT_INSTRUCTIONS = """
-You explain validated employee-performance findings and suggest constructive, low-risk next
-steps. Use only the supplied calculated results and findings. Do not calculate, alter, or
-repeat KPI numbers. Do not infer causes, intent, personality, or protected characteristics.
-Do not recommend hiring, firing, promotion, compensation, discipline, or other high-impact
-employment decisions. For Insufficient data results, recommend improving evidence coverage,
-not performance action. Every explanation and recommendation must cite one or more record IDs
-listed for that employee. Return no insight for an employee without a supported finding.
-For a missing required-submission date, tell the user to verify whether it was submitted;
-do not assume a submission occurred or instruct them to invent a date. Focus directly on the
-findings and avoid generic statements about complete source coverage. Put citations only in
-the structured record_ids fields. Never write record IDs, citation lists, or parenthetical
-citations inside message text. Mention only findings supported by that statement's record_ids.
-"""
-
 _MAPPING_CACHE_MAX_SIZE = 64
 _mapping_cache: OrderedDict[str, CalculationPlan] = OrderedDict()
-_INSIGHT_CONTEXT_CACHE_MAX_SIZE = 32
-_INSIGHT_CONTEXT_TTL = timedelta(minutes=15)
-
-
-@dataclass(frozen=True, slots=True)
-class InsightEmployeeContext:
-    prompt_context: dict[str, object]
-    allowed_record_ids: frozenset[str]
-
-
-@dataclass(frozen=True, slots=True)
-class CachedInsightContext:
-    created_at: datetime
-    employees: dict[str, InsightEmployeeContext]
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,21 +109,11 @@ class AnalysisArtifacts:
     response: AnalysisResponse
 
 
-_insight_context_cache: OrderedDict[str, CachedInsightContext] = OrderedDict()
-
-
 analysis_agent = Agent[None, AgentCalculationPlan](
     name="employee_performance_agent",
     instructions=MAPPING_AGENT_INSTRUCTIONS,
     deps_type=type(None),
     output_type=AgentCalculationPlan,
-)
-
-insights_agent = Agent[None, EmployeeAIInsight](
-    name="employee_performance_insights_agent",
-    instructions=INSIGHTS_AGENT_INSTRUCTIONS,
-    deps_type=type(None),
-    output_type=EmployeeAIInsight,
 )
 
 
@@ -503,10 +459,7 @@ def build_analysis_response(
         scoped_findings,
     )
     limitations.extend(additional_limitations or [])
-    analysis_id = _cache_insight_context(employee_results)
-
     return AnalysisResponse(
-        analysis_id=analysis_id,
         results=employee_results,
         summary=_build_analysis_summary(kpi_results),
         dataset_overview=overview,
@@ -541,17 +494,6 @@ def build_analysis_response(
         model_requests=model_requests,
         mapping_cache_hit=mapping_cache_hit,
     )
-
-
-def refresh_analysis_insight_context(
-    response: AnalysisResponse,
-) -> AnalysisResponse:
-    """Attach a fresh process-local insight context to a persisted dashboard snapshot."""
-    return response.model_copy(
-        update={"analysis_id": _cache_insight_context(response.results)}
-    )
-
-
 def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
     insufficient_ids = [
         result.employee_id
@@ -600,153 +542,6 @@ def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
 
 def _average(values: list[float]) -> float | None:
     return round(sum(values) / len(values), 2) if values else None
-
-
-def _build_insight_context(
-    employee_results: list[EmployeeKpiScores],
-) -> dict[str, InsightEmployeeContext]:
-    context: dict[str, InsightEmployeeContext] = {}
-    for result in employee_results:
-        grouped: dict[tuple[str, str, str], list[str]] = {}
-        for finding in result.validation_findings:
-            if not finding.record_ids:
-                continue
-            key = (finding.code, finding.message, finding.scoring_impact)
-            grouped.setdefault(key, []).extend(finding.record_ids)
-        if not grouped:
-            continue
-        allowed_record_ids = frozenset(
-            record_id for record_ids in grouped.values() for record_id in record_ids
-        )
-        findings = [
-            {
-                "code": code,
-                "message": message,
-                "scoring_impact": scoring_impact,
-                "occurrence_count": len(set(record_ids)),
-                "record_ids": list(dict.fromkeys(record_ids))[:5],
-            }
-            for (code, message, scoring_impact), record_ids in grouped.items()
-        ]
-        context[result.employee_id] = InsightEmployeeContext(
-            prompt_context={
-                "employee_id": result.employee_id,
-                "employee_name": result.employee_name,
-                "result_status": result.result_status,
-                "performance_tier": result.performance_tier,
-                "findings": findings,
-            },
-            allowed_record_ids=allowed_record_ids,
-        )
-    return context
-
-
-def _cache_insight_context(employee_results: list[EmployeeKpiScores]) -> str:
-    _remove_expired_insight_contexts()
-    analysis_id = token_urlsafe(24)
-    _insight_context_cache[analysis_id] = CachedInsightContext(
-        created_at=datetime.now(UTC),
-        employees=_build_insight_context(employee_results),
-    )
-    while len(_insight_context_cache) > _INSIGHT_CONTEXT_CACHE_MAX_SIZE:
-        _insight_context_cache.popitem(last=False)
-    return analysis_id
-
-
-def _get_insight_context(analysis_id: str) -> CachedInsightContext | None:
-    _remove_expired_insight_contexts()
-    context = _insight_context_cache.get(analysis_id)
-    if context is not None:
-        _insight_context_cache.move_to_end(analysis_id)
-    return context
-
-
-def _remove_expired_insight_contexts() -> None:
-    cutoff = datetime.now(UTC) - _INSIGHT_CONTEXT_TTL
-    expired_ids = [
-        analysis_id
-        for analysis_id, context in _insight_context_cache.items()
-        if context.created_at < cutoff
-    ]
-    for analysis_id in expired_ids:
-        del _insight_context_cache[analysis_id]
-
-
-async def generate_employee_insight(
-    analysis_id: str,
-    employee_id: str,
-) -> AIInsightResponse:
-    """Generate validated guidance from a temporary deterministic analysis context."""
-    cached = _get_insight_context(analysis_id)
-    if cached is None:
-        raise InsightContextExpiredError(
-            "This analysis has expired. Run the analysis again before requesting AI guidance."
-        )
-    employee_context = cached.employees.get(employee_id)
-    if employee_context is None:
-        raise InsightUnavailableError(
-            "This employee has no validated findings available for AI guidance."
-        )
-
-    usage = RunUsage()
-    try:
-        insight = await _run_insight_agent(employee_context.prompt_context, usage)
-    except AIUnavailableError:
-        raise
-    except (
-        ModelHTTPError,
-        UnexpectedModelBehavior,
-        UsageLimitExceeded,
-        UserError,
-    ) as exc:
-        raise AIError(f"The insight model call failed: {exc}") from exc
-
-    if not _validate_ai_insight(
-        insight, employee_id, employee_context.allowed_record_ids
-    ):
-        raise AIError(
-            "The generated insight was omitted because its employee or record citations did not validate."
-        )
-    return AIInsightResponse(
-        insight=insight,
-        model=get_settings().openai_model,
-        total_tokens=usage.total_tokens,
-        model_requests=usage.requests,
-    )
-
-
-async def _run_insight_agent(
-    insight_context: dict[str, object],
-    usage: RunUsage,
-) -> EmployeeAIInsight:
-    prompt = (
-        "Write one concise evidence-backed explanation and at most two constructive next "
-        "steps for this employee.\n\n"
-        + json.dumps(insight_context, ensure_ascii=False, separators=(",", ":"))
-    )
-    result = await insights_agent.run(
-        prompt,
-        model=get_model(),
-        model_settings=OpenAIResponsesModelSettings(
-            openai_prompt_cache_key="employee-performance-insights-v1",
-            openai_text_verbosity="low",
-        ),
-        usage=usage,
-        usage_limits=UsageLimits(request_limit=2, total_tokens_limit=12_000),
-    )
-    return result.output
-
-
-def _validate_ai_insight(
-    insight: EmployeeAIInsight,
-    employee_id: str,
-    allowed_record_ids: frozenset[str],
-) -> bool:
-    statements = [insight.explanation, *insight.recommendations]
-    return insight.employee_id == employee_id and all(
-        set(statement.record_ids).issubset(allowed_record_ids)
-        for statement in statements
-    )
 
 
 async def _run_mapping_agent(
