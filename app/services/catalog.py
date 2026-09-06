@@ -18,12 +18,9 @@ from app.schemas.uploads import (
     ClassificationValidation,
     ColumnDescription,
     DataCatalog,
-    DistinctValues,
-    RowPage,
     TableAnalysis,
     TableClassification,
     TableDescription,
-    TableInspection,
     TableProfile,
 )
 
@@ -59,19 +56,6 @@ def classification_contract() -> dict[str, object]:
         },
         "non_evidence_classifications": ["irrelevant"],
     }
-
-
-def list_tables(catalog: DataCatalog) -> list[TableInspection]:
-    """List table names, headers, row counts, and columns without returning row data."""
-    return [
-        TableInspection(
-            source_name=table.source_name,
-            header_row=table.header_row,
-            row_count=table.row_count,
-            columns=table.columns,
-        )
-        for table in catalog.tables
-    ]
 
 
 def describe_table(catalog: DataCatalog, table_name: str) -> TableDescription:
@@ -181,51 +165,6 @@ def validate_classifications(
     return validations
 
 
-def get_rows(
-    catalog: DataCatalog,
-    table_name: str,
-    columns: list[str] | None,
-    filters: dict[str, str] | None,
-    sort_by: str | None,
-    descending: bool,
-    limit: int,
-) -> RowPage:
-    """Return a bounded, optionally filtered and sorted page of source rows."""
-    table = _table(catalog, table_name)
-    selected_columns = columns or table.columns
-    _require_columns(table, selected_columns)
-    if filters:
-        _require_columns(table, list(filters))
-    if sort_by:
-        _require_columns(table, [sort_by])
-
-    matching_rows = [
-        row
-        for row in table.rows
-        if not filters
-        or all(_matches(row.get(column), value) for column, value in filters.items())
-    ]
-    if sort_by:
-        matching_rows.sort(
-            key=lambda row: (
-                row.get(sort_by) is None,
-                str(row.get(sort_by)).casefold(),
-            ),
-            reverse=descending,
-        )
-    page_rows = [
-        {column: row.get(column) for column in [*selected_columns, "_source_row"]}
-        for row in matching_rows[:limit]
-    ]
-    return RowPage(
-        source_name=table.source_name,
-        columns=[*selected_columns, "_source_row"],
-        rows=page_rows,
-        total_matching_rows=len(matching_rows),
-        truncated=len(matching_rows) > limit,
-    )
-
-
 def profile_data(catalog: DataCatalog, table_name: str) -> TableProfile:
     """Profile blanks, duplicate rows, and likely ID, date, and numeric columns."""
     table = _table(catalog, table_name)
@@ -256,57 +195,6 @@ def profile_data(catalog: DataCatalog, table_name: str) -> TableProfile:
             for description in descriptions
             if description.inferred_type == "number"
         ],
-    )
-
-
-def search_rows(
-    catalog: DataCatalog,
-    query: str,
-    table_name: str | None,
-    limit: int,
-) -> list[RowPage]:
-    """Find a text fragment across one table or all tables, returning bounded rows."""
-    normalized_query = query.casefold()
-    tables = [_table(catalog, table_name)] if table_name else catalog.tables
-    matches: list[RowPage] = []
-    for table in tables:
-        matching_rows = [
-            row
-            for row in table.rows
-            if any(
-                normalized_query in str(row.get(column, "")).casefold()
-                for column in table.columns
-            )
-        ]
-        if matching_rows:
-            matches.append(
-                RowPage(
-                    source_name=table.source_name,
-                    columns=[*table.columns, "_source_row"],
-                    rows=matching_rows[:limit],
-                    total_matching_rows=len(matching_rows),
-                    truncated=len(matching_rows) > limit,
-                )
-            )
-    return matches
-
-
-def get_distinct_values(
-    catalog: DataCatalog,
-    table_name: str,
-    column: str,
-    limit: int,
-) -> DistinctValues:
-    """Return a bounded list of non-empty distinct values for one column."""
-    table = _table(catalog, table_name)
-    _require_columns(table, [column])
-    values = _unique_values(row.get(column) for row in table.rows)
-    return DistinctValues(
-        source_name=table.source_name,
-        column=column,
-        values=values[:limit],
-        total_distinct_values=len(values),
-        truncated=len(values) > limit,
     )
 
 
@@ -394,14 +282,6 @@ def _table(catalog: DataCatalog, table_name: str) -> CatalogTable:
     )
 
 
-def _require_columns(table: CatalogTable, columns: list[str]) -> None:
-    unknown_columns = sorted(set(columns) - set(table.columns))
-    if unknown_columns:
-        raise ValueError(
-            f"Unknown columns in '{table.source_name}': {', '.join(unknown_columns)}."
-        )
-
-
 def _describe_column(table: CatalogTable, column: str) -> ColumnDescription:
     values = [row.get(column) for row in table.rows]
     non_empty_values = [value for value in values if value is not None]
@@ -454,10 +334,6 @@ def _looks_like_id(description: ColumnDescription, row_count: int) -> bool:
         and description.missing_count == 0
         and description.unique_count == row_count
     )
-
-
-def _matches(value: CellValue | None, expected: str) -> bool:
-    return value is not None and str(value).casefold() == expected.casefold()
 
 
 def _unique_values(values: Iterable[CellValue]) -> list[CellValue]:

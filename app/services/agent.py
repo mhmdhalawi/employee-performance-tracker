@@ -38,7 +38,6 @@ from app.schemas.uploads import (
     AnalysisFilters,
     AnalysisResponse,
     AnalysisSummary,
-    AnalyzeUploadResponse,
     CalculationPlan,
     CatalogTable,
     ClassificationValidation,
@@ -50,7 +49,6 @@ from app.schemas.uploads import (
 from app.services import catalog
 from app.services.aggregation import canonicalize_batch
 from app.services.datasets import build_performance_dataset
-from app.services.imports import parse_upload
 from app.services.performance import (
     build_performance_alerts,
     calculate_kpis,
@@ -130,62 +128,6 @@ def get_model() -> OpenAIResponsesModel:
     )
 
 
-async def analyze_upload(
-    file_name: str | None,
-    contents: bytes,
-    maximum_bytes: int,
-    employee_id: str | None = None,
-    team: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-) -> AnalyzeUploadResponse:
-    """Parse an upload and let the agent select and map relevant source tables."""
-    upload_catalog = parse_upload(file_name, contents, maximum_bytes)
-    import_issues = [
-        ImportIssue(
-            code="header_not_found",
-            message="No row with at least two non-empty header values was found.",
-            source_name=table.source_name,
-        )
-        for table in upload_catalog.tables
-        if table.header_row is None
-    ]
-    response = await analyze_catalog(
-        upload_catalog,
-        import_issues=import_issues,
-        employee_id=employee_id,
-        team=team,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    return AnalyzeUploadResponse(
-        **response.model_dump(),
-        file_name=upload_catalog.file_name,
-        file_type=upload_catalog.file_type,
-        byte_size=upload_catalog.byte_size,
-    )
-
-
-async def analyze_tables(
-    request: AnalyzeTablesRequest,
-    employee_id: str | None = None,
-    team: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-    calculation_plan: CalculationPlan | None = None,
-) -> AnalysisResponse:
-    """Analyze validated JSON tables through the shared catalog workflow."""
-    artifacts = await analyze_tables_artifacts(
-        request,
-        employee_id=employee_id,
-        team=team,
-        start_date=start_date,
-        end_date=end_date,
-        calculation_plan=calculation_plan,
-    )
-    return artifacts.response
-
-
 async def analyze_tables_artifacts(
     request: AnalyzeTablesRequest,
     employee_id: str | None = None,
@@ -207,28 +149,6 @@ async def analyze_tables_artifacts(
         canonicalize_batch_records=True,
         available_foundation_calculators=available_foundation_calculators,
     )
-
-
-async def analyze_catalog(
-    source_catalog: DataCatalog,
-    import_issues: list[ImportIssue],
-    employee_id: str | None = None,
-    team: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
-    calculation_plan: CalculationPlan | None = None,
-) -> AnalysisResponse:
-    """Classify and calculate a transport-neutral source catalog."""
-    artifacts = await analyze_catalog_artifacts(
-        source_catalog,
-        import_issues,
-        employee_id=employee_id,
-        team=team,
-        start_date=start_date,
-        end_date=end_date,
-        calculation_plan=calculation_plan,
-    )
-    return artifacts.response
 
 
 async def analyze_catalog_artifacts(

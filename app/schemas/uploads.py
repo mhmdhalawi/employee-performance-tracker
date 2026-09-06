@@ -65,22 +65,6 @@ class TableAnalysis(BaseModel):
     profile: TableProfile
 
 
-class RowPage(BaseModel):
-    source_name: str
-    columns: list[str]
-    rows: list[dict[str, CellValue]]
-    total_matching_rows: int
-    truncated: bool
-
-
-class DistinctValues(BaseModel):
-    source_name: str
-    column: str
-    values: list[CellValue]
-    total_distinct_values: int
-    truncated: bool
-
-
 type TableRole = Literal[
     "productivity",
     "compliance",
