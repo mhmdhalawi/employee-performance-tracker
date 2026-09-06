@@ -145,7 +145,7 @@ export interface DashboardResponse {
 
 export interface TableClassification {
   source_name: string
-  kpi_family: 'productivity' | 'compliance' | 'quality' | 'shared' | 'irrelevant' | 'unsupported'
+  kpi_family: 'productivity' | 'compliance' | 'quality' | 'shared' | 'irrelevant'
   calculator_invocations: Array<{
     calculator:
       | 'load_employees'

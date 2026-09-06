@@ -87,7 +87,6 @@ type TableRole = Literal[
     "quality",
     "shared",
     "irrelevant",
-    "unsupported",
 ]
 type CalculatorName = Literal[
     "calculate_productivity",
@@ -172,7 +171,7 @@ class CalculationPlan(BaseModel):
         expected = {
             item.source_name
             for item in self.table_classifications
-            if item.kpi_family not in {"irrelevant", "unsupported"}
+            if item.kpi_family != "irrelevant"
         }
         if set(self.selected_tables) != expected or len(self.selected_tables) != len(expected):
             raise ValueError(

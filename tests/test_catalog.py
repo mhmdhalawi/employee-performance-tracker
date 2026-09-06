@@ -1,5 +1,7 @@
 from unittest import TestCase
 
+from pydantic import ValidationError
+
 from app.schemas.uploads import (
     AgentCalculationPlan,
     AgentTableClassification,
@@ -20,6 +22,17 @@ from app.services.agent import (
 
 
 class CalculationPlanValidationTests(TestCase):
+    def test_unsupported_is_not_a_table_role(self) -> None:
+        with self.assertRaises(ValidationError):
+            AgentTableClassification.model_validate(
+                {
+                    "source_name": "Legacy_Evidence",
+                    "kpi_family": "unsupported",
+                    "calculator_invocations": [],
+                    "confidence": "low",
+                }
+            )
+
     def test_mapping_agent_uses_model_default_reasoning_effort(self) -> None:
         self.assertNotIn("openai_reasoning_effort", _mapping_model_settings())
 
@@ -217,7 +230,7 @@ class CalculationPlanValidationTests(TestCase):
             table_classifications=[
                 AgentTableClassification(
                     source_name="Projects",
-                    kpi_family="unsupported",
+                    kpi_family="irrelevant",
                     calculator_invocations=[],
                     confidence="low",
                 ),
@@ -244,9 +257,14 @@ class CalculationPlanValidationTests(TestCase):
                 ),
                 AgentTableClassification(
                     source_name="Notes",
-                    kpi_family="unsupported",
-                    calculator_invocations=[],
-                    confidence="low",
+                    kpi_family="shared",
+                    calculator_invocations=[
+                        CalculatorInvocation(
+                            calculator="load_employees",
+                            field_bindings={"employee_id": "employee_id"},
+                        )
+                    ],
+                    confidence="high",
                 ),
             ]
         )

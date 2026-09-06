@@ -37,8 +37,6 @@ function confidenceVariant(confidence: TableClassification['confidence']): 'succ
 function familyVariant(family: string): 'default' | 'secondary' | 'outline' | 'warning' {
   if (['productivity', 'compliance', 'quality'].includes(family))
     return 'outline'
-  if (family === 'unsupported')
-    return 'warning'
   if (family === 'irrelevant')
     return 'outline'
   if (family === 'shared')

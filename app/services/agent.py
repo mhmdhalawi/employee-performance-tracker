@@ -92,8 +92,8 @@ Mapping rules:
   to their contract fields. A table may support multiple calculator invocations.
 - Bind supported optional fields, including attendance time pairs and source ordering
   fields (source_version, source_updated_at).
-- Mark potential KPI evidence as unsupported when it cannot satisfy an approved
-  contract. Mark documentation, benchmarks, and unrelated tables as irrelevant.
+- Mark tables as irrelevant when they do not satisfy an approved calculator contract,
+  including documentation, benchmarks, and unrelated tables.
 - Lower confidence when semantics are uncertain. Do not guess bindings or invent
   columns, values, targets, status meanings, conversions, or formulas.
 
@@ -853,7 +853,7 @@ def _expand_agent_plan(agent_plan: AgentCalculationPlan) -> CalculationPlan:
         selected_tables=[
             item.source_name
             for item in classifications
-            if item.kpi_family not in {"irrelevant", "unsupported"}
+            if item.kpi_family != "irrelevant"
         ],
         table_classifications=classifications,
     )
@@ -862,10 +862,6 @@ def _expand_agent_plan(agent_plan: AgentCalculationPlan) -> CalculationPlan:
 def _classification_rationale(kpi_family: str, calculators: list[str]) -> str:
     if kpi_family == "irrelevant":
         return "The mapping agent classified this source as unrelated to KPI evidence."
-    if kpi_family == "unsupported":
-        return (
-            "The mapping agent found potential evidence without a supported calculator."
-        )
     return "Mapped to approved calculator" + (
         f": {calculators[0]}."
         if len(calculators) == 1

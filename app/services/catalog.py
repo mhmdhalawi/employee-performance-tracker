@@ -57,7 +57,7 @@ def classification_contract() -> dict[str, object]:
             }
             for calculator, (model, kpi_family) in _CALCULATOR_CONTRACTS.items()
         },
-        "non_evidence_classifications": ["irrelevant", "unsupported"],
+        "non_evidence_classifications": ["irrelevant"],
     }
 
 
@@ -316,7 +316,7 @@ def validate_classification(
 ) -> ClassificationValidation:
     """Validate a classification and its calculator-specific field bindings."""
     table = _table(catalog, classification.source_name)
-    if classification.kpi_family in {"irrelevant", "unsupported"}:
+    if classification.kpi_family == "irrelevant":
         valid = not classification.calculator_invocations
         return ClassificationValidation(
             source_name=table.source_name,
@@ -336,7 +336,7 @@ def validate_classification(
             message=(
                 "Non-evidence table classification is valid."
                 if valid
-                else "Irrelevant and unsupported tables cannot invoke calculators."
+                else "Irrelevant tables cannot invoke calculators."
             ),
         )
     unknown_source_columns: set[str] = set()

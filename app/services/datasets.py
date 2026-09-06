@@ -41,7 +41,7 @@ def build_performance_dataset(
     mapped_fields: dict[str, set[str]] = {}
 
     for classification in classifications:
-        if classification.kpi_family in {"irrelevant", "unsupported"}:
+        if classification.kpi_family == "irrelevant":
             continue
         validation = catalog_service.validate_classification(upload_catalog, classification)
         if not validation.valid:

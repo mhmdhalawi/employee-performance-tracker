@@ -16,10 +16,10 @@ const emit = defineEmits<{
 
 const classifications = computed(() => props.mappingSummaries.flatMap(item => item.table_classifications))
 const relevant = computed(() => classifications.value.filter(item =>
-  item.kpi_family !== 'irrelevant' && item.kpi_family !== 'unsupported',
+  item.kpi_family !== 'irrelevant',
 ))
 const needsAttention = computed(() => classifications.value.filter(item =>
-  item.kpi_family === 'unsupported' || item.confidence !== 'high',
+  item.confidence !== 'high',
 ))
 
 function familyLabel(value: string): string {
@@ -29,8 +29,6 @@ function familyLabel(value: string): string {
 function familyVariant(family: string): 'default' | 'secondary' | 'outline' | 'warning' {
   if (['productivity', 'compliance', 'quality'].includes(family))
     return 'outline'
-  if (family === 'unsupported')
-    return 'warning'
   if (family === 'irrelevant')
     return 'outline'
   if (family === 'shared')
@@ -84,7 +82,7 @@ function familyStyle(family: string): CSSProperties | undefined {
       </div></details>
       <div v-if="needsAttention.length" class="flex items-start gap-2 text-sm text-warning-foreground">
         <TriangleAlertIcon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <p>{{ needsAttention.length }} table{{ needsAttention.length === 1 ? '' : 's' }} need review because classification confidence is below high or the evidence is unsupported.</p>
+        <p>{{ needsAttention.length }} table{{ needsAttention.length === 1 ? '' : 's' }} need review because classification confidence is below high.</p>
       </div>
       <p v-else-if="relevant.length" class="text-sm text-muted-foreground">
         {{ relevant.length }} relevant table{{ relevant.length === 1 ? '' : 's' }} matched approved calculation inputs with high confidence.

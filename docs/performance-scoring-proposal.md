@@ -98,9 +98,9 @@ Compliance = Attendance score × 100%
 ```
 
 If the active policy also requires reporting or training but those tables are absent, Python
-marks that evidence as missing. It does not assume the obligations are inapplicable. If another
-table looks compliance-related but has no registered component, the result identifies it as
-recognized but unsupported rather than inventing a calculation.
+marks that evidence as missing. It does not assume the obligations are inapplicable. A table
+that cannot satisfy any registered component is classified as irrelevant and cannot contribute
+to a calculation.
 
 ## Quality
 
@@ -189,5 +189,5 @@ Under the proposal, clients do not need identical table titles or the maximum se
 - Python selects only a complete, approved profile or policy;
 - richer evidence can support a richer calculation;
 - sparse evidence may support a narrower, clearly labelled calculation;
-- unsupported or absent evidence never causes an invented formula; and
+- irrelevant or absent evidence never causes an invented formula; and
 - profile and policy metadata prevents unlike scores from being presented as equivalent.
