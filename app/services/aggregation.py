@@ -5,7 +5,7 @@ from hashlib import sha256
 
 from pydantic import BaseModel
 
-from app.core.storage import (
+from app.database import (
     CanonicalRecordWrite,
     StoredAggregationState,
 )

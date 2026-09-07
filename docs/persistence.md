@@ -3,6 +3,8 @@
 SQLite persistence is local to one company deployment. The default database is
 `storage/tracker.sqlite3`; override it with `DATABASE_PATH`. Keep the database and its WAL
 sidecars on the same machine as the FastAPI process.
+FastAPI initializes the database and applies pending numbered migrations during application
+startup, before the server accepts requests.
 
 ## Incremental ingestion
 

@@ -197,19 +197,18 @@ tracker/
 │   │   ├── tables.py         # JSON table request models
 │   │   └── uploads.py        # catalog, upload, and analysis response models
 │   ├── services/             # all business logic lives here
-│   │   ├── agent.py          # PydanticAI classification/planning agent + analysis workflow
+│   │   ├── agent/            # PydanticAI planning, context, cache, response, and workflow
 │   │   ├── aggregation.py    # canonical merge, serialization, and materialization
 │   │   ├── imports.py        # mechanical upload parsing and inspection
-│   │   ├── performance.py    # validation and deterministic KPI calculations
+│   │   ├── performance/      # validation, scoring, evidence, metrics, and trends
 │   │   ├── reports.py        # employee snapshot built from filtered dashboard results
-│   │   ├── submissions.py    # canonical submission writes and persisted dashboard reads
+│   │   ├── submissions/      # JSON/upload ingestion and persisted dashboard reads
 │   │   ├── tables.py         # mechanical JSON table-to-catalog conversion
 │   │   └── uploads.py        # extension and size validation
-│   ├── core/                 # config, errors, clients, storage
+│   ├── core/                 # cross-cutting configuration and application errors
 │   │   ├── config.py         # Settings (env-driven), get_settings()
-│   │   ├── database.py       # SQLite connection and migration lifecycle
-│   │   ├── errors.py         # AppError hierarchy + FastAPI handler
-│   │   └── storage.py        # typed low-level submission/snapshot persistence
+│   │   └── errors.py         # AppError hierarchy + FastAPI handler
+│   ├── database/             # SQLite connection, models, reads, and atomic publication
 │   └── utils/                # small pure helpers (nothing here yet)
 ├── tests/
 │   ├── test_api_integration.py # uploads, JSON persistence, dashboard, and filter API tests
@@ -235,7 +234,7 @@ tracker/
 ### Dependency direction
 
 ```
-api  ->  services  ->  schemas / utils / core
+api  ->  services  ->  schemas / utils / core / database
 ```
 
 `api/` may not import pandas, may not call OpenAI, and may not do arithmetic.

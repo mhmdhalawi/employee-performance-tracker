@@ -12,13 +12,12 @@ from app.schemas.uploads import (
     UploadCatalog,
 )
 from app.services.catalog import validate_classifications
-from app.services.agent import (
+from app.services.agent.context import (
     _build_targeted_repair_context,
     _build_workbook_context,
-    _expand_agent_plan,
-    _mapping_model_settings,
-    _merge_agent_plan,
 )
+from app.services.agent.model import _mapping_model_settings
+from app.services.agent.planning import _expand_agent_plan, _merge_agent_plan
 
 
 class CalculationPlanValidationTests(TestCase):

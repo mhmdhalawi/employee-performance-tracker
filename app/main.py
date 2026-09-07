@@ -1,9 +1,21 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import agent, health, reports
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
+from app.database import initialize_database
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Initialize application infrastructure before accepting requests."""
+    initialize_database()
+    yield
+
 
 settings = get_settings()
 
@@ -12,6 +24,7 @@ app = FastAPI(
     description="Ingests performance data and lets an AI agent decide what to calculate.",
     version="0.1.0",
     debug=settings.debug,
+    lifespan=lifespan,
 )
 
 app.add_middleware(

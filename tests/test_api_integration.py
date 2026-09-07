@@ -13,22 +13,23 @@ from pydantic_ai.usage import RunUsage
 os.environ["DEBUG"] = "false"
 
 from app.core.config import get_settings
-from app.core.database import database_connection
-from app.core.storage import (
+from app.database import (
     CanonicalRecordWrite,
     complete_submission,
     create_submission,
+    database_connection,
     fail_submission,
 )
 from app.main import app
 from app.schemas.uploads import CalculationPlan, CalculatorInvocation, TableClassification
-from app.services import agent as agent_service
+from app.services.agent import cache as agent_cache
+from app.services.agent import workflow as agent_workflow
 from tests.benchmark_fixture import benchmark_plan, benchmark_tables, benchmark_xlsx
 
 
 class AnalyzeApiIntegrationTests(TestCase):
     def setUp(self) -> None:
-        agent_service._mapping_cache.clear()
+        agent_cache._mapping_cache.clear()
         self._temporary_directory = TemporaryDirectory()
         self._original_database_path = get_settings().database_path
         get_settings().database_path = Path(self._temporary_directory.name) / "tracker.sqlite3"
@@ -39,7 +40,7 @@ class AnalyzeApiIntegrationTests(TestCase):
         self._temporary_directory.cleanup()
 
     def _post_benchmark(self, query: str = ""):
-        with patch.object(agent_service, "_run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
+        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
             return self.client.post(
                 f"/api/v1/analyze{query}",
                 files={"file": ("cedar-30-sanitized.xlsx", benchmark_xlsx(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
@@ -53,7 +54,7 @@ class AnalyzeApiIntegrationTests(TestCase):
             ]
         }
         with patch.object(
-            agent_service,
+            agent_workflow,
             "_run_mapping_agent",
             AsyncMock(return_value=plan or benchmark_plan()),
         ):
@@ -171,8 +172,8 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertTrue(b64decode(source["contents_base64"]).startswith(b"PK"))
         self.assertEqual(len(json.loads(audit["response_json"])["results"]), 30)
         first_results = dashboard.json()["results"]
-        agent_service._mapping_cache.clear()
-        with patch.object(agent_service, "_run_mapping_agent", AsyncMock(side_effect=AssertionError("cached plan expected"))):
+        agent_cache._mapping_cache.clear()
+        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(side_effect=AssertionError("cached plan expected"))):
             repeated = self.client.post(
                 "/api/v1/analyze",
                 files={"file": ("cedar.xlsx", benchmark_xlsx())},
@@ -184,7 +185,7 @@ class AnalyzeApiIntegrationTests(TestCase):
     def test_failed_upload_does_not_publish_evidence(self) -> None:
         from app.core.errors import AIError
 
-        with patch.object(agent_service, "_run_mapping_agent", AsyncMock(side_effect=AIError("test failure"))):
+        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(side_effect=AIError("test failure"))):
             response = self.client.post(
                 "/api/v1/analyze", files={"file": ("cedar.xlsx", benchmark_xlsx())},
             )
@@ -197,7 +198,7 @@ class AnalyzeApiIntegrationTests(TestCase):
     def test_json_tables_match_the_upload_analysis(self) -> None:
         self.assertEqual(self._post_benchmark().status_code, 200)
         upload_body = self.client.get("/api/v1/dashboard").json()
-        agent_service._mapping_cache.clear()
+        agent_cache._mapping_cache.clear()
         response = self._post_benchmark_tables()
 
         self.assertEqual(response.status_code, 201)
@@ -316,7 +317,7 @@ class AnalyzeApiIntegrationTests(TestCase):
 
         database_path = get_settings().database_path
         with patch.object(
-            agent_service,
+            agent_workflow,
             "_run_mapping_agent",
             AsyncMock(side_effect=mapping_with_usage),
         ):
@@ -336,10 +337,10 @@ class AnalyzeApiIntegrationTests(TestCase):
     def test_latest_dashboard_uses_persisted_plan_for_filters(self) -> None:
         submitted = self._post_benchmark_tables()
         self.assertEqual(submitted.status_code, 201)
-        agent_service._mapping_cache.clear()
+        agent_cache._mapping_cache.clear()
 
         mapping_agent = AsyncMock(side_effect=AssertionError("mapping agent should not run"))
-        with patch.object(agent_service, "_run_mapping_agent", mapping_agent):
+        with patch.object(agent_workflow, "_run_mapping_agent", mapping_agent):
             filtered = self.client.get(
                 "/api/v1/dashboard?start_date=2026-06-01&end_date=2026-06-05"
             )
@@ -775,7 +776,7 @@ class AnalyzeApiIntegrationTests(TestCase):
                 CalculatorInvocation(calculator="load_performance_targets", field_bindings={key: key for key in ("employee_id", "target_outputs_90d", "target_avg_effort_hours", "minimum_confidence")}),
             ], confidence="high", rationale="Deterministic CSV integration binding.")
         ])
-        with patch.object(agent_service, "_run_mapping_agent", AsyncMock(return_value=plan)):
+        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(return_value=plan)):
             response = self.client.post("/api/v1/analyze", files={"file": ("employees.csv", content, "text/csv")})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["file_type"], "csv")
@@ -789,7 +790,7 @@ class AnalyzeApiIntegrationTests(TestCase):
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             for name, rows in tables.items():
                 pd.DataFrame(rows).to_excel(writer, sheet_name=name, index=False)
-        with patch.object(agent_service, "_run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
+        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
             response = self.client.post("/api/v1/analyze", files={"file": ("invalid-row.xlsx", output.getvalue())})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(any(item["code"] == "invalid_row" for item in response.json()["import_issues"]))

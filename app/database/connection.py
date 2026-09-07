@@ -1,11 +1,10 @@
+import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-import sqlite3
 from threading import Lock
 
 from app.core.config import get_settings
-
 
 _MIGRATIONS_DIRECTORY = Path(__file__).resolve().parents[2] / "migrations"
 _initialization_lock = Lock()
@@ -31,7 +30,9 @@ def initialize_database(path: Path | None = None) -> Path:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("PRAGMA busy_timeout = 5000")
             current_version = connection.execute("PRAGMA user_version").fetchone()[0]
-            for migration_path in sorted(_MIGRATIONS_DIRECTORY.glob("[0-9][0-9][0-9]_*.sql")):
+            for migration_path in sorted(
+                _MIGRATIONS_DIRECTORY.glob("[0-9][0-9][0-9]_*.sql")
+            ):
                 version = int(migration_path.name.split("_", 1)[0])
                 if version <= current_version:
                     continue
@@ -62,3 +63,4 @@ def database_connection() -> Iterator[sqlite3.Connection]:
         raise
     finally:
         connection.close()
+
