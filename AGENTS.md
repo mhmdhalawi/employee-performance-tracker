@@ -423,9 +423,9 @@ Without an idempotency key, identical requests are separate audited submissions 
 reuse one mapping plan. A smaller unseen schema may also be faster on a cache miss because its
 catalog synopsis, token usage, binding work, and canonical write set are smaller.
 
-After Python validates an agent-proposed classification and calculator plan, the deterministic service uses
-`validate_dataset`, `calculate_kpis`, `calculate_weekly_kpi_trends`, and
-`get_supporting_evidence`. The planning agent selects only approved calculators; it does not
+After Python validates an agent-proposed classification and calculator plan, the deterministic
+service uses `validate_dataset`, `calculate_kpis`, `calculate_weekly_kpi_trends`, and
+`build_performance_alerts`. The planning agent selects only approved calculators; it does not
 choose formulas or execute calculations.
 
 The deterministic scorer uses Productivity (35%), Compliance (30%), and Quality (35%).

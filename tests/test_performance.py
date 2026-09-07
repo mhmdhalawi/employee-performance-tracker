@@ -14,7 +14,6 @@ from app.schemas.performance import (
 from app.services.performance import (
     build_performance_alerts,
     calculate_kpis,
-    get_supporting_evidence,
     validate_dataset,
 )
 
@@ -253,7 +252,7 @@ class PerformanceQaTests(TestCase):
         self.assertIsNone(result.performance_tier)
         self.assertEqual(result.result_status, "Insufficient data")
 
-    def test_team_filter_and_supporting_evidence(self) -> None:
+    def test_team_filter(self) -> None:
         dataset = _dataset()
         second = _dataset(employee_id="EMP-002", team="Operations", suffix="2")
         dataset.employees.extend(second.employees)
@@ -265,13 +264,8 @@ class PerformanceQaTests(TestCase):
         dataset.quality_events.extend(second.quality_events)
 
         results = calculate_kpis(dataset, team="Operations")
-        evidence = get_supporting_evidence(dataset, "EMP-002")
 
         self.assertEqual([item.employee_id for item in results], ["EMP-002"])
-        self.assertEqual(
-            set(evidence.record_ids),
-            {"OUT-2", "ATT-2", "SUB-2", "QLT-2"},
-        )
 
 
 def _dataset(

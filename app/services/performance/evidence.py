@@ -2,12 +2,10 @@ from collections import defaultdict
 from typing import Literal
 
 from app.schemas.performance import (
-    EvidenceResult,
     PerformanceAlert,
     PerformanceEvidenceDataset,
     ValidationFinding,
 )
-from app.services.performance.validation import validate_dataset
 
 
 def build_performance_alerts(
@@ -110,44 +108,3 @@ def build_performance_alerts(
             alert.code,
         ),
     )
-
-
-def get_supporting_evidence(
-    dataset: PerformanceEvidenceDataset, employee_id: str
-) -> EvidenceResult:
-    """Return records, evidence links, and validation findings supporting an employee result."""
-    findings = [
-        finding
-        for finding in validate_dataset(dataset)
-        if finding.employee_id == employee_id
-    ]
-    outputs = [
-        record for record in dataset.work_outputs if record.employee_id == employee_id
-    ]
-    record_ids = [
-        *(record.record_id for record in outputs),
-        *(
-            record.record_id
-            for record in dataset.attendance_events
-            if record.employee_id == employee_id
-        ),
-        *(
-            record.record_id
-            for record in dataset.submission_events
-            if record.employee_id == employee_id
-        ),
-        *(
-            record.record_id
-            for record in dataset.quality_events
-            if record.employee_id == employee_id
-        ),
-    ]
-    return EvidenceResult(
-        employee_id=employee_id,
-        record_ids=record_ids,
-        evidence_links=[
-            record.evidence_link for record in outputs if record.evidence_link
-        ],
-        findings=findings,
-    )
-

@@ -16,9 +16,9 @@ def database_path() -> Path:
     return get_settings().database_path.expanduser().resolve()
 
 
-def initialize_database(path: Path | None = None) -> Path:
+def initialize_database() -> Path:
     """Create the SQLite file and apply any unapplied numbered migrations."""
-    resolved_path = (path or database_path()).expanduser().resolve()
+    resolved_path = database_path()
     with _initialization_lock:
         if resolved_path in _initialized_paths:
             return resolved_path

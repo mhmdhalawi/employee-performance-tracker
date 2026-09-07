@@ -174,13 +174,6 @@ class EmployeeKpiScores(BaseModel):
     validation_findings: list[ValidationFinding] = Field(default_factory=list)
 
 
-class EvidenceResult(BaseModel):
-    employee_id: str
-    record_ids: list[str]
-    evidence_links: list[str]
-    findings: list[ValidationFinding]
-
-
 class KpiTrendPoint(BaseModel):
     period_start: date
     period_end: date

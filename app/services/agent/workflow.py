@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from datetime import date
 from time import perf_counter
 
 from pydantic_ai.exceptions import (
@@ -36,7 +35,6 @@ from app.services.agent.planning import (
 from app.services.aggregation import canonicalize_batch
 from app.services.analysis import build_analysis_response
 from app.services.datasets import build_performance_dataset
-from app.services.filters import validate_analysis_period
 from app.services.tables import catalog_from_tables
 
 
@@ -52,10 +50,6 @@ class AnalysisArtifacts:
 
 async def analyze_tables_artifacts(
     request: AnalyzeTablesRequest,
-    employee_id: str | None = None,
-    team: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
     calculation_plan: CalculationPlan | None = None,
     available_foundation_calculators: set[str] | None = None,
 ) -> AnalysisArtifacts:
@@ -63,10 +57,6 @@ async def analyze_tables_artifacts(
     return await analyze_catalog_artifacts(
         catalog_from_tables(request),
         import_issues=[],
-        employee_id=employee_id,
-        team=team,
-        start_date=start_date,
-        end_date=end_date,
         calculation_plan=calculation_plan,
         canonicalize_batch_records=True,
         available_foundation_calculators=available_foundation_calculators,
@@ -89,16 +79,15 @@ async def preview_tables_analysis(
 async def analyze_catalog_artifacts(
     source_catalog: DataCatalog,
     import_issues: list[ImportIssue],
-    employee_id: str | None = None,
-    team: str | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
     calculation_plan: CalculationPlan | None = None,
     canonicalize_batch_records: bool = False,
     available_foundation_calculators: set[str] | None = None,
 ) -> AnalysisArtifacts:
-    """Resolve a plan, bind canonical evidence, and construct a deterministic response."""
-    validate_analysis_period(start_date, end_date)
+    """Resolve a plan, bind canonical evidence, and construct a deterministic response.
+
+    The analysis is always unfiltered: both ingestion paths persist the whole batch, and
+    `/analyze` applies its response filters afterwards in `analyze_and_store_upload`.
+    """
     workbook_context = build_workbook_context(source_catalog)
     schema_fingerprint = catalog_schema_fingerprint(source_catalog)
     analysis = (
@@ -182,10 +171,6 @@ async def analyze_catalog_artifacts(
         performance_dataset,
         analysis,
         import_issues=all_import_issues,
-        employee_id=employee_id,
-        team=team,
-        start_date=start_date,
-        end_date=end_date,
         additional_validation_findings=batch_findings,
         model=get_settings().openai_model,
         total_tokens=usage.total_tokens,
