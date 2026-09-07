@@ -49,6 +49,13 @@ class FileTooLargeError(AppError):
         super().__init__(f"Upload exceeds the {maximum_bytes}-byte size limit.")
 
 
+class UnparseableFileError(AppError):
+    """The upload cannot be read as the declared CSV or Excel format."""
+
+    status_code = 422
+    code = "unparseable_file"
+
+
 class InvalidAnalysisFilterError(AppError):
     """The requested employee, team, or reporting period is invalid."""
 

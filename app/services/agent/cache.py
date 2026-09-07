@@ -33,7 +33,7 @@ def catalog_schema_fingerprint(
     return sha256(encoded).hexdigest()
 
 
-def _get_cached_analysis(schema_fingerprint: str) -> CalculationPlan | None:
+def get_cached_analysis(schema_fingerprint: str) -> CalculationPlan | None:
     analysis = _mapping_cache.get(schema_fingerprint)
     if analysis is None:
         return None
@@ -41,7 +41,7 @@ def _get_cached_analysis(schema_fingerprint: str) -> CalculationPlan | None:
     return analysis.model_copy(deep=True)
 
 
-def _cache_analysis(
+def cache_analysis(
     schema_fingerprint: str,
     analysis: CalculationPlan,
 ) -> None:

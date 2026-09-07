@@ -1,9 +1,12 @@
 from datetime import date, datetime
 
 from app.database import StoredSubmissionReceipt, load_canonical_record_types
+from app.schemas.calculators import CALCULATORS, FOUNDATION_CALCULATORS
 from app.schemas.uploads import SubmissionReceipt
 
-def _submission_receipt(stored: StoredSubmissionReceipt) -> SubmissionReceipt:
+
+def submission_receipt(stored: StoredSubmissionReceipt) -> SubmissionReceipt:
+    """Convert a stored receipt row into the typed ingestion response."""
     return SubmissionReceipt(
         submission_id=stored.submission_id,
         status=stored.status,
@@ -17,15 +20,11 @@ def _submission_receipt(stored: StoredSubmissionReceipt) -> SubmissionReceipt:
     )
 
 
-def _date_string(value: date | None) -> str | None:
-    return value.isoformat() if value else None
-
-
-def _available_foundation_calculators() -> set[str]:
+def persisted_foundation_calculators() -> set[str]:
+    """Return foundation calculators already satisfied by completed canonical records."""
     record_types = load_canonical_record_types()
-    calculators: set[str] = set()
-    if "employee" in record_types:
-        calculators.add("load_employees")
-    if "performance_target" in record_types:
-        calculators.add("load_performance_targets")
-    return calculators
+    return {
+        spec.name
+        for spec in CALCULATORS
+        if spec.name in FOUNDATION_CALCULATORS and spec.record_type in record_types
+    }

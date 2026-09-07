@@ -40,8 +40,8 @@ A FastAPI backend that:
    limitations, and supporting evidence.
 
 `POST /api/v1/analyze` owns the upload workflow, while `POST /api/v1/analyze-tables` accepts
-JSON tables and runs the same catalog analysis. `POST /api/v1/ask` is retained only as a small
-LLM connectivity test; it does not receive or analyze source data.
+JSON tables and runs the same catalog analysis, and `POST /api/v1/analyze-tables-preview`
+runs that analysis without touching persistence.
 
 ### The one rule that matters most
 
@@ -124,6 +124,8 @@ uvx library-skills --all             # discover/refresh AI skills bundled with i
 uv run fastapi dev app/main.py       # dev server, http://127.0.0.1:8000/docs
 uv run python -m unittest discover -s tests -v
                                      # deterministic service regression suite
+uv run ruff check app tests          # lint gate for the style rules in section 10
+uv run ruff check app tests --fix    # apply the mechanical fixes (import order, __all__)
 
 cd web
 pnpm install                         # install/refresh deps from pnpm-lock.yaml
@@ -191,14 +193,20 @@ tracker/
 │   │   ├── health.py         # GET /health
 │   │   └── reports.py        # deterministic employee report-preview endpoint
 │   ├── schemas/              # Pydantic request/response + internal models ONLY
-│   │   ├── agent.py          # AskRequest, AskResponse
+│   │   ├── calculators.py    # THE approved-calculator registry (see below)
+│   │   ├── health.py         # HealthResponse
 │   │   ├── performance.py    # generic calculator evidence records and tool results
 │   │   ├── reports.py        # renderer-ready employee report contract
 │   │   ├── tables.py         # JSON table request models
 │   │   └── uploads.py        # catalog, upload, and analysis response models
 │   ├── services/             # all business logic lives here
-│   │   ├── agent/            # PydanticAI planning, context, cache, response, and workflow
+│   │   ├── agent/            # model-facing ONLY: prompts, model, context, planning, cache,
+│   │   │                     #   workflow. Nothing else in the codebase may call a model.
 │   │   ├── aggregation.py    # canonical merge, serialization, and materialization
+│   │   ├── analysis.py       # deterministic AnalysisResponse assembly (no model access)
+│   │   ├── catalog.py        # catalog profiling and plan/binding validation
+│   │   ├── datasets.py       # binds a validated plan to typed evidence records
+│   │   ├── filters.py        # shared reporting-period filter validation
 │   │   ├── imports.py        # mechanical upload parsing and inspection
 │   │   ├── performance/      # validation, scoring, evidence, metrics, and trends
 │   │   ├── reports.py        # employee snapshot built from filtered dashboard results
@@ -209,11 +217,14 @@ tracker/
 │   │   ├── config.py         # Settings (env-driven), get_settings()
 │   │   └── errors.py         # AppError hierarchy + FastAPI handler
 │   ├── database/             # SQLite connection, models, reads, and atomic publication
-│   └── utils/                # small pure helpers (nothing here yet)
+│   └── utils/                # small pure helpers: dates.py, numbers.py
 ├── tests/
+│   ├── benchmark_fixture.py  # sanitized 30-employee workbook and plan builder
 │   ├── test_api_integration.py # uploads, JSON persistence, dashboard, and filter API tests
 │   ├── test_benchmark.py     # sanitized 30-employee benchmark parity
-│   └── test_performance.py   # generic-evidence KPI and validation regressions
+│   ├── test_catalog.py       # catalog profiling, plan validation, and repair merging
+│   ├── test_performance.py   # generic-evidence KPI and validation regressions
+│   └── test_tables.py        # JSON table request conversion
 └── web/                      # Vue 3 browser client
     ├── components.json       # shadcn-vue project configuration
     ├── package.json          # frontend scripts and dependencies
@@ -230,6 +241,25 @@ tracker/
         ├── main.ts
         └── style.css         # Tailwind import and global theme tokens
 ```
+
+### The calculator registry
+
+`app/schemas/calculators.py` is the single source of truth for every approved calculator. One
+`CalculatorSpec` per calculator carries its name, Pydantic input model, KPI family, dataset
+collection, canonical record type, identity field, and period fields. Everything downstream is
+derived from that one tuple:
+
+| Consumer | What it derives |
+| --- | --- |
+| `services/catalog.py` | the calculator contract sent to the agent, and binding validation |
+| `services/datasets.py` | which model and collection a validated binding produces |
+| `services/aggregation.py` | canonical record writes, batch identity, and materialization |
+| `schemas/uploads.py` | the `CalculatorName` literal the agent must return |
+
+**Adding or changing a calculator is one edit in `calculators.py`.** Do not reintroduce a
+per-module lookup table; a module-level check fails at import if `CalculatorName` and the
+registry ever disagree. Registry order is significant — it fixes the order of the contract sent
+to the model and of canonical record writes.
 
 ### Dependency direction
 
@@ -394,9 +424,9 @@ reuse one mapping plan. A smaller unseen schema may also be faster on a cache mi
 catalog synopsis, token usage, binding work, and canonical write set are smaller.
 
 After Python validates an agent-proposed classification and calculator plan, the deterministic service uses
-`validate_dataset`, `calculate_kpis`, `get_supporting_evidence`, and
-`calculate_kpi_trends`. The planning agent selects only approved calculators; it does not choose
-formulas or execute calculations.
+`validate_dataset`, `calculate_kpis`, `calculate_weekly_kpi_trends`, and
+`get_supporting_evidence`. The planning agent selects only approved calculators; it does not
+choose formulas or execute calculations.
 
 The deterministic scorer uses Productivity (35%), Compliance (30%), and Quality (35%).
 Productivity combines completion (60%) and time efficiency (40%); Compliance combines
@@ -434,8 +464,7 @@ than asking nicely in the prompt. Classification confidence communicates semanti
 No API key → the service still starts, and endpoints needing the agent say so plainly.
 
 The `/analyze` and `/analyze-tables` workflows construct a request-scoped synopsis when no valid
-mapping plan is cached. The planning agent has no upload dependency or function tools. `/ask`
-remains a separate plain connectivity test with no upload data.
+mapping plan is cached. The planning agent has no upload dependency or function tools.
 
 ---
 
@@ -456,7 +485,6 @@ Current endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | liveness + whether AI is configured |
-| `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
 | `POST` | `/api/v1/analyze` | upload, classify, validate, and return employee KPI results with findings |
 | `POST` | `/api/v1/analyze-tables` | ingest an incremental JSON upsert batch and return a `201` receipt |
 | `POST` | `/api/v1/analyze-tables-preview` | analyze a complete JSON dataset without persistence and return the adjusted response with LLM usage/timing |
@@ -506,6 +534,11 @@ nor browser-generated PDFs are persisted.
 - Small pure functions in `utils/`; keep pandas usage in one place so the rest of the codebase
   deals in plain Pydantic models.
 - No `print` in library code.
+- A leading underscore means *module*-private. If another module imports it, it should not have
+  one; import the sibling module (`from app.services.performance import metrics`) when the
+  qualified call reads better or the bare name would shadow a local.
+- `uv run ruff check app tests` enforces the mechanical part of these rules (import order,
+  unused names, modern syntax, no `print`). Keep it clean; it is not run automatically.
 
 ### Frontend
 

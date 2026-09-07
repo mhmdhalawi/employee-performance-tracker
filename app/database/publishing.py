@@ -1,6 +1,6 @@
 from app.database.connection import database_connection
 from app.database.models import CanonicalRecordWrite, StoredSubmissionReceipt
-from app.database.submissions import _now, _receipt_from_row
+from app.database.submissions import now_timestamp, receipt_from_row
 
 
 def complete_submission(
@@ -18,7 +18,7 @@ def complete_submission(
     canonical_records: list[CanonicalRecordWrite],
 ) -> StoredSubmissionReceipt:
     """Atomically publish canonical rows, audit artifacts, and completion state."""
-    completed_at = _now()
+    completed_at = now_timestamp()
     with database_connection() as connection:
         connection.execute(
             """
@@ -141,7 +141,7 @@ def complete_submission(
             """,
             (submission_id,),
         ).fetchone()
-    receipt = _receipt_from_row(row)
+    receipt = receipt_from_row(row)
     if receipt is None:
         raise RuntimeError("Completed submission receipt was not found.")
     return receipt

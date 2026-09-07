@@ -13,11 +13,12 @@ from app.schemas.uploads import CalculationPlan, SubmissionReceipt
 from app.services.agent import analyze_tables_artifacts, catalog_schema_fingerprint
 from app.services.aggregation import canonical_record_writes
 from app.services.submissions.helpers import (
-    _available_foundation_calculators,
-    _date_string,
-    _submission_receipt,
+    persisted_foundation_calculators,
+    submission_receipt,
 )
 from app.services.tables import catalog_from_tables
+from app.utils.dates import date_string
+
 
 async def analyze_and_store_tables(
     request: AnalyzeTablesRequest,
@@ -27,7 +28,7 @@ async def analyze_and_store_tables(
     if idempotency_key is not None:
         replay = load_submission_receipt_by_idempotency_key(idempotency_key)
         if replay is not None:
-            return _submission_receipt(replay)
+            return submission_receipt(replay)
 
     request_json = request.model_dump_json()
     schema_fingerprint = catalog_schema_fingerprint(catalog_from_tables(request))
@@ -49,7 +50,7 @@ async def analyze_and_store_tables(
         )
         if replay is None:
             raise RuntimeError("The idempotent submission could not be reloaded.")
-        return _submission_receipt(replay)
+        return submission_receipt(replay)
 
     persisted_plan_json = load_mapping_plan(schema_fingerprint)
     persisted_plan = (
@@ -58,7 +59,7 @@ async def analyze_and_store_tables(
         else None
     )
     try:
-        available_foundations = _available_foundation_calculators()
+        available_foundations = persisted_foundation_calculators()
         artifacts = await analyze_tables_artifacts(
             request,
             calculation_plan=persisted_plan,
@@ -70,8 +71,8 @@ async def analyze_and_store_tables(
             schema_fingerprint=schema_fingerprint,
             calculation_plan_json=artifacts.calculation_plan.model_dump_json(),
             analysis_id=str(uuid4()),
-            coverage_start=_date_string(response.dataset_overview.date_start),
-            coverage_end=_date_string(response.dataset_overview.date_end),
+            coverage_start=date_string(response.dataset_overview.date_start),
+            coverage_end=date_string(response.dataset_overview.date_end),
             model=response.model,
             total_tokens=response.total_tokens,
             model_requests=response.model_requests,
@@ -82,4 +83,4 @@ async def analyze_and_store_tables(
     except Exception as exc:
         fail_submission(submission_id, str(exc))
         raise
-    return _submission_receipt(receipt)
+    return submission_receipt(receipt)

@@ -1,6 +1,6 @@
+import os
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
-import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -40,7 +40,7 @@ class AnalyzeApiIntegrationTests(TestCase):
         self._temporary_directory.cleanup()
 
     def _post_benchmark(self, query: str = ""):
-        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
+        with patch.object(agent_workflow, "run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
             return self.client.post(
                 f"/api/v1/analyze{query}",
                 files={"file": ("cedar-30-sanitized.xlsx", benchmark_xlsx(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
@@ -55,7 +55,7 @@ class AnalyzeApiIntegrationTests(TestCase):
         }
         with patch.object(
             agent_workflow,
-            "_run_mapping_agent",
+            "run_mapping_agent",
             AsyncMock(return_value=plan or benchmark_plan()),
         ):
             return self.client.post(
@@ -173,7 +173,7 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertEqual(len(json.loads(audit["response_json"])["results"]), 30)
         first_results = dashboard.json()["results"]
         agent_cache._mapping_cache.clear()
-        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(side_effect=AssertionError("cached plan expected"))):
+        with patch.object(agent_workflow, "run_mapping_agent", AsyncMock(side_effect=AssertionError("cached plan expected"))):
             repeated = self.client.post(
                 "/api/v1/analyze",
                 files={"file": ("cedar.xlsx", benchmark_xlsx())},
@@ -185,7 +185,7 @@ class AnalyzeApiIntegrationTests(TestCase):
     def test_failed_upload_does_not_publish_evidence(self) -> None:
         from app.core.errors import AIError
 
-        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(side_effect=AIError("test failure"))):
+        with patch.object(agent_workflow, "run_mapping_agent", AsyncMock(side_effect=AIError("test failure"))):
             response = self.client.post(
                 "/api/v1/analyze", files={"file": ("cedar.xlsx", benchmark_xlsx())},
             )
@@ -318,7 +318,7 @@ class AnalyzeApiIntegrationTests(TestCase):
         database_path = get_settings().database_path
         with patch.object(
             agent_workflow,
-            "_run_mapping_agent",
+            "run_mapping_agent",
             AsyncMock(side_effect=mapping_with_usage),
         ):
             response = self.client.post(
@@ -340,7 +340,7 @@ class AnalyzeApiIntegrationTests(TestCase):
         agent_cache._mapping_cache.clear()
 
         mapping_agent = AsyncMock(side_effect=AssertionError("mapping agent should not run"))
-        with patch.object(agent_workflow, "_run_mapping_agent", mapping_agent):
+        with patch.object(agent_workflow, "run_mapping_agent", mapping_agent):
             filtered = self.client.get(
                 "/api/v1/dashboard?start_date=2026-06-01&end_date=2026-06-05"
             )
@@ -776,7 +776,7 @@ class AnalyzeApiIntegrationTests(TestCase):
                 CalculatorInvocation(calculator="load_performance_targets", field_bindings={key: key for key in ("employee_id", "target_outputs_90d", "target_avg_effort_hours", "minimum_confidence")}),
             ], confidence="high", rationale="Deterministic CSV integration binding.")
         ])
-        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(return_value=plan)):
+        with patch.object(agent_workflow, "run_mapping_agent", AsyncMock(return_value=plan)):
             response = self.client.post("/api/v1/analyze", files={"file": ("employees.csv", content, "text/csv")})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["file_type"], "csv")
@@ -790,7 +790,7 @@ class AnalyzeApiIntegrationTests(TestCase):
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             for name, rows in tables.items():
                 pd.DataFrame(rows).to_excel(writer, sheet_name=name, index=False)
-        with patch.object(agent_workflow, "_run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
+        with patch.object(agent_workflow, "run_mapping_agent", AsyncMock(return_value=benchmark_plan())):
             response = self.client.post("/api/v1/analyze", files={"file": ("invalid-row.xlsx", output.getvalue())})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(any(item["code"] == "invalid_row" for item in response.json()["import_issues"]))

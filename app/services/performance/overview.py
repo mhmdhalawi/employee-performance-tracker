@@ -1,5 +1,6 @@
 from app.schemas.performance import DatasetOverview, PerformanceEvidenceDataset
 
+
 def inspect_dataset(dataset: PerformanceEvidenceDataset) -> DatasetOverview:
     """Return the available population, coverage period, and source record counts."""
     dates = [

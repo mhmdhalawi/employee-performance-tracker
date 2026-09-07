@@ -7,20 +7,13 @@ from pathlib import PurePath
 
 import pandas as pd
 
-from app.core.errors import AppError
+from app.core.errors import UnparseableFileError
 from app.schemas.uploads import (
     CatalogTable,
     CellValue,
     UploadCatalog,
 )
 from app.services.uploads import accept_upload
-
-
-class UnparseableFileError(AppError):
-    """The upload cannot be read as the declared CSV or Excel format."""
-
-    status_code = 422
-    code = "unparseable_file"
 
 
 def parse_upload(

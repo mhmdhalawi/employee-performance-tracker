@@ -4,28 +4,10 @@ from typing import get_args
 
 from pydantic import BaseModel, ValidationError
 
-from app.schemas.performance import (
-    AttendanceComplianceEvidence,
-    Employee,
-    LeaveComplianceEvidence,
-    PerformanceEvidenceDataset,
-    PerformanceTarget,
-    QualityEvidence,
-    SubmissionComplianceEvidence,
-    WorkOutputEvidence,
-)
+from app.schemas.calculators import CALCULATOR_BY_NAME, CALCULATORS
+from app.schemas.performance import PerformanceEvidenceDataset
 from app.schemas.uploads import DataCatalog, ImportIssue, TableClassification
 from app.services import catalog as catalog_service
-
-_CALCULATOR_INPUTS: dict[str, tuple[type[BaseModel], str]] = {
-    "load_employees": (Employee, "employees"),
-    "load_performance_targets": (PerformanceTarget, "performance_targets"),
-    "calculate_productivity": (WorkOutputEvidence, "work_outputs"),
-    "calculate_attendance_compliance": (AttendanceComplianceEvidence, "attendance_events"),
-    "calculate_submission_compliance": (SubmissionComplianceEvidence, "submission_events"),
-    "calculate_leave_compliance": (LeaveComplianceEvidence, "leave_events"),
-    "calculate_quality": (QualityEvidence, "quality_events"),
-}
 
 
 def build_performance_dataset(
@@ -34,8 +16,7 @@ def build_performance_dataset(
 ) -> tuple[PerformanceEvidenceDataset, list[ImportIssue]]:
     """Apply a validated classification plan and report unusable source rows."""
     collections: dict[str, list[BaseModel]] = {
-        collection_name: []
-        for _, collection_name in _CALCULATOR_INPUTS.values()
+        spec.collection_name: [] for spec in CALCULATORS
     }
     issues: list[ImportIssue] = []
     mapped_fields: dict[str, set[str]] = {}
@@ -60,11 +41,11 @@ def build_performance_dataset(
             if table.source_name == classification.source_name
         )
         for invocation in classification.calculator_invocations:
-            target = _CALCULATOR_INPUTS.get(invocation.calculator)
-            if target is None:
+            spec = CALCULATOR_BY_NAME.get(invocation.calculator)
+            if spec is None:
                 continue
-            model, collection_name = target
-            mapped_fields.setdefault(collection_name, set()).update(
+            model = spec.model
+            mapped_fields.setdefault(spec.collection_name, set()).update(
                 invocation.field_bindings
             )
             for row in table.rows:
@@ -84,7 +65,9 @@ def build_performance_dataset(
                     if row.get(source_column) is not None
                 }
                 try:
-                    collections[collection_name].append(model.model_validate(mapped_row))
+                    collections[spec.collection_name].append(
+                        model.model_validate(mapped_row)
+                    )
                 except ValidationError as exc:
                     issues.append(
                         ImportIssue(

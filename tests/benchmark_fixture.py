@@ -6,7 +6,6 @@ import pandas as pd
 
 from app.schemas.uploads import CalculationPlan, CalculatorInvocation, TableClassification
 
-
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
 

@@ -11,13 +11,13 @@ from app.schemas.uploads import (
     TableClassification,
     UploadCatalog,
 )
-from app.services.catalog import validate_classifications
 from app.services.agent.context import (
-    _build_targeted_repair_context,
-    _build_workbook_context,
+    build_targeted_repair_context,
+    build_workbook_context,
 )
-from app.services.agent.model import _mapping_model_settings
-from app.services.agent.planning import _expand_agent_plan, _merge_agent_plan
+from app.services.agent.model import mapping_model_settings
+from app.services.agent.planning import _merge_agent_plan, expand_agent_plan
+from app.services.catalog import validate_classifications
 
 
 class CalculationPlanValidationTests(TestCase):
@@ -33,7 +33,7 @@ class CalculationPlanValidationTests(TestCase):
             )
 
     def test_mapping_agent_uses_model_default_reasoning_effort(self) -> None:
-        self.assertNotIn("openai_reasoning_effort", _mapping_model_settings())
+        self.assertNotIn("openai_reasoning_effort", mapping_model_settings())
 
     def test_kpi_plan_requires_employee_and_target_loaders(self) -> None:
         catalog = UploadCatalog(
@@ -101,7 +101,7 @@ class CalculationPlanValidationTests(TestCase):
         self.assertTrue(all(item.valid for item in persisted_foundation_validations))
 
     def test_agent_plan_expansion_derives_non_scoring_fields(self) -> None:
-        expanded = _expand_agent_plan(
+        expanded = expand_agent_plan(
             AgentCalculationPlan(
                 table_classifications=[
                     AgentTableClassification(
@@ -152,7 +152,7 @@ class CalculationPlanValidationTests(TestCase):
             ],
         )
 
-        context = _build_workbook_context(upload)
+        context = build_workbook_context(upload)
         table = context["tables"][0]
         columns = {column["name"]: column for column in table["columns"]}
 
@@ -211,7 +211,7 @@ class CalculationPlanValidationTests(TestCase):
             )
         ]
 
-        context = _build_targeted_repair_context(
+        context = build_targeted_repair_context(
             upload,
             {item.source_name for item in invalid},
         )

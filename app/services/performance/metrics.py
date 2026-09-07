@@ -11,9 +11,10 @@ from app.schemas.performance import (
     WorkOutputEvidence,
 )
 from app.services.performance.constants import (
+    NEUTRAL_ATTENDANCE_OUTCOMES,
     REQUIRED_EVIDENCE_MATRIX,
-    _NEUTRAL_ATTENDANCE_OUTCOMES,
 )
+
 
 @dataclass(frozen=True, slots=True)
 class AttendanceBreakdown:
@@ -26,7 +27,7 @@ class EmployeeLinkedRecord(Protocol):
     employee_id: str
 
 
-def _in_period[T: EmployeeLinkedRecord](
+def in_period[T: EmployeeLinkedRecord](
     records: list[T],
     employee_id: str,
     date_getter: Callable[[T], date],
@@ -43,14 +44,14 @@ def _in_period[T: EmployeeLinkedRecord](
     ]
 
 
-def _attendance_compliance(
+def attendance_compliance(
     records: list[AttendanceComplianceEvidence],
     mapped_fields: set[str],
 ) -> AttendanceBreakdown:
     working_records = [
         record
         for record in records
-        if record.outcome.casefold() not in _NEUTRAL_ATTENDANCE_OUTCOMES
+        if record.outcome.casefold() not in NEUTRAL_ATTENDANCE_OUTCOMES
     ]
     arrival_score = (
         _boolean_score(
@@ -89,7 +90,7 @@ def _attendance_compliance(
     )
 
 
-def _report_compliance(reports: list[SubmissionComplianceEvidence]) -> float | None:
+def report_compliance(reports: list[SubmissionComplianceEvidence]) -> float | None:
     supported: list[tuple[date, date]] = []
     for report in reports:
         submitted_date = report.submitted_date
@@ -107,7 +108,7 @@ def _report_compliance(reports: list[SubmissionComplianceEvidence]) -> float | N
     )
 
 
-def _leave_compliance(
+def leave_compliance(
     dataset: PerformanceEvidenceDataset,
     employee_id: str,
     start_date: date | None,
@@ -135,7 +136,7 @@ def _leave_compliance(
     )
 
 
-def _performance_tier(overall: float | None) -> str | None:
+def performance_tier(overall: float | None) -> str | None:
     if overall is None:
         return None
     if overall >= 90:
@@ -147,7 +148,7 @@ def _performance_tier(overall: float | None) -> str | None:
     return "Needs support"
 
 
-def _evidence_confidence(
+def evidence_confidence(
     projects: list[WorkOutputEvidence],
     attendance: list[AttendanceComplianceEvidence],
     reports: list[SubmissionComplianceEvidence],
@@ -204,12 +205,7 @@ def _boolean_score(checks: Iterable[bool]) -> float | None:
     return sum(values) / len(values) * 100 if values else None
 
 
-def _average(values: Iterable[float]) -> float | None:
-    available = list(values)
-    return round(sum(available) / len(available), 2) if available else None
-
-
-def _weighted_available(
+def weighted_available(
     components: list[tuple[float | None, float]],
 ) -> float:
     available = [(value, weight) for value, weight in components if value is not None]
@@ -229,7 +225,7 @@ def _weighted_available_optional(
     return sum(value * weight for value, weight in available) / total_weight
 
 
-def _format_optional_score(value: float | None) -> str:
+def format_optional_score(value: float | None) -> str:
     return f"{value:.2f}" if value is not None else "unavailable"
 
 
@@ -237,7 +233,7 @@ def _attendance_evidence_complete(
     record: AttendanceComplianceEvidence,
     mapped_fields: set[str],
 ) -> bool:
-    if record.outcome.casefold() in _NEUTRAL_ATTENDANCE_OUTCOMES:
+    if record.outcome.casefold() in NEUTRAL_ATTENDANCE_OUTCOMES:
         return True
     required_fields = {"actual_end"}
     for field_group in (

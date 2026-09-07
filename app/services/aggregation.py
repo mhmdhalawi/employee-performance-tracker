@@ -1,6 +1,5 @@
 import json
 from dataclasses import dataclass
-from datetime import date, datetime
 from hashlib import sha256
 
 from pydantic import BaseModel
@@ -8,6 +7,12 @@ from pydantic import BaseModel
 from app.database import (
     CanonicalRecordWrite,
     StoredAggregationState,
+)
+from app.schemas.calculators import (
+    CALCULATOR_BY_NAME,
+    CALCULATOR_BY_RECORD_TYPE,
+    CALCULATORS,
+    CalculatorSpec,
 )
 from app.schemas.performance import (
     AttendanceComplianceEvidence,
@@ -21,6 +26,7 @@ from app.schemas.performance import (
     WorkOutputEvidence,
 )
 from app.schemas.uploads import CalculationPlan, SchemaMappingSummary
+from app.utils.dates import date_string, datetime_string
 
 type CanonicalRecord = (
     Employee
@@ -34,83 +40,10 @@ type CanonicalRecord = (
 
 
 @dataclass(frozen=True, slots=True)
-class RecordSpec:
-    record_type: str
-    collection_name: str
-    model: type[BaseModel]
-    identity_field: str
-    start_field: str | None
-    end_field: str | None
-
-
-@dataclass(frozen=True, slots=True)
 class MaterializedAggregation:
     dataset: PerformanceEvidenceDataset
     mapping_summaries: list[SchemaMappingSummary]
     limitations: list[str]
-
-
-_RECORD_SPECS = (
-    RecordSpec("employee", "employees", Employee, "employee_id", None, None),
-    RecordSpec(
-        "performance_target",
-        "performance_targets",
-        PerformanceTarget,
-        "employee_id",
-        None,
-        None,
-    ),
-    RecordSpec(
-        "work_output",
-        "work_outputs",
-        WorkOutputEvidence,
-        "record_id",
-        "assigned_date",
-        "assigned_date",
-    ),
-    RecordSpec(
-        "attendance",
-        "attendance_events",
-        AttendanceComplianceEvidence,
-        "record_id",
-        "occurred_on",
-        "occurred_on",
-    ),
-    RecordSpec(
-        "required_report",
-        "submission_events",
-        SubmissionComplianceEvidence,
-        "record_id",
-        "due_date",
-        "due_date",
-    ),
-    RecordSpec(
-        "leave",
-        "leave_events",
-        LeaveComplianceEvidence,
-        "record_id",
-        "start_date",
-        "end_date",
-    ),
-    RecordSpec(
-        "quality_review",
-        "quality_events",
-        QualityEvidence,
-        "record_id",
-        "occurred_on",
-        "occurred_on",
-    ),
-)
-_SPEC_BY_TYPE = {spec.record_type: spec for spec in _RECORD_SPECS}
-_COLLECTION_BY_CALCULATOR = {
-    "load_employees": "employees",
-    "load_performance_targets": "performance_targets",
-    "calculate_productivity": "work_outputs",
-    "calculate_attendance_compliance": "attendance_events",
-    "calculate_submission_compliance": "submission_events",
-    "calculate_leave_compliance": "leave_events",
-    "calculate_quality": "quality_events",
-}
 
 
 def canonicalize_batch(
@@ -119,7 +52,7 @@ def canonicalize_batch(
     """Collapse same-ID replays, reject same-ID conflicts, and flag content duplicates."""
     updates: dict[str, list[CanonicalRecord]] = {}
     findings: list[ValidationFinding] = []
-    for spec in _RECORD_SPECS:
+    for spec in CALCULATORS:
         records = list(getattr(dataset, spec.collection_name))
         grouped: dict[str, list[CanonicalRecord]] = {}
         for record in records:
@@ -178,7 +111,7 @@ def canonical_record_writes(
 ) -> list[CanonicalRecordWrite]:
     """Serialize a validated batch into mechanical canonical-record writes."""
     writes: list[CanonicalRecordWrite] = []
-    for spec in _RECORD_SPECS:
+    for spec in CALCULATORS:
         for record in getattr(dataset, spec.collection_name):
             start = getattr(record, spec.start_field) if spec.start_field else None
             end = getattr(record, spec.end_field) if spec.end_field else None
@@ -187,11 +120,11 @@ def canonical_record_writes(
                     record_type=spec.record_type,
                     record_id=str(getattr(record, spec.identity_field)),
                     employee_id=str(record.employee_id),
-                    period_start=_date_string(start),
-                    period_end=_date_string(end),
+                    period_start=date_string(start),
+                    period_end=date_string(end),
                     payload_json=record.model_dump_json(),
                     source_version=getattr(record, "source_version", None),
-                    source_updated_at=_datetime_string(
+                    source_updated_at=datetime_string(
                         getattr(record, "source_updated_at", None)
                     ),
                 )
@@ -204,13 +137,13 @@ def materialize_aggregation(
 ) -> MaterializedAggregation:
     """Validate canonical payloads and rebuild one combined evidence dataset."""
     collections: dict[str, list[BaseModel]] = {
-        spec.collection_name: [] for spec in _RECORD_SPECS
+        spec.collection_name: [] for spec in CALCULATORS
     }
     contributing_schemas: dict[str, set[str]] = {
-        spec.collection_name: set() for spec in _RECORD_SPECS
+        spec.collection_name: set() for spec in CALCULATORS
     }
     for stored in state.records:
-        spec = _SPEC_BY_TYPE[stored.record_type]
+        spec = CALCULATOR_BY_RECORD_TYPE[stored.record_type]
         collections[spec.collection_name].append(
             spec.model.model_validate_json(stored.payload_json)
         )
@@ -259,7 +192,7 @@ def materialize_aggregation(
 
 
 def _content_duplicate_findings(
-    spec: RecordSpec,
+    spec: CalculatorSpec,
     records: list[CanonicalRecord],
 ) -> list[ValidationFinding]:
     grouped: dict[str, list[CanonicalRecord]] = {}
@@ -305,14 +238,6 @@ def _mapped_fields(plan: CalculationPlan) -> dict[str, set[str]]:
     mapped: dict[str, set[str]] = {}
     for classification in plan.table_classifications:
         for invocation in classification.calculator_invocations:
-            collection_name = _COLLECTION_BY_CALCULATOR[invocation.calculator]
+            collection_name = CALCULATOR_BY_NAME[invocation.calculator].collection_name
             mapped.setdefault(collection_name, set()).update(invocation.field_bindings)
     return mapped
-
-
-def _date_string(value: date | None) -> str | None:
-    return value.isoformat() if value is not None else None
-
-
-def _datetime_string(value: datetime | None) -> str | None:
-    return value.isoformat() if value is not None else None

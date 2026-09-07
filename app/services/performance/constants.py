@@ -17,7 +17,7 @@ REQUIRED_EVIDENCE_MATRIX: dict[str, tuple[str, ...]] = {
     ),
 }
 
-_NEUTRAL_ATTENDANCE_OUTCOMES = {
+NEUTRAL_ATTENDANCE_OUTCOMES = {
     "annual leave",
     "sick leave",
     "holiday",

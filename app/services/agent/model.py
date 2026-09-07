@@ -32,14 +32,14 @@ def get_model() -> OpenAIResponsesModel:
         provider=OpenAIProvider(api_key=settings.openai_api_key),
     )
 
-def _mapping_model_settings() -> OpenAIResponsesModelSettings:
+def mapping_model_settings() -> OpenAIResponsesModelSettings:
     return OpenAIResponsesModelSettings(
         openai_prompt_cache_key="employee-performance-mapping-v1",
         openai_text_verbosity="low",
     )
 
 
-def _mapping_usage_limits() -> UsageLimits:
+def mapping_usage_limits() -> UsageLimits:
     return UsageLimits(
         request_limit=3,
         total_tokens_limit=60_000,

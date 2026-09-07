@@ -181,16 +181,6 @@ class EvidenceResult(BaseModel):
     findings: list[ValidationFinding]
 
 
-class KpiTrendResult(BaseModel):
-    employee_id: str
-    employee_name: str | None
-    baseline_overall_score: float | None
-    current_overall_score: float | None
-    overall_score_change: float | None
-    baseline_status: str
-    current_status: str
-
-
 class KpiTrendPoint(BaseModel):
     period_start: date
     period_end: date

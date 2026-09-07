@@ -4,7 +4,6 @@ from datetime import date
 from hashlib import sha256
 from uuid import uuid4
 
-from app.core.errors import InvalidAnalysisFilterError
 from app.database import (
     complete_submission,
     create_submission,
@@ -14,15 +13,17 @@ from app.database import (
 from app.schemas.uploads import AnalyzeUploadResponse, CalculationPlan, ImportIssue
 from app.services.agent import (
     analyze_catalog_artifacts,
-    build_analysis_response,
     catalog_schema_fingerprint,
 )
 from app.services.aggregation import canonical_record_writes
+from app.services.analysis import build_analysis_response
+from app.services.filters import validate_analysis_period
 from app.services.imports import parse_upload
 from app.services.submissions.helpers import (
-    _available_foundation_calculators,
-    _date_string,
+    persisted_foundation_calculators,
 )
+from app.utils.dates import date_string
+
 
 async def analyze_and_store_upload(
     file_name: str | None,
@@ -35,8 +36,7 @@ async def analyze_and_store_upload(
 ) -> AnalyzeUploadResponse:
     """Publish all uploaded evidence and return the requested analysis view."""
     source = parse_upload(file_name, contents, maximum_bytes)
-    if start_date and end_date and start_date > end_date:
-        raise InvalidAnalysisFilterError("start_date must be on or before end_date.")
+    validate_analysis_period(start_date, end_date)
     submission_id = str(uuid4())
     fingerprint = catalog_schema_fingerprint(source)
     request_json = json.dumps(
@@ -72,7 +72,7 @@ async def analyze_and_store_upload(
             if plan_json
             else None,
             canonicalize_batch_records=True,
-            available_foundation_calculators=_available_foundation_calculators(),
+            available_foundation_calculators=persisted_foundation_calculators(),
         )
         response = artifacts.response
         filtered = response
@@ -112,8 +112,8 @@ async def analyze_and_store_upload(
             schema_fingerprint=fingerprint,
             calculation_plan_json=artifacts.calculation_plan.model_dump_json(),
             analysis_id=str(uuid4()),
-            coverage_start=_date_string(response.dataset_overview.date_start),
-            coverage_end=_date_string(response.dataset_overview.date_end),
+            coverage_start=date_string(response.dataset_overview.date_start),
+            coverage_end=date_string(response.dataset_overview.date_end),
             model=response.model,
             total_tokens=response.total_tokens,
             model_requests=response.model_requests,

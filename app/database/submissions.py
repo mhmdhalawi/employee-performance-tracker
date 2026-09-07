@@ -27,7 +27,7 @@ def create_submission(
                 """,
                 (
                     submission_id,
-                    _now(),
+                    now_timestamp(),
                     request_sha256,
                     schema_fingerprint,
                     table_count,
@@ -57,7 +57,7 @@ def load_submission_receipt_by_idempotency_key(
             """,
             (idempotency_key,),
         ).fetchone()
-    return _receipt_from_row(row)
+    return receipt_from_row(row)
 
 
 def fail_submission(submission_id: str, error_message: str) -> None:
@@ -69,11 +69,11 @@ def fail_submission(submission_id: str, error_message: str) -> None:
             SET status = 'failed', completed_at = ?, error_message = ?
             WHERE id = ?
             """,
-            (_now(), error_message[:1000], submission_id),
+            (now_timestamp(), error_message[:1000], submission_id),
         )
 
 
-def _receipt_from_row(row: sqlite3.Row | None) -> StoredSubmissionReceipt | None:
+def receipt_from_row(row: sqlite3.Row | None) -> StoredSubmissionReceipt | None:
     if row is None:
         return None
     return StoredSubmissionReceipt(
@@ -91,6 +91,6 @@ def _submission_status(value: str) -> SubmissionStatus:
     return cast(SubmissionStatus, value)
 
 
-def _now() -> str:
+def now_timestamp() -> str:
     return datetime.now(UTC).isoformat()
 

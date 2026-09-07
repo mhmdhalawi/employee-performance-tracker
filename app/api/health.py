@@ -1,15 +1,9 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
 
 from app.core.config import get_settings
+from app.schemas.health import HealthResponse
 
 router = APIRouter(tags=["system"])
-
-
-class HealthResponse(BaseModel):
-    status: str
-    app_name: str
-    ai_enabled: bool
 
 
 @router.get("/health", response_model=HealthResponse)

@@ -3,6 +3,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.calculators import CalculatorName, TableRole
 from app.schemas.performance import (
     DatasetOverview,
     EmployeeKpiScores,
@@ -36,6 +37,13 @@ class UploadCatalog(DataCatalog):
     byte_size: int
 
 
+class UploadReceipt(BaseModel):
+    file_name: str
+    file_type: Literal["csv", "xlsx"]
+    byte_size: int
+    message: str
+
+
 class ColumnDescription(BaseModel):
     name: str
     inferred_type: str
@@ -63,24 +71,6 @@ class TableProfile(BaseModel):
 class TableAnalysis(BaseModel):
     description: TableDescription
     profile: TableProfile
-
-
-type TableRole = Literal[
-    "productivity",
-    "compliance",
-    "quality",
-    "shared",
-    "irrelevant",
-]
-type CalculatorName = Literal[
-    "calculate_productivity",
-    "calculate_attendance_compliance",
-    "calculate_submission_compliance",
-    "calculate_leave_compliance",
-    "calculate_quality",
-    "load_employees",
-    "load_performance_targets",
-]
 
 
 class CalculatorInvocation(BaseModel):

@@ -11,7 +11,7 @@ from pydantic_ai.exceptions import (
 from pydantic_ai.usage import RunUsage
 
 from app.core.config import get_settings
-from app.core.errors import AIError, InvalidAnalysisFilterError
+from app.core.errors import AIError
 from app.schemas.performance import PerformanceEvidenceDataset, ValidationFinding
 from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
@@ -22,21 +22,23 @@ from app.schemas.uploads import (
     ImportIssue,
 )
 from app.services import catalog
-from app.services.aggregation import canonicalize_batch
 from app.services.agent.cache import (
-    _cache_analysis,
-    _get_cached_analysis,
+    cache_analysis,
     catalog_schema_fingerprint,
+    get_cached_analysis,
 )
-from app.services.agent.context import _build_workbook_context
+from app.services.agent.context import build_workbook_context
 from app.services.agent.planning import (
-    _expand_agent_plan,
-    _repair_mappings,
-    _run_mapping_agent,
+    expand_agent_plan,
+    repair_mappings,
+    run_mapping_agent,
 )
-from app.services.agent.response import build_analysis_response
+from app.services.aggregation import canonicalize_batch
+from app.services.analysis import build_analysis_response
 from app.services.datasets import build_performance_dataset
+from app.services.filters import validate_analysis_period
 from app.services.tables import catalog_from_tables
+
 
 @dataclass(frozen=True, slots=True)
 class AnalysisArtifacts:
@@ -96,14 +98,13 @@ async def analyze_catalog_artifacts(
     available_foundation_calculators: set[str] | None = None,
 ) -> AnalysisArtifacts:
     """Resolve a plan, bind canonical evidence, and construct a deterministic response."""
-    if start_date and end_date and start_date > end_date:
-        raise InvalidAnalysisFilterError("start_date must be on or before end_date.")
-    workbook_context = _build_workbook_context(source_catalog)
+    validate_analysis_period(start_date, end_date)
+    workbook_context = build_workbook_context(source_catalog)
     schema_fingerprint = catalog_schema_fingerprint(source_catalog)
     analysis = (
         calculation_plan.model_copy(deep=True)
         if calculation_plan is not None
-        else _get_cached_analysis(schema_fingerprint)
+        else get_cached_analysis(schema_fingerprint)
     )
     if analysis is not None and any(
         not validation.valid
@@ -121,12 +122,12 @@ async def analyze_catalog_artifacts(
     if analysis is None:
         try:
             llm_started = perf_counter()
-            agent_plan = await _run_mapping_agent(
+            agent_plan = await run_mapping_agent(
                 workbook_context,
                 usage,
             )
             llm_duration_seconds += perf_counter() - llm_started
-            analysis = _expand_agent_plan(agent_plan)
+            analysis = expand_agent_plan(agent_plan)
             invalid_classifications = [
                 validation
                 for validation in catalog.validate_classifications(
@@ -138,7 +139,7 @@ async def analyze_catalog_artifacts(
             ]
             if invalid_classifications:
                 llm_started = perf_counter()
-                agent_plan = await _repair_mappings(
+                agent_plan = await repair_mappings(
                     source_catalog,
                     workbook_context,
                     agent_plan,
@@ -146,7 +147,7 @@ async def analyze_catalog_artifacts(
                     usage,
                 )
                 llm_duration_seconds += perf_counter() - llm_started
-                analysis = _expand_agent_plan(agent_plan)
+                analysis = expand_agent_plan(agent_plan)
         except (
             ModelHTTPError,
             UnexpectedModelBehavior,
@@ -167,7 +168,7 @@ async def analyze_catalog_artifacts(
             raise AIError(
                 "The model calculation plan did not pass deterministic validation."
             )
-        _cache_analysis(schema_fingerprint, analysis)
+        cache_analysis(schema_fingerprint, analysis)
 
     performance_dataset, mapping_issues = build_performance_dataset(
         source_catalog,

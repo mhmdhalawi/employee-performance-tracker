@@ -6,7 +6,8 @@ from app.schemas.uploads import (
 )
 from app.services import catalog
 
-def _build_workbook_context(upload_catalog: DataCatalog) -> dict[str, object]:
+
+def build_workbook_context(upload_catalog: DataCatalog) -> dict[str, object]:
     analyses = catalog.inspect_tables(
         upload_catalog,
         [table.source_name for table in upload_catalog.tables],
@@ -25,7 +26,7 @@ def _build_workbook_context(upload_catalog: DataCatalog) -> dict[str, object]:
     }
 
 
-def _build_targeted_repair_context(
+def build_targeted_repair_context(
     upload_catalog: DataCatalog,
     target_sources: set[str],
 ) -> dict[str, object]:
@@ -43,7 +44,7 @@ def _build_targeted_repair_context(
     }
 
 
-def _repair_target_sources(
+def repair_target_sources(
     upload_catalog: DataCatalog,
     invalid_classifications: list[ClassificationValidation],
 ) -> set[str]:

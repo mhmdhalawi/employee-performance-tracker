@@ -1,16 +1,10 @@
 from collections.abc import Iterable, Sequence
 from datetime import date
 
-from pydantic import BaseModel
-
-from app.schemas.performance import (
-    AttendanceComplianceEvidence,
-    Employee,
-    LeaveComplianceEvidence,
-    PerformanceTarget,
-    QualityEvidence,
-    SubmissionComplianceEvidence,
-    WorkOutputEvidence,
+from app.schemas.calculators import (
+    CALCULATOR_BY_NAME,
+    CALCULATORS,
+    FOUNDATION_CALCULATORS,
 )
 from app.schemas.uploads import (
     CatalogTable,
@@ -24,35 +18,17 @@ from app.schemas.uploads import (
     TableProfile,
 )
 
-_CALCULATOR_CONTRACTS: dict[str, tuple[type[BaseModel], str]] = {
-    "load_employees": (Employee, "shared"),
-    "load_performance_targets": (PerformanceTarget, "shared"),
-    "calculate_productivity": (WorkOutputEvidence, "productivity"),
-    "calculate_attendance_compliance": (AttendanceComplianceEvidence, "compliance"),
-    "calculate_submission_compliance": (SubmissionComplianceEvidence, "compliance"),
-    "calculate_leave_compliance": (LeaveComplianceEvidence, "compliance"),
-    "calculate_quality": (QualityEvidence, "quality"),
-}
-
 
 def classification_contract() -> dict[str, object]:
     """Return approved calculators and their KPI-family input contracts."""
     return {
         "approved_calculators": {
-            calculator: {
-                "required_fields": [
-                    name
-                    for name, field in model.model_fields.items()
-                    if field.is_required()
-                ],
-                "optional_fields": [
-                    name
-                    for name, field in model.model_fields.items()
-                    if not field.is_required()
-                ],
-                "kpi_family": kpi_family,
+            spec.name: {
+                "required_fields": spec.required_fields,
+                "optional_fields": spec.optional_fields,
+                "kpi_family": spec.kpi_family,
             }
-            for calculator, (model, kpi_family) in _CALCULATOR_CONTRACTS.items()
+            for spec in CALCULATORS
         },
         "non_evidence_classifications": ["irrelevant"],
     }
@@ -142,7 +118,7 @@ def validate_classifications(
     }
     if any(calculator.startswith("calculate_") for calculator in invoked_calculators):
         missing_foundations = sorted(
-            {"load_employees", "load_performance_targets"}
+            FOUNDATION_CALCULATORS
             - invoked_calculators
             - (available_foundation_calculators or set())
         )
@@ -232,11 +208,10 @@ def validate_classification(
     missing_required_fields: set[str] = set()
     invalid_calculators: list[str] = []
     for invocation in classification.calculator_invocations:
-        contract = _CALCULATOR_CONTRACTS.get(invocation.calculator)
-        if contract is None or contract[1] != classification.kpi_family:
+        spec = CALCULATOR_BY_NAME.get(invocation.calculator)
+        if spec is None or spec.kpi_family != classification.kpi_family:
             invalid_calculators.append(invocation.calculator)
             continue
-        model, _ = contract
         bindings = invocation.field_bindings
         unknown_source_columns.update(set(bindings.values()) - set(table.columns))
         duplicate_source_columns.update(
@@ -244,10 +219,7 @@ def validate_classification(
             for source_column in set(bindings.values())
             if list(bindings.values()).count(source_column) > 1
         )
-        required_fields = {
-            name for name, field in model.model_fields.items() if field.is_required()
-        }
-        missing_required_fields.update(required_fields - set(bindings))
+        missing_required_fields.update(set(spec.required_fields) - set(bindings))
     if not classification.calculator_invocations:
         invalid_calculators.append("missing_calculator")
     valid = not (

@@ -2,13 +2,13 @@ from datetime import date, timedelta
 
 from app.schemas.performance import (
     KpiTrendPoint,
-    KpiTrendResult,
     PerformanceEvidenceDataset,
 )
-from app.services.performance.metrics import _average
 from app.services.performance.overview import inspect_dataset
 from app.services.performance.scoring import calculate_kpis
 from app.services.performance.validation import validate_dataset
+from app.utils.numbers import average
+
 
 def calculate_weekly_kpi_trends(
     dataset: PerformanceEvidenceDataset,
@@ -86,27 +86,27 @@ def calculate_weekly_kpi_trends(
                 productivity_employee_count=len(productivity_ids),
                 compliance_employee_count=len(compliance_ids),
                 quality_employee_count=len(quality_ids),
-                productivity_score=_average(
+                productivity_score=average(
                     result.productivity_score
                     for result in results
                     if result.employee_id in productivity_ids
                 ),
-                compliance_score=_average(
+                compliance_score=average(
                     result.compliance_score
                     for result in results
                     if result.employee_id in compliance_ids
                 ),
-                quality_score=_average(
+                quality_score=average(
                     result.quality_score
                     for result in results
                     if result.employee_id in quality_ids
                 ),
-                overall_score=_average(
+                overall_score=average(
                     result.overall_score
                     for result in scored
                     if result.overall_score is not None
                 ),
-                data_confidence=_average(result.data_confidence for result in results),
+                data_confidence=average(result.data_confidence for result in results),
                 record_count=len(
                     {
                         record_id
@@ -117,56 +117,3 @@ def calculate_weekly_kpi_trends(
             )
         )
     return points
-
-def calculate_kpi_trends(
-    dataset: PerformanceEvidenceDataset,
-    baseline_start: date,
-    baseline_end: date,
-    current_start: date,
-    current_end: date,
-    employee_id: str | None = None,
-) -> list[KpiTrendResult]:
-    """Compare deterministic overall KPI results across two explicit periods."""
-    baseline = {
-        result.employee_id: result
-        for result in calculate_kpis(
-            dataset,
-            employee_id=employee_id,
-            start_date=baseline_start,
-            end_date=baseline_end,
-        )
-    }
-    current = {
-        result.employee_id: result
-        for result in calculate_kpis(
-            dataset,
-            employee_id=employee_id,
-            start_date=current_start,
-            end_date=current_end,
-        )
-    }
-    trends: list[KpiTrendResult] = []
-    for result in current.values():
-        baseline_result = baseline.get(result.employee_id)
-        if baseline_result is None:
-            continue
-        baseline_score = baseline_result.overall_score
-        current_score = result.overall_score
-        score_change = (
-            round(current_score - baseline_score, 2)
-            if current_score is not None and baseline_score is not None
-            else None
-        )
-        trends.append(
-            KpiTrendResult(
-                employee_id=result.employee_id,
-                employee_name=result.employee_name,
-                baseline_overall_score=baseline_score,
-                current_overall_score=current_score,
-                overall_score_change=score_change,
-                baseline_status=baseline_result.result_status,
-                current_status=result.result_status,
-            )
-        )
-    return trends
-

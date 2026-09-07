@@ -25,6 +25,8 @@ from app.services.performance import (
     summarize_validation,
     validate_dataset,
 )
+from app.utils.numbers import average
+
 
 def build_analysis_response(
     performance_dataset: PerformanceEvidenceDataset,
@@ -213,22 +215,17 @@ def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
         insufficient_data_count=insufficient_count,
         insufficient_data_employee_ids=insufficient_ids,
         performance_tier_counts=dict(sorted(tier_counts.items())),
-        average_overall_score=_average(scored_overall),
-        average_productivity_score=_average(
+        average_overall_score=average(scored_overall),
+        average_productivity_score=average(
             [result.productivity_score for result in kpi_results]
         ),
-        average_compliance_score=_average(
+        average_compliance_score=average(
             [result.compliance_score for result in kpi_results]
         ),
-        average_quality_score=_average(
-            [result.quality_score for result in kpi_results]
-        ),
+        average_quality_score=average([result.quality_score for result in kpi_results]),
         narrative=narrative,
     )
 
-
-def _average(values: list[float]) -> float | None:
-    return round(sum(values) / len(values), 2) if values else None
 
 def _build_limitations(
     dataset: PerformanceEvidenceDataset,
@@ -275,4 +272,3 @@ def _build_limitations(
             f"{excluded_count} invalid or duplicate records were excluded from scoring."
         )
     return limitations
-

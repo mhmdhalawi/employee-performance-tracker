@@ -10,17 +10,18 @@ from app.schemas.uploads import (
     TableClassification,
 )
 from app.services.agent.context import (
-    _build_targeted_repair_context,
-    _repair_target_sources,
+    build_targeted_repair_context,
+    repair_target_sources,
 )
 from app.services.agent.model import (
-    _mapping_model_settings,
-    _mapping_usage_limits,
     analysis_agent,
     get_model,
+    mapping_model_settings,
+    mapping_usage_limits,
 )
 
-async def _run_mapping_agent(
+
+async def run_mapping_agent(
     workbook_context: dict[str, object],
     usage: RunUsage,
 ) -> AgentCalculationPlan:
@@ -33,25 +34,25 @@ async def _run_mapping_agent(
     result = await analysis_agent.run(
         prompt,
         model=get_model(),
-        model_settings=_mapping_model_settings(),
+        model_settings=mapping_model_settings(),
         usage=usage,
-        usage_limits=_mapping_usage_limits(),
+        usage_limits=mapping_usage_limits(),
     )
     return result.output
 
 
-async def _repair_mappings(
+async def repair_mappings(
     upload_catalog: DataCatalog,
     workbook_context: dict[str, object],
     analysis: AgentCalculationPlan,
     invalid_classifications: list[ClassificationValidation],
     usage: RunUsage,
 ) -> AgentCalculationPlan:
-    repairable_sources = _repair_target_sources(
+    repairable_sources = repair_target_sources(
         upload_catalog,
         invalid_classifications,
     )
-    targeted_context = _build_targeted_repair_context(
+    targeted_context = build_targeted_repair_context(
         upload_catalog,
         repairable_sources,
     )
@@ -81,9 +82,9 @@ async def _repair_mappings(
     result = await analysis_agent.run(
         prompt,
         model=get_model(),
-        model_settings=_mapping_model_settings(),
+        model_settings=mapping_model_settings(),
         usage=usage,
-        usage_limits=_mapping_usage_limits(),
+        usage_limits=mapping_usage_limits(),
     )
     return _merge_agent_plan(analysis, result.output, repairable_sources)
 
@@ -106,7 +107,7 @@ def _merge_agent_plan(
     return AgentCalculationPlan(table_classifications=merged)
 
 
-def _expand_agent_plan(agent_plan: AgentCalculationPlan) -> CalculationPlan:
+def expand_agent_plan(agent_plan: AgentCalculationPlan) -> CalculationPlan:
     classifications = [
         TableClassification(
             source_name=item.source_name,

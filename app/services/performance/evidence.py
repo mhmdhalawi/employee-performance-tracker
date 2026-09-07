@@ -9,6 +9,7 @@ from app.schemas.performance import (
 )
 from app.services.performance.validation import validate_dataset
 
+
 def build_performance_alerts(
     dataset: PerformanceEvidenceDataset,
     findings: list[ValidationFinding],

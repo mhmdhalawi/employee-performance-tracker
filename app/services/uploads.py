@@ -2,7 +2,7 @@ from pathlib import PurePath
 from typing import Literal
 
 from app.core.errors import FileTooLargeError, UnsupportedFileTypeError
-from app.schemas.agent import UploadReceipt
+from app.schemas.uploads import UploadReceipt
 
 FileType = Literal["csv", "xlsx"]
 

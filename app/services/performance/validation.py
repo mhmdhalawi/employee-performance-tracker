@@ -8,7 +8,8 @@ from app.schemas.performance import (
     ValidationFinding,
     ValidationSummary,
 )
-from app.services.performance.constants import _NEUTRAL_ATTENDANCE_OUTCOMES
+from app.services.performance.constants import NEUTRAL_ATTENDANCE_OUTCOMES
+
 
 def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFinding]:
     """Find scoring-relevant data quality issues without discarding their evidence."""
@@ -91,7 +92,7 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
             findings.append(
                 _orphan("attendance evidence", record.record_id, record.employee_id)
             )
-        if record.outcome.casefold() not in _NEUTRAL_ATTENDANCE_OUTCOMES:
+        if record.outcome.casefold() not in NEUTRAL_ATTENDANCE_OUTCOMES:
             required_fields = {"actual_end"}
             for field_group in (
                 {"scheduled_start", "actual_start"},
