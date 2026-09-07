@@ -460,6 +460,7 @@ Current endpoints:
 | `POST` | `/api/v1/ask` | test whether the configured LLM can answer a plain prompt |
 | `POST` | `/api/v1/analyze` | upload, classify, validate, and return employee KPI results with findings |
 | `POST` | `/api/v1/analyze-tables` | ingest an incremental JSON upsert batch and return a `201` receipt |
+| `POST` | `/api/v1/analyze-tables-preview` | analyze a complete JSON dataset without persistence and return the adjusted response with LLM usage/timing |
 | `GET` | `/api/v1/dashboard` | recalculate the aggregated canonical dashboard with optional filters |
 | `POST` | `/api/v1/reports/employee/preview` | return a deterministic employee report snapshot for browser PDF generation |
 

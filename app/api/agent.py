@@ -5,10 +5,12 @@ from fastapi import APIRouter, Header, UploadFile, status
 from app.core.config import get_settings
 from app.schemas.tables import AnalyzeTablesRequest
 from app.schemas.uploads import (
+    AnalyzeTablesPreviewResponse,
     AnalyzeUploadResponse,
     DashboardResponse,
     SubmissionReceipt,
 )
+from app.services.agent import preview_tables_analysis
 from app.services.submissions import (
     analyze_and_store_tables,
     analyze_and_store_upload,
@@ -52,6 +54,16 @@ async def analyze_table_data(
         request,
         idempotency_key=idempotency_key,
     )
+
+
+@router.post(
+    "/analyze-tables-preview",
+    response_model=AnalyzeTablesPreviewResponse,
+)
+async def preview_table_data(
+    request: AnalyzeTablesRequest,
+) -> AnalyzeTablesPreviewResponse:
+    return await preview_tables_analysis(request)
 
 
 @router.get("/dashboard", response_model=DashboardResponse)

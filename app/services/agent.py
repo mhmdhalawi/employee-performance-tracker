@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
 from hashlib import sha256
+from time import perf_counter
 from typing import Literal
 
 from pydantic_ai import Agent
@@ -38,6 +39,7 @@ from app.schemas.uploads import (
     AnalysisFilters,
     AnalysisResponse,
     AnalysisSummary,
+    AnalyzeTablesPreviewResponse,
     CalculationPlan,
     CatalogTable,
     ClassificationValidation,
@@ -106,6 +108,9 @@ class AnalysisArtifacts:
     calculation_plan: CalculationPlan
     performance_dataset: PerformanceEvidenceDataset
     response: AnalysisResponse
+    input_tokens: int
+    output_tokens: int
+    llm_duration_ms: float
 
 
 analysis_agent = Agent[None, AgentCalculationPlan](
@@ -152,6 +157,19 @@ async def analyze_tables_artifacts(
     )
 
 
+async def preview_tables_analysis(
+    request: AnalyzeTablesRequest,
+) -> AnalyzeTablesPreviewResponse:
+    """Analyze one complete JSON dataset without reading or writing persistence."""
+    artifacts = await analyze_tables_artifacts(request)
+    return AnalyzeTablesPreviewResponse(
+        **artifacts.response.model_dump(),
+        input_tokens=artifacts.input_tokens,
+        output_tokens=artifacts.output_tokens,
+        llm_duration_ms=artifacts.llm_duration_ms,
+    )
+
+
 async def analyze_catalog_artifacts(
     source_catalog: DataCatalog,
     import_issues: list[ImportIssue],
@@ -184,13 +202,16 @@ async def analyze_catalog_artifacts(
         analysis = None
     mapping_cache_hit = analysis is not None
     usage = RunUsage()
+    llm_duration_seconds = 0.0
 
     if analysis is None:
         try:
+            llm_started = perf_counter()
             agent_plan = await _run_mapping_agent(
                 workbook_context,
                 usage,
             )
+            llm_duration_seconds += perf_counter() - llm_started
             analysis = _expand_agent_plan(agent_plan)
             invalid_classifications = [
                 validation
@@ -202,6 +223,7 @@ async def analyze_catalog_artifacts(
                 if not validation.valid
             ]
             if invalid_classifications:
+                llm_started = perf_counter()
                 agent_plan = await _repair_mappings(
                     source_catalog,
                     workbook_context,
@@ -209,6 +231,7 @@ async def analyze_catalog_artifacts(
                     invalid_classifications,
                     usage,
                 )
+                llm_duration_seconds += perf_counter() - llm_started
                 analysis = _expand_agent_plan(agent_plan)
         except (
             ModelHTTPError,
@@ -259,6 +282,9 @@ async def analyze_catalog_artifacts(
         calculation_plan=analysis,
         performance_dataset=performance_dataset,
         response=response,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        llm_duration_ms=round(llm_duration_seconds * 1000, 2),
     )
 
 
@@ -415,6 +441,8 @@ def build_analysis_response(
         model_requests=model_requests,
         mapping_cache_hit=mapping_cache_hit,
     )
+
+
 def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
     insufficient_ids = [
         result.employee_id

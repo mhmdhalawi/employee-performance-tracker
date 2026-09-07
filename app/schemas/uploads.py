@@ -233,6 +233,12 @@ class AnalysisResponse(BaseModel):
     mapping_cache_hit: bool
 
 
+class AnalyzeTablesPreviewResponse(AnalysisResponse):
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    llm_duration_ms: float = Field(ge=0)
+
+
 class DashboardResponse(BaseModel):
     results: list[EmployeeKpiScores]
     summary: AnalysisSummary

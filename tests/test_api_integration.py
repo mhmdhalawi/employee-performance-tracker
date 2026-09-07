@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 from fastapi.testclient import TestClient
+from pydantic_ai.usage import RunUsage
 
 os.environ["DEBUG"] = "false"
 
@@ -300,6 +301,37 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertEqual(dashboard.json()["summary"]["total_employee_count"], 30)
         self.assertEqual(dashboard.json()["included_submission_count"], 1)
+
+    def test_json_preview_returns_analysis_and_usage_without_creating_database(self) -> None:
+        payload = {
+            "tables": [
+                {"source_name": source_name, "rows": rows}
+                for source_name, rows in benchmark_tables().items()
+            ]
+        }
+
+        async def mapping_with_usage(_context, usage):
+            usage.incr(RunUsage(requests=1, input_tokens=321, output_tokens=123))
+            return benchmark_plan()
+
+        database_path = get_settings().database_path
+        with patch.object(
+            agent_service,
+            "_run_mapping_agent",
+            AsyncMock(side_effect=mapping_with_usage),
+        ):
+            response = self.client.post(
+                "/api/v1/analyze-tables-preview",
+                json=payload,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["summary"]["total_employee_count"], 30)
+        self.assertEqual(body["input_tokens"], 321)
+        self.assertEqual(body["output_tokens"], 123)
+        self.assertGreaterEqual(body["llm_duration_ms"], 0)
+        self.assertFalse(database_path.exists())
 
     def test_latest_dashboard_uses_persisted_plan_for_filters(self) -> None:
         submitted = self._post_benchmark_tables()

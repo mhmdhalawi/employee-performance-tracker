@@ -22,6 +22,12 @@ sidecars on the same machine as the FastAPI process.
 Failed submissions retain their raw request and bounded error but publish no canonical evidence.
 Pending and failed rows never contribute to dashboard reads.
 
+`POST /api/v1/analyze-tables-preview` is the non-persistent counterpart. It requires a complete
+request, including employee and performance-target foundations, and runs the validated mapping
+and deterministic calculation path without consulting SQLite. Its response adds input tokens,
+output tokens, and elapsed model-call milliseconds. In-memory mapping-cache hits make no model
+request and therefore report zero for all three values.
+
 A KPI evidence batch may omit employee and performance-target tables when completed canonical
 employee and target records already exist. Plan validation accepts those persisted foundations,
 then the dashboard joins the new evidence to the combined canonical dataset. The first KPI

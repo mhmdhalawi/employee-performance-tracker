@@ -10,6 +10,10 @@ and audit analyses, and publishes canonical evidence in SQLite. `GET /api/v1/das
 all current canonical records and recalculates its employee, team, or period-filtered view in
 Python.
 
+`POST /api/v1/analyze-tables-preview` runs the same model-plan validation and deterministic
+calculation path for a complete JSON dataset without reading or writing SQLite. It returns the
+full adjusted analysis with separate input/output token counts and model-call duration.
+
 The first KPI-bearing JSON submission must include employee and performance-target tables. Once
 those foundations are canonical, later submissions may contain only new evidence tables. For
 example, a quality-review-only batch can join stored employees by `employee_id`; it does not need
@@ -124,6 +128,7 @@ dependencies, and `library-skills` discovers skills bundled by those installed p
 | `POST` | `/api/v1/ask` | Test the configured model with a plain prompt |
 | `POST` | `/api/v1/analyze` | Upload, classify, validate, and analyze CSV/XLSX performance data |
 | `POST` | `/api/v1/analyze-tables` | Ingest an incremental JSON batch and return a `201` submission receipt |
+| `POST` | `/api/v1/analyze-tables-preview` | Analyze a complete JSON dataset without persistence and return LLM usage/timing |
 | `GET` | `/api/v1/dashboard` | Recalculate the combined canonical dashboard or a backend-filtered view |
 | `POST` | `/api/v1/insights` | Generate optional guidance for one employee from the temporary validated analysis context |
 | `POST` | `/api/v1/reports/employee/preview` | Build a deterministic employee report snapshot for browser PDF generation |
