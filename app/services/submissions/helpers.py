@@ -11,13 +11,15 @@ def submission_receipt(stored: StoredSubmissionReceipt) -> SubmissionReceipt:
         submission_id=stored.submission_id,
         status=stored.status,
         received_at=datetime.fromisoformat(stored.received_at),
-        coverage_start=date.fromisoformat(stored.coverage_start)
-        if stored.coverage_start
-        else None,
-        coverage_end=date.fromisoformat(stored.coverage_end)
-        if stored.coverage_end
-        else None,
+        coverage_start=_stored_date(stored.coverage_start),
+        coverage_end=_stored_date(stored.coverage_end),
     )
+
+
+def _stored_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    return date.fromisoformat(value)
 
 
 def persisted_foundation_calculators() -> set[str]:

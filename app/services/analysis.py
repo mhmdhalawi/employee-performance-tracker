@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date
 from typing import Literal
 
@@ -26,6 +27,12 @@ from app.services.performance import (
     validate_dataset,
 )
 from app.utils.numbers import average
+
+_ATTENDANCE_CHECK_FIELDS: dict[str, set[str]] = {
+    "arrival": {"scheduled_start", "actual_start"},
+    "shift-end": {"scheduled_end", "actual_end"},
+    "lunch": {"lunch_out", "lunch_in"},
+}
 
 
 def build_analysis_response(
@@ -84,15 +91,12 @@ def build_analysis_response(
     scoped_findings = [
         finding
         for finding in validation_findings
-        if (
-            finding.employee_id in result_employee_ids
-            and (
-                finding.scoring_impact == "blocks_score"
-                or not finding.record_ids
-                or bool(set(finding.record_ids) & included_record_ids)
-            )
+        if _finding_in_scope(
+            finding,
+            known_employee_ids=known_employee_ids,
+            result_employee_ids=result_employee_ids,
+            included_record_ids=included_record_ids,
         )
-        or finding.employee_id not in known_employee_ids
     ]
     project_links = {
         record.record_id: record.evidence_link
@@ -183,19 +187,34 @@ def build_analysis_response(
     )
 
 
+def _finding_in_scope(
+    finding: ValidationFinding,
+    *,
+    known_employee_ids: set[str],
+    result_employee_ids: set[str],
+    included_record_ids: set[str],
+) -> bool:
+    """Report whether a validation finding belongs in the filtered response."""
+    if finding.employee_id not in known_employee_ids:
+        return True
+    if finding.employee_id not in result_employee_ids:
+        return False
+    if finding.scoring_impact == "blocks_score" or not finding.record_ids:
+        return True
+    return bool(set(finding.record_ids) & included_record_ids)
+
+
 def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
     insufficient_ids = [
         result.employee_id
         for result in kpi_results
         if result.result_status == "Insufficient data"
     ]
-    tier_counts: dict[str, int] = {}
-    for result in kpi_results:
-        if result.performance_tier is not None:
-            tier_counts[result.performance_tier] = (
-                tier_counts.get(result.performance_tier, 0) + 1
-            )
-
+    tier_counts = Counter(
+        result.performance_tier
+        for result in kpi_results
+        if result.performance_tier is not None
+    )
     total_count = len(kpi_results)
     insufficient_count = len(insufficient_ids)
     scored_count = total_count - insufficient_count
@@ -250,17 +269,12 @@ def _build_limitations(
             f"{len(import_issues)} source rows or calculator bindings could not be imported."
         )
     mapped_attendance = dataset.mapped_fields.get("attendance_events", set())
-    attendance_capabilities = {
-        "arrival": {"scheduled_start", "actual_start"},
-        "shift-end": {"scheduled_end", "actual_end"},
-        "lunch": {"lunch_out", "lunch_in"},
-    }
     unavailable_attendance_checks = [
         label
-        for label, required_fields in attendance_capabilities.items()
-        if dataset.attendance_events and not required_fields <= mapped_attendance
+        for label, required_fields in _ATTENDANCE_CHECK_FIELDS.items()
+        if not required_fields <= mapped_attendance
     ]
-    if unavailable_attendance_checks:
+    if dataset.attendance_events and unavailable_attendance_checks:
         limitations.append(
             "Attendance checks unavailable because their timestamp fields were not mapped: "
             + ", ".join(unavailable_attendance_checks)

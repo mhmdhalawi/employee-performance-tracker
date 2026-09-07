@@ -40,9 +40,10 @@ async def get_aggregated_dashboard(
             overview.date_start or preset_start,
         )
 
+    first_summary = materialized.mapping_summaries[0]
     first_plan = CalculationPlan(
-        selected_tables=materialized.mapping_summaries[0].selected_tables,
-        table_classifications=materialized.mapping_summaries[0].table_classifications,
+        selected_tables=first_summary.selected_tables,
+        table_classifications=first_summary.table_classifications,
     )
     classifications = [
         classification

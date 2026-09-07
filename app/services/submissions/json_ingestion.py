@@ -59,11 +59,10 @@ async def analyze_and_store_tables(
         else None
     )
     try:
-        available_foundations = persisted_foundation_calculators()
         artifacts = await analyze_tables_artifacts(
             request,
             calculation_plan=persisted_plan,
-            available_foundation_calculators=available_foundations,
+            available_foundation_calculators=persisted_foundation_calculators(),
         )
         response = artifacts.response
         receipt = complete_submission(

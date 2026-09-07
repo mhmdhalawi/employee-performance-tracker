@@ -3,6 +3,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+type FindingSeverity = Literal["error", "warning", "info"]
+type ScoringImpact = Literal[
+    "blocks_score",
+    "excluded_from_scoring",
+    "lowers_confidence",
+    "affects_score",
+    "none",
+]
+
 
 class Employee(BaseModel):
     employee_id: str = Field(min_length=1)
@@ -103,18 +112,12 @@ class PerformanceEvidenceDataset(BaseModel):
 
 class ValidationFinding(BaseModel):
     code: str
-    severity: Literal["error", "warning", "info"]
+    severity: FindingSeverity
     message: str
     record_ids: list[str]
     employee_id: str | None = None
     source_type: str | None = None
-    scoring_impact: Literal[
-        "blocks_score",
-        "excluded_from_scoring",
-        "lowers_confidence",
-        "affects_score",
-        "none",
-    ] = "none"
+    scoring_impact: ScoringImpact = "none"
 
 
 class ValidationSummary(BaseModel):
@@ -192,7 +195,7 @@ class KpiTrendPoint(BaseModel):
 
 class PerformanceAlert(BaseModel):
     code: str
-    severity: Literal["error", "warning", "info"]
+    severity: FindingSeverity
     message: str
     employee_id: str | None
     employee_name: str | None
@@ -200,10 +203,4 @@ class PerformanceAlert(BaseModel):
     occurrence_count: int = Field(ge=1)
     record_ids: list[str]
     evidence_links: list[str] = Field(default_factory=list)
-    scoring_impact: Literal[
-        "blocks_score",
-        "excluded_from_scoring",
-        "lowers_confidence",
-        "affects_score",
-        "none",
-    ]
+    scoring_impact: ScoringImpact

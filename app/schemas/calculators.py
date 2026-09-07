@@ -147,8 +147,9 @@ FOUNDATION_CALCULATORS: frozenset[str] = frozenset(
 
 # Fails at import if CalculatorName and the registry drift apart.
 _declared_names = frozenset(get_args(CalculatorName.__value__))
-if _declared_names != frozenset(CALCULATOR_BY_NAME):
+_registered_names = frozenset(CALCULATOR_BY_NAME)
+if _declared_names != _registered_names:
     raise RuntimeError(
         "CalculatorName and CALCULATORS must declare the same calculators; "
-        f"they differ by {sorted(_declared_names ^ frozenset(CALCULATOR_BY_NAME))}."
+        f"they differ by {sorted(_declared_names ^ _registered_names)}."
     )

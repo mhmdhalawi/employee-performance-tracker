@@ -24,16 +24,9 @@ def calculate_weekly_kpi_trends(
     if period_start is None or period_end is None or period_start > period_end:
         return []
 
-    periods: list[tuple[date, date]] = []
-    week_start = period_start
-    while week_start <= period_end:
-        week_end = min(week_start + timedelta(days=6), period_end)
-        periods.append((week_start, week_end))
-        week_start = week_end + timedelta(days=1)
-
     findings = validate_dataset(dataset)
     points: list[KpiTrendPoint] = []
-    for week_start, week_end in periods[-12:]:
+    for week_start, week_end in _week_periods(period_start, period_end)[-12:]:
         results = calculate_kpis(
             dataset,
             employee_id=employee_id,
@@ -103,7 +96,7 @@ def calculate_weekly_kpi_trends(
                 ),
                 overall_score=average(
                     result.overall_score
-                    for result in scored
+                    for result in results
                     if result.overall_score is not None
                 ),
                 data_confidence=average(result.data_confidence for result in results),
@@ -117,3 +110,13 @@ def calculate_weekly_kpi_trends(
             )
         )
     return points
+
+
+def _week_periods(period_start: date, period_end: date) -> list[tuple[date, date]]:
+    periods: list[tuple[date, date]] = []
+    week_start = period_start
+    while week_start <= period_end:
+        week_end = min(week_start + timedelta(days=6), period_end)
+        periods.append((week_start, week_end))
+        week_start = week_end + timedelta(days=1)
+    return periods

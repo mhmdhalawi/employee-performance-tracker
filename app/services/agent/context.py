@@ -8,21 +8,14 @@ from app.services import catalog
 
 
 def build_workbook_context(upload_catalog: DataCatalog) -> dict[str, object]:
-    analyses = catalog.inspect_tables(
-        upload_catalog,
-        [table.source_name for table in upload_catalog.tables],
-    )
-    tables_by_source = {table.source_name: table for table in upload_catalog.tables}
+    source_names = [table.source_name for table in upload_catalog.tables]
     return {
         "classification_and_calculator_contract": catalog.classification_contract(),
-        "tables": [
-            _build_table_context(
-                tables_by_source[analysis.description.source_name],
-                analysis.description.columns,
-                include_examples=False,
-            )
-            for analysis in analyses
-        ],
+        "tables": _table_contexts(
+            upload_catalog,
+            source_names,
+            include_examples=False,
+        ),
     }
 
 
@@ -30,17 +23,12 @@ def build_targeted_repair_context(
     upload_catalog: DataCatalog,
     target_sources: set[str],
 ) -> dict[str, object]:
-    analyses = catalog.inspect_tables(upload_catalog, sorted(target_sources))
-    tables_by_source = {table.source_name: table for table in upload_catalog.tables}
     return {
-        "tables": [
-            _build_table_context(
-                tables_by_source[analysis.description.source_name],
-                analysis.description.columns,
-                include_examples=True,
-            )
-            for analysis in analyses
-        ]
+        "tables": _table_contexts(
+            upload_catalog,
+            sorted(target_sources),
+            include_examples=True,
+        )
     }
 
 
@@ -55,6 +43,22 @@ def repair_target_sources(
     ):
         return known_sources
     return {validation.source_name for validation in invalid_classifications}
+
+
+def _table_contexts(
+    upload_catalog: DataCatalog,
+    source_names: list[str],
+    include_examples: bool,
+) -> list[dict[str, object]]:
+    tables_by_source = {table.source_name: table for table in upload_catalog.tables}
+    return [
+        _build_table_context(
+            tables_by_source[analysis.description.source_name],
+            analysis.description.columns,
+            include_examples,
+        )
+        for analysis in catalog.inspect_tables(upload_catalog, source_names)
+    ]
 
 
 def _build_table_context(
@@ -95,7 +99,7 @@ def _column_signals(
     column: ColumnDescription,
 ) -> list[str]:
     signals: list[str] = []
-    normalized_name = column.name.casefold().replace("-", "_").replace(" ", "_")
+    normalized_name = _normalized_column_name(column.name)
     name_parts = [part for part in normalized_name.split("_") if part]
     if normalized_name.endswith("id") or (
         name_parts and name_parts[-1] in {"code", "identifier", "key", "ref"}
@@ -167,8 +171,12 @@ def _safe_categorical_examples(
     return examples
 
 
+def _normalized_column_name(column_name: str) -> str:
+    return column_name.casefold().replace("-", "_").replace(" ", "_")
+
+
 def _is_sensitive_example_column(column_name: str) -> bool:
-    normalized = column_name.casefold().replace("-", "_").replace(" ", "_")
+    normalized = _normalized_column_name(column_name)
     sensitive_markers = (
         "address",
         "comment",

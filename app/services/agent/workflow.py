@@ -17,6 +17,7 @@ from app.schemas.uploads import (
     AnalysisResponse,
     AnalyzeTablesPreviewResponse,
     CalculationPlan,
+    ClassificationValidation,
     DataCatalog,
     ImportIssue,
 )
@@ -88,20 +89,16 @@ async def analyze_catalog_artifacts(
     The analysis is always unfiltered: both ingestion paths persist the whole batch, and
     `/analyze` applies its response filters afterwards in `analyze_and_store_upload`.
     """
-    workbook_context = build_workbook_context(source_catalog)
     schema_fingerprint = catalog_schema_fingerprint(source_catalog)
     analysis = (
         calculation_plan.model_copy(deep=True)
         if calculation_plan is not None
         else get_cached_analysis(schema_fingerprint)
     )
-    if analysis is not None and any(
-        not validation.valid
-        for validation in catalog.validate_classifications(
-            source_catalog,
-            analysis.table_classifications,
-            available_foundation_calculators=available_foundation_calculators,
-        )
+    if analysis is not None and _invalid_classifications(
+        source_catalog,
+        analysis,
+        available_foundation_calculators,
     ):
         analysis = None
     mapping_cache_hit = analysis is not None
@@ -109,54 +106,11 @@ async def analyze_catalog_artifacts(
     llm_duration_seconds = 0.0
 
     if analysis is None:
-        try:
-            llm_started = perf_counter()
-            agent_plan = await run_mapping_agent(
-                workbook_context,
-                usage,
-            )
-            llm_duration_seconds += perf_counter() - llm_started
-            analysis = expand_agent_plan(agent_plan)
-            invalid_classifications = [
-                validation
-                for validation in catalog.validate_classifications(
-                    source_catalog,
-                    analysis.table_classifications,
-                    available_foundation_calculators=available_foundation_calculators,
-                )
-                if not validation.valid
-            ]
-            if invalid_classifications:
-                llm_started = perf_counter()
-                agent_plan = await repair_mappings(
-                    source_catalog,
-                    workbook_context,
-                    agent_plan,
-                    invalid_classifications,
-                    usage,
-                )
-                llm_duration_seconds += perf_counter() - llm_started
-                analysis = expand_agent_plan(agent_plan)
-        except (
-            ModelHTTPError,
-            UnexpectedModelBehavior,
-            UsageLimitExceeded,
-            UserError,
-        ) as exc:
-            raise AIError(f"The model call failed: {exc}") from exc
-
-        final_validations = catalog.validate_classifications(
+        analysis, llm_duration_seconds = await _plan_with_agent(
             source_catalog,
-            analysis.table_classifications,
-            available_foundation_calculators=available_foundation_calculators,
+            usage,
+            available_foundation_calculators,
         )
-        invalid_final_validations = [
-            validation for validation in final_validations if not validation.valid
-        ]
-        if invalid_final_validations:
-            raise AIError(
-                "The model calculation plan did not pass deterministic validation."
-            )
         cache_analysis(schema_fingerprint, analysis)
 
     performance_dataset, mapping_issues = build_performance_dataset(
@@ -166,11 +120,10 @@ async def analyze_catalog_artifacts(
     batch_findings: list[ValidationFinding] = []
     if canonicalize_batch_records:
         performance_dataset, batch_findings = canonicalize_batch(performance_dataset)
-    all_import_issues = [*import_issues, *mapping_issues]
     response = build_analysis_response(
         performance_dataset,
         analysis,
-        import_issues=all_import_issues,
+        import_issues=[*import_issues, *mapping_issues],
         additional_validation_findings=batch_findings,
         model=get_settings().openai_model,
         total_tokens=usage.total_tokens,
@@ -186,4 +139,74 @@ async def analyze_catalog_artifacts(
         output_tokens=usage.output_tokens,
         llm_duration_ms=round(llm_duration_seconds * 1000, 2),
     )
+
+
+async def _plan_with_agent(
+    source_catalog: DataCatalog,
+    usage: RunUsage,
+    available_foundation_calculators: set[str] | None,
+) -> tuple[CalculationPlan, float]:
+    """Return a model-proposed validated plan and the seconds spent in model calls.
+
+    Raises `AIError` when the model call fails or when the returned plan still fails
+    deterministic validation after one targeted repair attempt.
+    """
+    workbook_context = build_workbook_context(source_catalog)
+    llm_duration_seconds = 0.0
+    try:
+        llm_started = perf_counter()
+        agent_plan = await run_mapping_agent(
+            workbook_context,
+            usage,
+        )
+        llm_duration_seconds += perf_counter() - llm_started
+        analysis = expand_agent_plan(agent_plan)
+
+        invalid_classifications = _invalid_classifications(
+            source_catalog,
+            analysis,
+            available_foundation_calculators,
+        )
+        if invalid_classifications:
+            llm_started = perf_counter()
+            agent_plan = await repair_mappings(
+                source_catalog,
+                workbook_context,
+                agent_plan,
+                invalid_classifications,
+                usage,
+            )
+            llm_duration_seconds += perf_counter() - llm_started
+            analysis = expand_agent_plan(agent_plan)
+    except (
+        ModelHTTPError,
+        UnexpectedModelBehavior,
+        UsageLimitExceeded,
+        UserError,
+    ) as exc:
+        raise AIError(f"The model call failed: {exc}") from exc
+
+    if _invalid_classifications(
+        source_catalog,
+        analysis,
+        available_foundation_calculators,
+    ):
+        raise AIError("The model calculation plan did not pass deterministic validation.")
+    return analysis, llm_duration_seconds
+
+
+def _invalid_classifications(
+    source_catalog: DataCatalog,
+    plan: CalculationPlan,
+    available_foundation_calculators: set[str] | None,
+) -> list[ClassificationValidation]:
+    return [
+        validation
+        for validation in catalog.validate_classifications(
+            source_catalog,
+            plan.table_classifications,
+            available_foundation_calculators=available_foundation_calculators,
+        )
+        if not validation.valid
+    ]
 

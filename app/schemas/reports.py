@@ -3,7 +3,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.schemas.performance import KpiTrendPoint
+from app.schemas.performance import FindingSeverity, KpiTrendPoint, ScoringImpact
 
 
 class EmployeeReportRequest(BaseModel):
@@ -47,14 +47,8 @@ class ReportKpiSection(BaseModel):
 
 class ReportFinding(BaseModel):
     code: str
-    severity: Literal["error", "warning", "info"]
-    scoring_impact: Literal[
-        "blocks_score",
-        "excluded_from_scoring",
-        "lowers_confidence",
-        "affects_score",
-        "none",
-    ]
+    severity: FindingSeverity
+    scoring_impact: ScoringImpact
     message: str
     occurrence_count: int = Field(ge=1)
     record_ids: list[str]

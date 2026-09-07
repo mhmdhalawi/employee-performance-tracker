@@ -12,9 +12,8 @@ from app.schemas.performance import (
     WorkOutputEvidence,
 )
 from app.services.performance import metrics
+from app.services.performance.constants import COMPLETED_OUTPUT_STATUSES
 from app.services.performance.validation import validate_dataset
-
-_COMPLETED_STATUSES = {"completed on time", "completed late"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,9 +111,7 @@ def calculate_kpis(
             if score_is_allowed
             else None
         )
-        performance_tier = (
-            metrics.performance_tier(overall) if score_is_allowed else None
-        )
+        performance_tier = metrics.performance_tier(overall)
         results.append(
             KpiResult(
                 employee_id=employee.employee_id,
@@ -156,15 +153,19 @@ def _employee_evidence(
         )
         if record.record_id not in duplicate_ids
     ]
-    reviews = metrics.in_period(
-        dataset.quality_events,
-        employee_id,
-        lambda review: review.occurred_on,
-        start_date,
-        end_date,
-    )
-    # A review only counts as evidence when the work output it grades is present.
     known_output_ids = {record.record_id for record in dataset.work_outputs}
+    # A review only counts as evidence when the work output it grades is present.
+    reviews = [
+        review
+        for review in metrics.in_period(
+            dataset.quality_events,
+            employee_id,
+            lambda review: review.occurred_on,
+            start_date,
+            end_date,
+        )
+        if review.related_output_id in known_output_ids
+    ]
     return EmployeeEvidence(
         projects=metrics.in_period(
             dataset.work_outputs,
@@ -181,9 +182,7 @@ def _employee_evidence(
             start_date,
             end_date,
         ),
-        reviews=[
-            review for review in reviews if review.related_output_id in known_output_ids
-        ],
+        reviews=reviews,
     )
 
 
@@ -197,7 +196,7 @@ def _score_productivity(
     completed = [
         record
         for record in projects
-        if record.completion_status.casefold() in _COMPLETED_STATUSES
+        if record.completion_status.casefold() in COMPLETED_OUTPUT_STATUSES
     ]
     project_target = target.target_outputs_90d
     if start_date is not None and end_date is not None:
@@ -206,19 +205,12 @@ def _score_productivity(
         project_target *= period_days / 90
     completion_score = min(100.0, len(completed) / project_target * 100)
 
-    effort_records = [
-        record for record in completed if record.actual_effort_hours is not None
+    effort_hours = [
+        record.actual_effort_hours
+        for record in completed
+        if record.actual_effort_hours is not None
     ]
-    average_hours = (
-        sum(
-            record.actual_effort_hours
-            for record in effort_records
-            if record.actual_effort_hours is not None
-        )
-        / len(effort_records)
-        if effort_records
-        else None
-    )
+    average_hours = sum(effort_hours) / len(effort_hours) if effort_hours else None
     time_score = (
         min(100.0, target.target_avg_effort_hours / average_hours * 100)
         if average_hours
@@ -280,25 +272,18 @@ def _score_compliance(
 
 def _score_quality(reviews: list[QualityEvidence]) -> ScoredKpi:
     """Weight accuracy at 60%, first-pass approval at 25%, and rework at 15%."""
-    accuracy = (
-        sum(review.accuracy_ratio for review in reviews) / len(reviews) * 100
-        if reviews
-        else 0
-    )
-    first_pass = (
-        sum(review.first_pass_approved for review in reviews) / len(reviews) * 100
-        if reviews
-        else 0
-    )
-    # Rework is inverted into a score: eight average rework hours exhaust the component.
-    rework = (
-        max(
-            0.0,
-            100 - (sum(review.rework_hours for review in reviews) / len(reviews) * 8),
+    if reviews:
+        accuracy = sum(review.accuracy_ratio for review in reviews) / len(reviews) * 100
+        first_pass = (
+            sum(review.first_pass_approved for review in reviews) / len(reviews) * 100
         )
-        if reviews
-        else 0
-    )
+        average_rework_hours = sum(review.rework_hours for review in reviews) / len(reviews)
+        # Rework is inverted into a score: eight average rework hours exhaust the component.
+        rework = max(0.0, 100 - average_rework_hours * 8)
+    else:
+        accuracy = 0.0
+        first_pass = 0.0
+        rework = 0.0
     return ScoredKpi(
         score=accuracy * 0.60 + first_pass * 0.25 + rework * 0.15,
         reason=(

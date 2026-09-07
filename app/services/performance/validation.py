@@ -8,14 +8,32 @@ from app.schemas.performance import (
     ValidationFinding,
     ValidationSummary,
 )
-from app.services.performance.constants import NEUTRAL_ATTENDANCE_OUTCOMES
+from app.services.performance.constants import (
+    COMPLETED_OUTPUT_STATUSES,
+    NEUTRAL_ATTENDANCE_OUTCOMES,
+)
+from app.services.performance.metrics import required_attendance_fields
 
 
 def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFinding]:
     """Find scoring-relevant data quality issues without discarding their evidence."""
-    findings: list[ValidationFinding] = []
     employee_ids = {employee.employee_id for employee in dataset.employees}
-    known_outputs = {record.record_id for record in dataset.work_outputs}
+    return [
+        *_identity_findings(dataset, employee_ids),
+        *_attendance_findings(dataset, employee_ids),
+        *_work_output_findings(dataset, employee_ids),
+        *_submission_findings(dataset, employee_ids),
+        *_leave_findings(dataset, employee_ids),
+        *_quality_findings(dataset, employee_ids),
+    ]
+
+
+def _identity_findings(
+    dataset: PerformanceEvidenceDataset,
+    employee_ids: set[str],
+) -> list[ValidationFinding]:
+    """Report duplicate identities, missing KPI targets, and targets without an employee."""
+    findings: list[ValidationFinding] = []
     known_targets = {target.employee_id for target in dataset.performance_targets}
 
     duplicate_employee_ids = _duplicates(
@@ -81,9 +99,19 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
             findings.append(
                 _orphan("KPI target", target.employee_id, target.employee_id)
             )
+    return findings
 
+
+def _attendance_findings(
+    dataset: PerformanceEvidenceDataset,
+    employee_ids: set[str],
+) -> list[ValidationFinding]:
+    """Report unknown employees, missing mapped attendance times, and same-day duplicates."""
+    findings: list[ValidationFinding] = []
     attendance_by_key: dict[tuple[str, date], list[str]] = defaultdict(list)
-    mapped_attendance_fields = dataset.mapped_fields.get("attendance_events", set())
+    required_fields = sorted(
+        required_attendance_fields(dataset.mapped_fields.get("attendance_events", set()))
+    )
     for record in dataset.attendance_events:
         attendance_by_key[record.employee_id, record.occurred_on].append(
             record.record_id
@@ -92,18 +120,12 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
             findings.append(
                 _orphan("attendance evidence", record.record_id, record.employee_id)
             )
-        if record.outcome.casefold() not in NEUTRAL_ATTENDANCE_OUTCOMES:
-            required_fields = {"actual_end"}
-            for field_group in (
-                {"scheduled_start", "actual_start"},
-                {"scheduled_end", "actual_end"},
-                {"lunch_out", "lunch_in"},
-            ):
-                if field_group & mapped_attendance_fields:
-                    required_fields.update(field_group)
-            for field_name in sorted(required_fields):
-                if getattr(record, field_name) is None:
-                    findings.append(_missing_attendance_finding(record, field_name))
+        if record.outcome.casefold() in NEUTRAL_ATTENDANCE_OUTCOMES:
+            continue
+        for field_name in required_fields:
+            if getattr(record, field_name) is None:
+                findings.append(_missing_attendance_finding(record, field_name))
+
     for (employee_id, _), record_ids in attendance_by_key.items():
         if len(record_ids) > 1:
             findings.append(
@@ -117,7 +139,15 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                     scoring_impact="excluded_from_scoring",
                 )
             )
+    return findings
 
+
+def _work_output_findings(
+    dataset: PerformanceEvidenceDataset,
+    employee_ids: set[str],
+) -> list[ValidationFinding]:
+    """Report unknown employees, unverified or effortless completions, and overdue work."""
+    findings: list[ValidationFinding] = []
     for record in dataset.work_outputs:
         if record.employee_id not in employee_ids:
             findings.append(
@@ -136,8 +166,7 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                 )
             )
         if (
-            record.completion_status.casefold()
-            in {"completed on time", "completed late"}
+            record.completion_status.casefold() in COMPLETED_OUTPUT_STATUSES
             and record.actual_effort_hours is None
         ):
             findings.append(
@@ -166,7 +195,15 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                     scoring_impact="affects_score",
                 )
             )
+    return findings
 
+
+def _submission_findings(
+    dataset: PerformanceEvidenceDataset,
+    employee_ids: set[str],
+) -> list[ValidationFinding]:
+    """Report unknown employees, missing or unverified submissions, and late submissions."""
+    findings: list[ValidationFinding] = []
     for report in dataset.submission_events:
         if report.employee_id not in employee_ids:
             findings.append(
@@ -215,7 +252,15 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                     scoring_impact="affects_score",
                 )
             )
+    return findings
 
+
+def _leave_findings(
+    dataset: PerformanceEvidenceDataset,
+    employee_ids: set[str],
+) -> list[ValidationFinding]:
+    """Report unknown employees and approved sick leave without complete documentation."""
+    findings: list[ValidationFinding] = []
     for leave_request in dataset.leave_events:
         if leave_request.employee_id not in employee_ids:
             findings.append(
@@ -239,7 +284,16 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
                     scoring_impact="affects_score",
                 )
             )
+    return findings
 
+
+def _quality_findings(
+    dataset: PerformanceEvidenceDataset,
+    employee_ids: set[str],
+) -> list[ValidationFinding]:
+    """Report unknown employees, reviews of absent outputs, and low-quality results."""
+    findings: list[ValidationFinding] = []
+    known_outputs = {record.record_id for record in dataset.work_outputs}
     for review in dataset.quality_events:
         if review.employee_id not in employee_ids:
             findings.append(
@@ -286,23 +340,28 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
 
 def summarize_validation(findings: list[ValidationFinding]) -> ValidationSummary:
     """Summarize validation severity, exclusions, and affected employees."""
-    excluded_record_count = sum(
-        max(0, len(finding.record_ids) - 1)
-        if finding.code == "duplicate_attendance"
-        else 1
-        for finding in findings
-        if finding.scoring_impact == "excluded_from_scoring"
-    )
     return ValidationSummary(
         total_findings=len(findings),
         error_count=sum(finding.severity == "error" for finding in findings),
         warning_count=sum(finding.severity == "warning" for finding in findings),
         info_count=sum(finding.severity == "info" for finding in findings),
-        excluded_record_count=excluded_record_count,
+        excluded_record_count=sum(
+            _excluded_record_count(finding)
+            for finding in findings
+            if finding.scoring_impact == "excluded_from_scoring"
+        ),
         affected_employee_count=len(
             {finding.employee_id for finding in findings if finding.employee_id}
         ),
     )
+
+
+def _excluded_record_count(finding: ValidationFinding) -> int:
+    # A duplicate-attendance group keeps its first record and excludes the rest.
+    if finding.code == "duplicate_attendance":
+        return max(0, len(finding.record_ids) - 1)
+    return 1
+
 
 def _missing_attendance_finding(
     record: AttendanceComplianceEvidence,

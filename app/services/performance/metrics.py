@@ -1,6 +1,6 @@
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, time
 from typing import Protocol
 
 from app.schemas.performance import (
@@ -11,6 +11,7 @@ from app.schemas.performance import (
     WorkOutputEvidence,
 )
 from app.services.performance.constants import (
+    COMPLETED_OUTPUT_STATUSES,
     NEUTRAL_ATTENDANCE_OUTCOMES,
     REQUIRED_EVIDENCE_MATRIX,
 )
@@ -22,6 +23,7 @@ class AttendanceBreakdown:
     arrival_score: float | None
     shift_end_score: float | None
     lunch_score: float | None
+
 
 class EmployeeLinkedRecord(Protocol):
     employee_id: str
@@ -53,32 +55,23 @@ def attendance_compliance(
         for record in records
         if record.outcome.casefold() not in NEUTRAL_ATTENDANCE_OUTCOMES
     ]
-    arrival_score = (
-        _boolean_score(
-            record.actual_start <= record.scheduled_start
-            for record in working_records
-            if record.scheduled_start is not None and record.actual_start is not None
-        )
-        if {"scheduled_start", "actual_start"} <= mapped_fields
-        else None
+    arrival_score = _mapped_pair_score(
+        working_records,
+        mapped_fields,
+        ("scheduled_start", "actual_start"),
+        lambda scheduled_start, actual_start: actual_start <= scheduled_start,
     )
-    shift_end_score = (
-        _boolean_score(
-            record.actual_end >= record.scheduled_end
-            for record in working_records
-            if record.scheduled_end is not None and record.actual_end is not None
-        )
-        if {"scheduled_end", "actual_end"} <= mapped_fields
-        else None
+    shift_end_score = _mapped_pair_score(
+        working_records,
+        mapped_fields,
+        ("scheduled_end", "actual_end"),
+        lambda scheduled_end, actual_end: actual_end >= scheduled_end,
     )
-    lunch_score = (
-        _boolean_score(
-            record.lunch_in > record.lunch_out
-            for record in working_records
-            if record.lunch_out is not None and record.lunch_in is not None
-        )
-        if {"lunch_out", "lunch_in"} <= mapped_fields
-        else None
+    lunch_score = _mapped_pair_score(
+        working_records,
+        mapped_fields,
+        ("lunch_out", "lunch_in"),
+        lambda lunch_out, lunch_in: lunch_in > lunch_out,
     )
     return AttendanceBreakdown(
         score=_weighted_available_optional(
@@ -88,6 +81,39 @@ def attendance_compliance(
         shift_end_score=shift_end_score,
         lunch_score=lunch_score,
     )
+
+
+def _mapped_pair_score(
+    records: list[AttendanceComplianceEvidence],
+    mapped_fields: set[str],
+    fields: tuple[str, str],
+    is_compliant: Callable[[time, time], bool],
+) -> float | None:
+    """Score one attendance time pair, or None when the source did not map both fields."""
+    if not set(fields) <= mapped_fields:
+        return None
+    first_name, second_name = fields
+    pairs = [
+        (getattr(record, first_name), getattr(record, second_name)) for record in records
+    ]
+    return _boolean_score(
+        is_compliant(first, second)
+        for first, second in pairs
+        if first is not None and second is not None
+    )
+
+
+def required_attendance_fields(mapped_fields: set[str]) -> set[str]:
+    """Return the fields a working attendance record must supply for the mapped pairs."""
+    required = {"actual_end"}
+    for field_pair in (
+        {"scheduled_start", "actual_start"},
+        {"scheduled_end", "actual_end"},
+        {"lunch_out", "lunch_in"},
+    ):
+        if field_pair & mapped_fields:
+            required.update(field_pair)
+    return required
 
 
 def report_compliance(reports: list[SubmissionComplianceEvidence]) -> float | None:
@@ -158,8 +184,7 @@ def evidence_confidence(
     project_confidence = _coverage(
         record.verification_status.casefold() == "verified"
         and (
-            record.completion_status.casefold()
-            not in {"completed on time", "completed late"}
+            record.completion_status.casefold() not in COMPLETED_OUTPUT_STATUSES
             or record.actual_effort_hours is not None
         )
         for record in projects
@@ -195,34 +220,37 @@ def evidence_confidence(
     return confidence, reason
 
 
-def _coverage(checks: Iterable[bool]) -> float:
-    values = list(checks)
-    return sum(values) / len(values) * 100 if values else 0.0
-
-
 def _boolean_score(checks: Iterable[bool]) -> float | None:
+    """Return the percentage of checks that passed, or None when there are none."""
     values = list(checks)
-    return sum(values) / len(values) * 100 if values else None
+    if not values:
+        return None
+    return sum(values) / len(values) * 100
 
 
-def weighted_available(
-    components: list[tuple[float | None, float]],
-) -> float:
-    available = [(value, weight) for value, weight in components if value is not None]
-    if not available:
-        return 0.0
-    total_weight = sum(weight for _, weight in available)
-    return sum(value * weight for value, weight in available) / total_weight
+def _coverage(checks: Iterable[bool]) -> float:
+    """Return the percentage of checks that passed, treating no evidence as no coverage."""
+    score = _boolean_score(checks)
+    return score if score is not None else 0.0
 
 
 def _weighted_available_optional(
     components: list[tuple[float | None, float]],
 ) -> float | None:
+    """Combine the available components by weight, or None when none are available."""
     available = [(value, weight) for value, weight in components if value is not None]
     if not available:
         return None
     total_weight = sum(weight for _, weight in available)
     return sum(value * weight for value, weight in available) / total_weight
+
+
+def weighted_available(
+    components: list[tuple[float | None, float]],
+) -> float:
+    """Combine the available components by weight, scoring zero when none are available."""
+    score = _weighted_available_optional(components)
+    return score if score is not None else 0.0
 
 
 def format_optional_score(value: float | None) -> str:
@@ -235,15 +263,8 @@ def _attendance_evidence_complete(
 ) -> bool:
     if record.outcome.casefold() in NEUTRAL_ATTENDANCE_OUTCOMES:
         return True
-    required_fields = {"actual_end"}
-    for field_group in (
-        {"scheduled_start", "actual_start"},
-        {"scheduled_end", "actual_end"},
-        {"lunch_out", "lunch_in"},
-    ):
-        if field_group & mapped_fields:
-            required_fields.update(field_group)
     return all(
-        getattr(record, field_name) is not None for field_name in required_fields
+        getattr(record, field_name) is not None
+        for field_name in required_attendance_fields(mapped_fields)
     )
 

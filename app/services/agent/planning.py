@@ -31,14 +31,7 @@ async def run_mapping_agent(
         "tables; ignore those.\n\n"
         + json.dumps(workbook_context, ensure_ascii=False, separators=(",", ":"))
     )
-    result = await analysis_agent.run(
-        prompt,
-        model=get_model(),
-        model_settings=mapping_model_settings(),
-        usage=usage,
-        usage_limits=mapping_usage_limits(),
-    )
-    return result.output
+    return await _run_planning_agent(prompt, usage)
 
 
 async def repair_mappings(
@@ -79,6 +72,11 @@ async def repair_mappings(
         + "\n\nTARGETED_COLUMN_EXAMPLES:\n"
         + json.dumps(targeted_context, ensure_ascii=False, separators=(",", ":"))
     )
+    repairs = await _run_planning_agent(prompt, usage)
+    return _merge_agent_plan(analysis, repairs, repairable_sources)
+
+
+async def _run_planning_agent(prompt: str, usage: RunUsage) -> AgentCalculationPlan:
     result = await analysis_agent.run(
         prompt,
         model=get_model(),
@@ -86,7 +84,7 @@ async def repair_mappings(
         usage=usage,
         usage_limits=mapping_usage_limits(),
     )
-    return _merge_agent_plan(analysis, result.output, repairable_sources)
+    return result.output
 
 
 def _merge_agent_plan(
@@ -134,9 +132,7 @@ def expand_agent_plan(agent_plan: AgentCalculationPlan) -> CalculationPlan:
 def _classification_rationale(kpi_family: str, calculators: list[str]) -> str:
     if kpi_family == "irrelevant":
         return "The mapping agent classified this source as unrelated to KPI evidence."
-    return "Mapped to approved calculator" + (
-        f": {calculators[0]}."
-        if len(calculators) == 1
-        else "s: " + ", ".join(calculators) + "."
-    )
+    if len(calculators) == 1:
+        return f"Mapped to approved calculator: {calculators[0]}."
+    return f"Mapped to approved calculators: {', '.join(calculators)}."
 

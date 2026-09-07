@@ -17,6 +17,7 @@ async def build_employee_report_preview(
     request: EmployeeReportRequest,
 ) -> EmployeeReportPreviewResponse:
     """Build a renderer-ready employee report from deterministic dashboard results."""
+    unavailable = f"Employee '{request.employee_id}' is not available for this report."
     try:
         dashboard = await get_aggregated_dashboard(
             employee_id=request.employee_id,
@@ -25,13 +26,9 @@ async def build_employee_report_preview(
             end_date=request.end_date,
         )
     except InvalidAnalysisFilterError as exc:
-        raise EmployeeReportNotFoundError(
-            f"Employee '{request.employee_id}' is not available for this report."
-        ) from exc
+        raise EmployeeReportNotFoundError(unavailable) from exc
     if len(dashboard.results) != 1:
-        raise EmployeeReportNotFoundError(
-            f"Employee '{request.employee_id}' is not available for this report."
-        )
+        raise EmployeeReportNotFoundError(unavailable)
 
     start_date = dashboard.applied_filters.start_date
     end_date = dashboard.applied_filters.end_date

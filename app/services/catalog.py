@@ -1,4 +1,5 @@
-from collections.abc import Iterable, Sequence
+from collections import Counter
+from collections.abc import Sequence
 from datetime import date
 
 from app.schemas.calculators import (
@@ -74,43 +75,36 @@ def validate_classifications(
     """Validate the complete table classification and execution plan."""
     validations: list[ClassificationValidation] = []
     known_sources = {table.source_name for table in catalog.tables}
-    classified_sources = [item.source_name for item in classifications]
+    classification_counts = Counter(item.source_name for item in classifications)
     for classification in classifications:
         if classification.source_name not in known_sources:
             validations.append(
-                ClassificationValidation(
-                    source_name=classification.source_name,
-                    kpi_family=classification.kpi_family,
-                    valid=False,
-                    unknown_source_columns=[],
-                    duplicate_source_columns=[],
-                    missing_required_fields=[],
-                    invalid_calculators=[],
-                    message="The classified source table does not exist.",
+                _rejected_validation(
+                    classification.source_name,
+                    classification.kpi_family,
+                    "The classified source table does not exist.",
                 )
             )
             continue
         validations.append(validate_classification(catalog, classification))
     for source_name in sorted(known_sources):
-        count = classified_sources.count(source_name)
-        if count == 1:
-            continue
-        validations.append(
-            ClassificationValidation(
-                source_name=source_name,
-                kpi_family="unclassified" if count == 0 else "duplicate",
-                valid=False,
-                unknown_source_columns=[],
-                duplicate_source_columns=[],
-                missing_required_fields=[],
-                invalid_calculators=[],
-                message=(
-                    "Every source table must be classified exactly once."
-                    if count == 0
-                    else "A source table cannot have multiple classifications."
-                ),
+        count = classification_counts[source_name]
+        if count == 0:
+            validations.append(
+                _rejected_validation(
+                    source_name,
+                    "unclassified",
+                    "Every source table must be classified exactly once.",
+                )
             )
-        )
+        elif count > 1:
+            validations.append(
+                _rejected_validation(
+                    source_name,
+                    "duplicate",
+                    "A source table cannot have multiple classifications.",
+                )
+            )
     invoked_calculators = {
         invocation.calculator
         for classification in classifications
@@ -124,18 +118,12 @@ def validate_classifications(
         )
         if missing_foundations:
             validations.append(
-                ClassificationValidation(
-                    source_name="calculation_plan",
-                    kpi_family="shared",
-                    valid=False,
-                    unknown_source_columns=[],
-                    duplicate_source_columns=[],
+                _rejected_validation(
+                    "calculation_plan",
+                    "shared",
+                    "A KPI calculation plan requires employee and performance-target "
+                    "loaders in the current plan or persisted canonical foundations.",
                     missing_required_fields=missing_foundations,
-                    invalid_calculators=[],
-                    message=(
-                        "A KPI calculation plan requires employee and performance-target "
-                        "loaders in the current plan or persisted canonical foundations."
-                    ),
                 )
             )
     return validations
@@ -181,27 +169,23 @@ def validate_classification(
     """Validate a classification and its calculator-specific field bindings."""
     table = _table(catalog, classification.source_name)
     if classification.kpi_family == "irrelevant":
-        valid = not classification.calculator_invocations
+        forbidden_calculators = [
+            invocation.calculator
+            for invocation in classification.calculator_invocations
+        ]
+        if forbidden_calculators:
+            message = "Irrelevant tables cannot invoke calculators."
+        else:
+            message = "Non-evidence table classification is valid."
         return ClassificationValidation(
             source_name=table.source_name,
             kpi_family=classification.kpi_family,
-            valid=valid,
+            valid=not forbidden_calculators,
             unknown_source_columns=[],
             duplicate_source_columns=[],
             missing_required_fields=[],
-            invalid_calculators=(
-                []
-                if valid
-                else [
-                    invocation.calculator
-                    for invocation in classification.calculator_invocations
-                ]
-            ),
-            message=(
-                "Non-evidence table classification is valid."
-                if valid
-                else "Irrelevant tables cannot invoke calculators."
-            ),
+            invalid_calculators=forbidden_calculators,
+            message=message,
         )
     unknown_source_columns: set[str] = set()
     duplicate_source_columns: set[str] = set()
@@ -213,11 +197,12 @@ def validate_classification(
             invalid_calculators.append(invocation.calculator)
             continue
         bindings = invocation.field_bindings
-        unknown_source_columns.update(set(bindings.values()) - set(table.columns))
+        bound_column_counts = Counter(bindings.values())
+        unknown_source_columns.update(set(bound_column_counts) - set(table.columns))
         duplicate_source_columns.update(
             source_column
-            for source_column in set(bindings.values())
-            if list(bindings.values()).count(source_column) > 1
+            for source_column, count in bound_column_counts.items()
+            if count > 1
         )
         missing_required_fields.update(set(spec.required_fields) - set(bindings))
     if not classification.calculator_invocations:
@@ -244,6 +229,24 @@ def validate_classification(
     )
 
 
+def _rejected_validation(
+    source_name: str,
+    kpi_family: str,
+    message: str,
+    missing_required_fields: list[str] | None = None,
+) -> ClassificationValidation:
+    return ClassificationValidation(
+        source_name=source_name,
+        kpi_family=kpi_family,
+        valid=False,
+        unknown_source_columns=[],
+        duplicate_source_columns=[],
+        missing_required_fields=missing_required_fields or [],
+        invalid_calculators=[],
+        message=message,
+    )
+
+
 def _table(catalog: DataCatalog, table_name: str) -> CatalogTable:
     for table in catalog.tables:
         if table.source_name == table_name:
@@ -261,7 +264,7 @@ def _describe_column(table: CatalogTable, column: str) -> ColumnDescription:
         name=column,
         inferred_type=_infer_type(non_empty_values),
         missing_count=len(values) - len(non_empty_values),
-        unique_count=len(_unique_values(non_empty_values)),
+        unique_count=len(set(non_empty_values)),
     )
 
 
@@ -306,11 +309,3 @@ def _looks_like_id(description: ColumnDescription, row_count: int) -> bool:
         and description.missing_count == 0
         and description.unique_count == row_count
     )
-
-
-def _unique_values(values: Iterable[CellValue]) -> list[CellValue]:
-    unique_values: list[CellValue] = []
-    for value in values:
-        if value is not None and value not in unique_values:
-            unique_values.append(value)
-    return unique_values

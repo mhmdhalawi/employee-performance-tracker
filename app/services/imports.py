@@ -3,7 +3,6 @@ from datetime import date, datetime
 from io import BytesIO
 from math import isnan
 from numbers import Number
-from pathlib import PurePath
 
 import pandas as pd
 
@@ -13,7 +12,7 @@ from app.schemas.uploads import (
     CellValue,
     UploadCatalog,
 )
-from app.services.uploads import accept_upload
+from app.services.uploads import FileType, accept_upload
 
 
 def parse_upload(
@@ -39,11 +38,11 @@ class _RawTable:
     frame: pd.DataFrame
 
 
-def _read_tables(file_type: str, contents: bytes) -> list[_RawTable]:
+def _read_tables(file_type: FileType, contents: bytes) -> list[_RawTable]:
     try:
         if file_type == "csv":
             raw = pd.read_csv(BytesIO(contents), header=None)
-            return [_table_from_raw(PurePath("upload.csv").stem, raw)]
+            return [_table_from_raw("upload", raw)]
         workbook = pd.ExcelFile(BytesIO(contents))
         return [
             _table_from_raw(str(name), pd.read_excel(workbook, sheet_name=name, header=None))

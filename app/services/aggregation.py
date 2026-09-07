@@ -53,49 +53,48 @@ def canonicalize_batch(
     updates: dict[str, list[CanonicalRecord]] = {}
     findings: list[ValidationFinding] = []
     for spec in CALCULATORS:
-        records = list(getattr(dataset, spec.collection_name))
         grouped: dict[str, list[CanonicalRecord]] = {}
-        for record in records:
+        for record in getattr(dataset, spec.collection_name):
             grouped.setdefault(str(getattr(record, spec.identity_field)), []).append(
                 record
             )
 
         accepted: list[CanonicalRecord] = []
         for record_id, versions in grouped.items():
-            first = versions[0]
-            if all(version == first for version in versions[1:]):
-                accepted.append(first)
-                if len(versions) > 1:
+            first, *replays = versions
+            if any(version != first for version in replays):
+                for employee_id in sorted(
+                    {str(version.employee_id) for version in versions}
+                ):
                     findings.append(
                         ValidationFinding(
-                            code="duplicate_canonical_record",
-                            severity="warning",
+                            code="conflicting_canonical_record",
+                            severity="error",
                             message=(
-                                "Identical same-ID rows in this batch were collapsed before publication."
+                                "Conflicting rows share one stable identity in this batch; "
+                                "that identity was not published."
                             ),
-                            employee_id=str(first.employee_id),
+                            employee_id=employee_id,
                             record_ids=[record_id],
                             source_type=spec.record_type,
-                            scoring_impact="excluded_from_scoring",
+                            scoring_impact="blocks_score",
                         )
                     )
                 continue
 
-            for employee_id in sorted(
-                {str(version.employee_id) for version in versions}
-            ):
+            accepted.append(first)
+            if replays:
                 findings.append(
                     ValidationFinding(
-                        code="conflicting_canonical_record",
-                        severity="error",
+                        code="duplicate_canonical_record",
+                        severity="warning",
                         message=(
-                            "Conflicting rows share one stable identity in this batch; "
-                            "that identity was not published."
+                            "Identical same-ID rows in this batch were collapsed before publication."
                         ),
-                        employee_id=employee_id,
+                        employee_id=str(first.employee_id),
                         record_ids=[record_id],
                         source_type=spec.record_type,
-                        scoring_impact="blocks_score",
+                        scoring_impact="excluded_from_scoring",
                     )
                 )
 
@@ -207,30 +206,23 @@ def _content_duplicate_findings(
     for duplicates in grouped.values():
         if len(duplicates) < 2:
             continue
-        employee_ids = {str(item.employee_id) for item in duplicates}
-        for employee_id in sorted(employee_ids):
-            employee_records = [
-                item for item in duplicates if str(item.employee_id) == employee_id
-            ]
-            if len(employee_records) < 2:
-                continue
-            findings.append(
-                ValidationFinding(
-                    code="duplicate_record_content",
-                    severity="warning",
-                    message=(
-                        "Different record IDs contain identical evidence; review them "
-                        "before deciding whether either event should be removed."
-                    ),
-                    employee_id=employee_id,
-                    record_ids=[
-                        str(getattr(item, spec.identity_field))
-                        for item in employee_records
-                    ],
-                    source_type=spec.record_type,
-                    scoring_impact="none",
-                )
+        # employee_id is part of the hashed content, so one group is always one employee.
+        findings.append(
+            ValidationFinding(
+                code="duplicate_record_content",
+                severity="warning",
+                message=(
+                    "Different record IDs contain identical evidence; review them "
+                    "before deciding whether either event should be removed."
+                ),
+                employee_id=str(duplicates[0].employee_id),
+                record_ids=[
+                    str(getattr(item, spec.identity_field)) for item in duplicates
+                ],
+                source_type=spec.record_type,
+                scoring_impact="none",
             )
+        )
     return findings
 
 

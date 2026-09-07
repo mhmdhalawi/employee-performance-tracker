@@ -24,3 +24,8 @@ NEUTRAL_ATTENDANCE_OUTCOMES = {
     "public holiday",
 }
 
+COMPLETED_OUTPUT_STATUSES = {
+    "completed on time",
+    "completed late",
+}
+

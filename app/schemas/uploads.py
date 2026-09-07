@@ -78,23 +78,6 @@ class CalculatorInvocation(BaseModel):
     field_bindings: dict[str, str]
 
 
-class TableClassification(BaseModel):
-    source_name: str
-    kpi_family: TableRole
-    calculator_invocations: list[CalculatorInvocation]
-    confidence: Literal["low", "medium", "high"]
-    rationale: str = Field(min_length=1, max_length=500)
-
-    @model_validator(mode="after")
-    def validate_unique_calculators(self) -> Self:
-        calculators = [
-            invocation.calculator for invocation in self.calculator_invocations
-        ]
-        if len(calculators) != len(set(calculators)):
-            raise ValueError("A table cannot invoke the same calculator more than once.")
-        return self
-
-
 class AgentTableClassification(BaseModel):
     source_name: str
     kpi_family: TableRole
@@ -109,6 +92,11 @@ class AgentTableClassification(BaseModel):
         if len(calculators) != len(set(calculators)):
             raise ValueError("A table cannot invoke the same calculator more than once.")
         return self
+
+
+class TableClassification(AgentTableClassification):
+    # The rationale is derived in Python once the agent's classification is validated.
+    rationale: str = Field(min_length=1, max_length=500)
 
 
 class AgentCalculationPlan(BaseModel):
@@ -147,7 +135,7 @@ class CalculationPlan(BaseModel):
             for item in self.table_classifications
             if item.kpi_family != "irrelevant"
         }
-        if set(self.selected_tables) != expected or len(self.selected_tables) != len(expected):
+        if sorted(self.selected_tables) != sorted(expected):
             raise ValueError(
                 "selected_tables must contain each relevant classified table exactly once."
             )

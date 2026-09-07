@@ -6,7 +6,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.schemas.calculators import CALCULATOR_BY_NAME, CALCULATORS
 from app.schemas.performance import PerformanceEvidenceDataset
-from app.schemas.uploads import DataCatalog, ImportIssue, TableClassification
+from app.schemas.uploads import CellValue, DataCatalog, ImportIssue, TableClassification
 from app.services import catalog as catalog_service
 
 
@@ -49,21 +49,7 @@ def build_performance_dataset(
                 invocation.field_bindings
             )
             for row in table.rows:
-                source_row = row.get("_source_row")
-                row_number = (
-                    source_row
-                    if isinstance(source_row, int) and not isinstance(source_row, bool)
-                    else None
-                )
-                mapped_row = {
-                    calculator_field: _normalize_value(
-                        model,
-                        calculator_field,
-                        row.get(source_column),
-                    )
-                    for calculator_field, source_column in invocation.field_bindings.items()
-                    if row.get(source_column) is not None
-                }
+                mapped_row = _mapped_row(model, invocation.field_bindings, row)
                 try:
                     collections[spec.collection_name].append(
                         model.model_validate(mapped_row)
@@ -74,15 +60,38 @@ def build_performance_dataset(
                             code="invalid_row",
                             message=str(exc),
                             source_name=classification.source_name,
-                            row_number=row_number,
+                            row_number=_row_number(row),
                         )
                     )
 
-    dataset_data: dict[str, object] = {
-        **collections,
-        "mapped_fields": mapped_fields,
+    dataset = PerformanceEvidenceDataset.model_validate(
+        {**collections, "mapped_fields": mapped_fields}
+    )
+    return dataset, issues
+
+
+def _mapped_row(
+    model: type[BaseModel],
+    field_bindings: dict[str, str],
+    row: dict[str, CellValue],
+) -> dict[str, object]:
+    return {
+        calculator_field: _normalize_value(
+            model,
+            calculator_field,
+            row.get(source_column),
+        )
+        for calculator_field, source_column in field_bindings.items()
+        if row.get(source_column) is not None
     }
-    return PerformanceEvidenceDataset.model_validate(dataset_data), issues
+
+
+def _row_number(row: dict[str, CellValue]) -> int | None:
+    source_row = row.get("_source_row")
+    # bool is a subclass of int, but a flag column is not a row number.
+    if isinstance(source_row, bool) or not isinstance(source_row, int):
+        return None
+    return source_row
 
 
 def _normalize_value(

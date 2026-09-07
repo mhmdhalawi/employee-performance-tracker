@@ -50,10 +50,7 @@ async def analyze_table_data(
     request: AnalyzeTablesRequest,
     idempotency_key: str | None = Header(default=None, min_length=1, max_length=200),
 ) -> SubmissionReceipt:
-    return await analyze_and_store_tables(
-        request,
-        idempotency_key=idempotency_key,
-    )
+    return await analyze_and_store_tables(request, idempotency_key=idempotency_key)
 
 
 @router.post(
