@@ -70,7 +70,8 @@ their business meaning, not exact names or isolated keywords.
 KPI definitions:
 - Productivity: Work completed against output targets and time efficiency against
   effort targets. Relevant evidence includes work items, completion status/dates,
-  and actual effort.
+  actual effort, and indicators of work difficulty or complexity such as project
+  weight.
 - Compliance: Adherence to attendance, reporting, and leave requirements. Relevant
   evidence includes scheduled/actual working times, breaks, report deadlines and
   verified submissions, and leave approvals and documentation. Approved leave is neutral.
