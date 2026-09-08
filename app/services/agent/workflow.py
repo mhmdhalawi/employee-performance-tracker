@@ -49,6 +49,7 @@ class AnalysisArtifacts:
     output_tokens: int
     llm_duration_ms: float
 
+
 async def analyze_tables_artifacts(
     request: AnalyzeTablesRequest,
     calculation_plan: CalculationPlan | None = None,
@@ -209,4 +210,3 @@ def _invalid_classifications(
         )
         if not validation.valid
     ]
-
