@@ -28,6 +28,17 @@ Remaining follow-ups include sign-in refinements, official compact/reversed logo
 | Predominantly white dashboard | Confirmed readable in desktop/mobile review | Retain white header; improve shared identity and density |
 | Gold chart and label treatment | Small ochre labels lacked normal-text contrast | Separate readable text foreground from chart-line color |
 
+## Employee evidence tables — 2026-09-14
+
+Employee Details replaces its three standalone KPI score cards with three full-width evidence sections, ordered Productivity, Compliance, and Quality. Each header retains the backend score and overall weight with a short performance-record description. Calculation explanations are available in an optional collapsed disclosure. Overall result and evidence confidence retain their existing sections.
+
+Desktop uses semantic tables; phones use labeled record cards showing the same independently paginated records. Shared `EmployeeEvidenceTable.vue` and `EvidenceRecordDetails.vue` own both Employee Details and report preview presentation. IDs and text wrap, and shared Collapsible controls reveal full values, findings, scoring impacts, and safe evidence links.
+
+The portrait employee PDF presents scores, relevant Needs attention issues, and trends, followed by complete performance records; formula explanations and metric definitions are omitted. Section titles and column headings repeat on continuation pages; ordinary records stay together and oversized notes may flow across pages. The existing PDF palette is preserved.
+
+See [evidence read contracts](persistence.md#employee-evidence-reads) and
+[implementation verification](ux-guidelines.md#employee-review-verification--2026-09-14).
+
 ## Original brand proposal and unresolved assets
 
 ## Goal
@@ -199,3 +210,7 @@ The stylesheet contains dark-mode tokens, but the current UI does not expose a t
 - Error, warning, success, selected, disabled, and insufficient-data states remain unambiguous without relying on color alone.
 - Charts remain understandable in color, for common color-vision deficiencies, and in grayscale exports.
 - The app passes `pnpm build` and is visually checked at relevant desktop and mobile sizes.
+
+## Performance-first employee review — 2026-09-14
+
+Remove the Compliance calculation card and replace standalone Findings with compact Needs attention above the three tables. Show three issue groups initially, with Show all/Show fewer controls; hide the section when no relevant issues remain. Preserve white surfaces and existing status treatments. Shared EmployeeAttentionSummary/EmployeeAttentionItem and EmployeeCalculationDetails components serve both page and report preview. Detailed calculations remain collapsed by default at the end of each view.

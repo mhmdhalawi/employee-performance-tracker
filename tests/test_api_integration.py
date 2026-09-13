@@ -293,6 +293,140 @@ class AnalyzeApiIntegrationTests(TestCase):
             "employee_report_not_found",
         )
 
+    def test_employee_evidence_pages_match_complete_report(self) -> None:
+        self.assertEqual(self._post_benchmark_tables().status_code, 201)
+        query = "employee_id=EMP-001&period_weeks=12"
+        dashboard = self.client.get(f"/api/v1/dashboard?{query}").json()
+        report = self.client.post(
+            "/api/v1/reports/employee/preview",
+            json={"employee_id": "EMP-001", "period_weeks": 12},
+        ).json()["report"]
+        self.assertEqual(report["latest_submission_at"], dashboard["latest_submission_at"])
+        for kpi in ("productivity", "compliance", "quality"):
+            complete = report["evidence_tables"][kpi]
+            response = self.client.get(
+                f"/api/v1/employees/EMP-001/evidence?kpi={kpi}&period_weeks=12&page_size=2"
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            page = response.json()
+            self.assertEqual(page["total_count"], complete["total_count"])
+            rows = page["rows"]
+            for number in range(2, (page["total_count"] + 1) // 2 + 1):
+                rows.extend(self.client.get(
+                    f"/api/v1/employees/EMP-001/evidence?kpi={kpi}&period_weeks=12"
+                    f"&page_size=2&page={number}"
+                ).json()["rows"])
+            self.assertEqual(rows, complete["rows"])
+            self.assertTrue(all(row["record"]["employee_id"] == "EMP-001" for row in rows))
+            self.assertEqual(page["applied_filters"], {
+                **dashboard["applied_filters"], "employee_id": "EMP-001",
+            })
+        self.assertGreater(report["evidence_tables"]["compliance"]["total_count"], 5)
+
+    def test_employee_evidence_rejects_invalid_queries_and_unknown_employee(self) -> None:
+        self._post_benchmark_tables()
+        for query in ("kpi=other", "kpi=quality&page=0", "kpi=quality&page_size=51",
+                      "kpi=quality&page=999"):
+            response = self.client.get(f"/api/v1/employees/EMP-001/evidence?{query}")
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()["error"]["code"], "invalid_employee_evidence_query")
+        unknown = self.client.get("/api/v1/employees/EMP-999/evidence?kpi=quality")
+        self.assertEqual(unknown.status_code, 404)
+        self.assertEqual(unknown.json()["error"]["code"], "employee_evidence_not_found")
+        invalid_period = self.client.get(
+            "/api/v1/employees/EMP-001/evidence?kpi=quality&period_weeks=4&start_date=2026-06-01"
+        )
+        self.assertEqual(invalid_period.status_code, 400)
+
+    def test_employee_evidence_is_available_after_upload_and_preserves_exclusions(self) -> None:
+        self.assertEqual(self._post_benchmark().status_code, 200)
+        page = self.client.get(
+            "/api/v1/employees/EMP-027/evidence?kpi=compliance&page_size=50"
+        ).json()
+        excluded = [row for row in page["rows"] if row["excluded_from_scoring"]]
+        self.assertEqual(len(excluded), 1)
+        self.assertTrue(excluded[0]["exclusion_reason"])
+        self.assertTrue(any(
+            finding["code"] == "duplicate_attendance"
+            for finding in excluded[0]["validation_findings"]
+        ))
+        report = self.client.post(
+            "/api/v1/reports/employee/preview",
+            json={"employee_id": "EMP-027", "period_weeks": 12},
+        ).json()["report"]
+        self.assertIsNone(report["overall_score"])
+        self.assertIn(excluded[0], report["evidence_tables"]["compliance"]["rows"])
+
+    def test_report_loads_one_canonical_state_including_prior_comparison(self) -> None:
+        self._post_benchmark_tables()
+        from app.services.submissions import dashboard as dashboard_service
+
+        original = dashboard_service.load_aggregation_state
+        with patch.object(dashboard_service, "load_aggregation_state", wraps=original) as load:
+            preview = self.client.post(
+                "/api/v1/reports/employee/preview",
+                json={"employee_id": "EMP-001", "start_date": "2026-06-20",
+                      "end_date": "2026-07-01"},
+            )
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(load.call_count, 1)
+        report = preview.json()["report"]
+        self.assertIsNotNone(report["period"]["prior_start_date"])
+        self.assertEqual(report["evidence_tables"]["productivity"]["total_count"], 0)
+        self.assertEqual(report["evidence_tables"]["quality"]["total_count"], 0)
+        self.assertEqual(report["evidence_tables"]["compliance"]["total_count"], 1)
+
+    def test_evidence_uses_record_specific_dates_and_filters_unsafe_links(self) -> None:
+        payload = self._single_employee_batch("DATES", "2026-06-01")
+        for table in payload["tables"]:
+            row = table["rows"][0]
+            if table["source_name"] == "Projects":
+                row.update({"evidence_link": "javascript:alert(1)", "completed_date": "2026-06-10"})
+            elif table["source_name"] == "Quality":
+                row["occurred_on"] = "2026-06-10"
+            elif table["source_name"] == "Leave":
+                row.update({"start_date": "2026-05-30", "end_date": "2026-06-10"})
+            elif table["source_name"] == "Reports":
+                row["submitted_date"] = "2026-06-10"
+        self.assertEqual(self._post_benchmark_tables(payload=payload).status_code, 201)
+        period = "start_date=2026-06-10&end_date=2026-06-10"
+        quality = self.client.get(
+            f"/api/v1/employees/EMP-001/evidence?kpi=quality&{period}"
+        ).json()
+        self.assertEqual(quality["total_count"], 1)
+        self.assertFalse(quality["rows"][0]["excluded_from_scoring"])
+        productivity = self.client.get(
+            f"/api/v1/employees/EMP-001/evidence?kpi=productivity&{period}"
+        ).json()
+        self.assertEqual(productivity["total_count"], 0)
+        compliance = self.client.get(
+            f"/api/v1/employees/EMP-001/evidence?kpi=compliance&{period}"
+        ).json()
+        self.assertEqual([row["record_type"] for row in compliance["rows"]], ["leave"])
+        work = self.client.get(
+            "/api/v1/employees/EMP-001/evidence?kpi=productivity"
+        ).json()["rows"][0]
+        self.assertIsNone(work["record"]["evidence_link"])
+
+    def test_orphan_quality_remains_visible_and_excluded_in_page_and_report(self) -> None:
+        payload = self._single_employee_batch("ORPHAN", "2026-06-01")
+        quality = next(table for table in payload["tables"] if table["source_name"] == "Quality")
+        quality["rows"][0]["related_output_id"] = "WORK-NOT-PRESENT"
+        self.assertEqual(self._post_benchmark_tables(payload=payload).status_code, 201)
+        response = self.client.get("/api/v1/employees/EMP-001/evidence?kpi=quality")
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["rows"][0]
+        self.assertTrue(row["excluded_from_scoring"])
+        self.assertTrue(any(
+            finding["code"] == "orphan_quality_evidence" for finding in row["validation_findings"]
+        ))
+        report = self.client.post(
+            "/api/v1/reports/employee/preview",
+            json={"employee_id": "EMP-001", "period_weeks": 12},
+        ).json()["report"]
+        self.assertEqual(report["evidence_tables"]["quality"]["rows"], [row])
+
     def test_json_submission_is_available_as_latest_dashboard(self) -> None:
         submitted = self._post_benchmark_tables()
 

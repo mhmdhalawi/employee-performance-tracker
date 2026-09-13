@@ -1,5 +1,4 @@
 from datetime import UTC, date, datetime, timedelta
-from urllib.parse import urlparse
 
 from app.core.errors import EmployeeReportNotFoundError, InvalidAnalysisFilterError
 from app.schemas.reports import (
@@ -10,7 +9,9 @@ from app.schemas.reports import (
     ReportKpiSection,
     ReportPeriod,
 )
-from app.services.submissions import get_aggregated_dashboard
+from app.services.employee_evidence import build_employee_evidence_tables
+from app.services.submissions.dashboard import build_dashboard, load_dashboard_context
+from app.utils.links import is_safe_evidence_link
 
 
 async def build_employee_report_preview(
@@ -18,8 +19,10 @@ async def build_employee_report_preview(
 ) -> EmployeeReportPreviewResponse:
     """Build a renderer-ready employee report from deterministic dashboard results."""
     unavailable = f"Employee '{request.employee_id}' is not available for this report."
+    context = load_dashboard_context()
     try:
-        dashboard = await get_aggregated_dashboard(
+        dashboard = build_dashboard(
+            context,
             employee_id=request.employee_id,
             period_weeks=request.period_weeks,
             start_date=request.start_date,
@@ -45,7 +48,8 @@ async def build_employee_report_preview(
     )
     prior_score: float | None = None
     if prior_start is not None and prior_end is not None:
-        prior_dashboard = await get_aggregated_dashboard(
+        prior_dashboard = build_dashboard(
+            context,
             employee_id=request.employee_id,
             start_date=prior_start,
             end_date=prior_end,
@@ -67,7 +71,7 @@ async def build_employee_report_preview(
             occurrence_count=alert.occurrence_count,
             record_ids=alert.record_ids,
             evidence_links=[
-                link for link in alert.evidence_links if _is_safe_evidence_link(link)
+                link for link in alert.evidence_links if is_safe_evidence_link(link)
             ],
         )
         for alert in dashboard.alerts
@@ -86,6 +90,10 @@ async def build_employee_report_preview(
             prior_end_date=prior_end,
         ),
         generated_at=datetime.now(UTC),
+        latest_submission_at=dashboard.latest_submission_at,
+        evidence_tables=build_employee_evidence_tables(
+            context.materialized.dataset, employee.employee_id, start_date, end_date
+        ),
         overall_score=employee.overall_score,
         result_status=employee.result_status,
         performance_tier=employee.performance_tier,
@@ -141,8 +149,3 @@ def _prior_period(
     if coverage_start is None or prior_start < coverage_start:
         return None, None
     return prior_start, prior_end
-
-
-def _is_safe_evidence_link(value: str) -> bool:
-    parsed = urlparse(value)
-    return parsed.scheme == "https" and bool(parsed.netloc)

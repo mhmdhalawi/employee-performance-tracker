@@ -1,5 +1,8 @@
-import type { Content, ContentColumns, TDocumentDefinitions } from 'pdfmake/interfaces'
+import type { Content, ContentColumns, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
 import type { EmployeeReportData, ReportFinding } from '@/types/reports'
+import type { EmployeeEvidenceRow, EvidenceKpi } from '@/types/employee-evidence'
+import { needsAttention } from '@/lib/employee-presentation'
+import { evidenceCells, evidenceDetails, evidenceImpact, evidenceDescriptions, evidenceLabels, evidenceLink } from '@/lib/employee-evidence'
 
 const cedar = '#078181'
 const cedarLight = '#E7F3F3'
@@ -34,19 +37,10 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
   const period = `${formatDate(report.period.start_date)} - ${formatDate(report.period.end_date)}`
   const overall = report.overall_score === null ? 'Withheld' : score(report.overall_score)
   const status = report.performance_tier || report.result_status
-  const kpiExplanations = report.kpis.map<Content>(kpi => ({
-    stack: [
-      { text: `${kpi.name} - ${score(kpi.score)}`, bold: true },
-      { text: kpi.explanation, color: muted, margin: [0, 2, 0, 8] },
-    ],
-  }))
-  const findingBlocks = report.findings.length
-    ? report.findings.map<Content>(findingBlock)
-    : [{
-        text: 'No validated findings for this employee and reporting period.',
-        color: muted,
-        margin: [0, 2, 0, 10] as [number, number, number, number],
-      }]
+  const attention = needsAttention(report.findings)
+  const attentionBlocks: Content[] = attention.length
+    ? [{ text: 'Needs attention', style: 'sectionTitle', margin: [0, 12, 0, 5] }, ...attention.map(findingBlock)]
+    : []
 
   return {
     pageSize: 'A4',
@@ -62,7 +56,7 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
     footer: (currentPage: number, pageCount: number) => ({
       margin: [42, 12, 42, 0],
       columns: [
-        { text: `Generated ${formatDateTime(report.generated_at)}`, color: muted, fontSize: 7 },
+        { text: `Generated ${formatDateTime(report.generated_at)} | ${report.employee_id}`, color: muted, fontSize: 7 },
         { text: `${currentPage} / ${pageCount}`, alignment: 'right', color: muted, fontSize: 7 },
       ],
     }),
@@ -102,26 +96,13 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
         columnGap: 8,
         margin: [0, 6, 0, 16],
       },
-      { text: 'Evidence confidence', style: 'sectionTitle' },
-      { text: report.confidence_explanation, margin: [0, 5, 0, 14] },
+      ...attentionBlocks,
       { text: 'Weekly trend', style: 'sectionTitle' },
       trendTable(report),
-      { text: 'Evidence and action', style: 'title', pageBreak: 'before' },
-      { text: 'Deterministic KPI explanations', style: 'sectionTitle', margin: [0, 12, 0, 5] },
-      ...kpiExplanations,
-      { text: 'Validated findings', style: 'sectionTitle', margin: [0, 8, 0, 5] },
-      ...findingBlocks,
-      { text: 'Supporting records', style: 'sectionTitle', margin: [0, 8, 0, 4] },
-      {
-        text: report.supporting_record_ids.length
-          ? report.supporting_record_ids.join(', ')
-          : 'No supporting record IDs are available.',
-        color: muted,
-        fontSize: 8,
-      },
-      { text: 'Metric definitions', style: 'sectionTitle', margin: [0, 12, 0, 4] },
-      { ul: report.metric_definitions, color: muted, fontSize: 8 },
       { text: report.manager_review_notice, style: 'notice', margin: [0, 12, 0, 0] },
+      { text: 'Employee performance records', style: 'title', pageBreak: 'before' },
+      { text: 'All selected-period records are included. Excluded records are labeled for auditability; source statuses do not replace calculated results.', color: muted, margin: [0, 4, 0, 12] },
+      ...(['productivity', 'compliance', 'quality'] as EvidenceKpi[]).flatMap(kpi => evidenceSection(report, kpi)),
     ],
     styles: {
       title: { fontSize: 22, bold: true, color: cedar, margin: [0, 0, 0, 4] },
@@ -129,6 +110,89 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
       notice: { fillColor: cedarLight, color: ink, margin: [9, 8, 9, 8] },
     },
   }
+}
+
+function wrapLongWords(value: string): string {
+  return value.replace(/\S{24,}/g, word => word.replace(/(.{18})/g, '$1\u200b'))
+}
+
+function evidenceNotes(row: EmployeeEvidenceRow): Content {
+  const stack: Content[] = []
+  if (row.excluded_from_scoring)
+    stack.push({ text: wrapLongWords(`Excluded from scoring: ${row.exclusion_reason}`), bold: true })
+  for (const finding of row.validation_findings) {
+    stack.push({ text: wrapLongWords(`${evidenceImpact(finding.scoring_impact)}: ${finding.message} Records: ${finding.record_ids.join(', ')}`), margin: [0, 3, 0, 0] })
+  }
+  const link = evidenceLink(row)
+  if (link) {
+    stack.push({ text: 'Open evidence', link, color: cedar, decoration: 'underline', margin: [0, 3, 0, 0] })
+    stack.push({ text: wrapLongWords(link), color: muted, fontSize: 7 })
+  }
+  return { stack: stack.length ? stack : [{ text: 'No additional findings.', color: muted }] }
+}
+
+function evidenceSection(report: EmployeeReportData, kpi: EvidenceKpi): Content[] {
+  const section = report.evidence_tables[kpi]
+  const metric = report.kpis.find(item => item.name === evidenceLabels[kpi])!
+  const title: Content = {
+    unbreakable: true,
+    stack: [
+      { text: `${evidenceLabels[kpi]} evidence - ${score(metric.score)} | ${metric.weight}% of overall`, style: 'sectionTitle' },
+      { text: `${section.total_count} records | ${evidenceDescriptions[kpi]}`, color: muted, fontSize: 8, margin: [0, 4, 0, 6] },
+    ],
+    margin: [0, 12, 0, 0],
+  }
+  if (!section.rows.length)
+    return [title, { text: `No ${evidenceLabels[kpi].toLowerCase()} evidence records for this reporting period.`, color: muted, margin: [0, 4, 0, 12] }]
+
+  const headers = kpi === 'productivity'
+    ? ['Work record', 'Assigned / due / completed', 'Source status', 'Actual hours', 'Verification / evidence / notes']
+    : kpi === 'compliance'
+      ? ['Type / record ID', 'Date / period', 'Source outcome', 'Record details', 'Findings / exclusion notes']
+      : ['Review / work IDs', 'Review date', 'Accuracy / first pass', 'Rework hours', 'Verification / notes']
+  const body: TableCell[][] = [
+    [{ colSpan: 5, stack: [
+      { text: `${evidenceLabels[kpi]} evidence - ${score(metric.score)} | ${metric.weight}% of overall`, style: 'sectionTitle' },
+      { text: `${section.total_count} records | ${evidenceDescriptions[kpi]}`, color: muted, fontSize: 8, margin: [0, 4, 0, 2] },
+    ] }, {}, {}, {}, {}],
+    headers.map(text => ({ text, bold: true, color: ink })),
+  ]
+  for (const row of section.rows) {
+    const cells = evidenceCells(row)
+    let values: (string | Content)[]
+    if (row.record_type === 'work_output') {
+      values = [row.record_id, `Assigned: ${formatDate(row.record.assigned_date)}\nDue: ${formatDate(row.record.due_date)}\nCompleted: ${cells[2]}`,
+        cells[3]!, cells[4]!, { stack: [{ text: wrapLongWords(row.record.verification_status) }, evidenceNotes(row)] }]
+    }
+    else if (row.record_type === 'quality') {
+      values = [`${row.record_id}\nWork: ${row.record.related_output_id}`, cells[2]!, `${cells[3]}\n${cells[4]}`, cells[5]!,
+        { stack: [{ text: wrapLongWords(row.record.verification_status) }, evidenceNotes(row)] }]
+    }
+    else {
+      const details = evidenceDetails(row).filter(([label]) => !['Type', 'Date / period', 'Record ID', 'Source outcome'].includes(label))
+      values = [`${cells[0]}\n${row.record_id}`, cells[1]!, cells[3]!, details.map(([label, value]) => `${label}: ${value}`).join('\n'), evidenceNotes(row)]
+    }
+    body.push(values.map(value => typeof value === 'string' ? { text: wrapLongWords(value) } : value))
+  }
+  const ordinaryRows = section.rows.every(row => JSON.stringify(row).length < 2000)
+  return [{
+    table: {
+      // Repeating the section title with its columns also keeps it with the first record.
+      headerRows: 2, keepWithHeaderRows: ordinaryRows ? 1 : 0,
+      // Ordinary records stay intact; unusually long source text/notes may flow across pages.
+      dontBreakRows: ordinaryRows,
+      widths: kpi === 'productivity' ? [70, 100, 65, 45, '*']
+        : kpi === 'compliance' ? [80, 65, 55, 170, '*'] : [95, 70, 95, 45, '*'],
+      body,
+    },
+    layout: {
+      fillColor: (rowIndex: number) => rowIndex === 1 ? cedarLight : null,
+      hLineColor: () => line, vLineColor: () => line,
+      paddingLeft: () => 5, paddingRight: () => 5, paddingTop: () => 6, paddingBottom: () => 6,
+    },
+    fontSize: 8,
+    margin: [0, 0, 0, 12],
+  }]
 }
 
 function metricCell(label: string, value: string, detail: string): Content {
@@ -177,11 +241,11 @@ function trendTable(report: EmployeeReportData): Content {
 
 function findingBlock(finding: ReportFinding): Content {
   const stack: Content[] = [
-    { text: `${finding.code.replaceAll('_', ' ')} - ${impactLabel(finding.scoring_impact)}`, bold: true },
-    { text: finding.message, color: muted, margin: [0, 2, 0, 1] },
-    { text: `Records: ${finding.record_ids.join(', ') || 'None'}`, color: muted, fontSize: 7 },
+    { text: `${finding.code.replaceAll('_', ' ')} - ${finding.occurrence_count} occurrences`, bold: true },
+    { text: wrapLongWords(finding.message), color: muted, margin: [0, 2, 0, 1] },
+    { text: wrapLongWords(`Records: ${finding.record_ids.join(', ') || 'None'}`), color: muted, fontSize: 7 },
     ...finding.evidence_links.map<Content>(link => ({
-      text: link,
+      text: wrapLongWords(link),
       link,
       color: cedar,
       decoration: 'underline',
@@ -220,10 +284,6 @@ function change(value: number | null): string {
 function priorPeriodLabel(report: EmployeeReportData): string {
   const { prior_start_date: start, prior_end_date: end } = report.period
   return start && end ? `${formatDate(start)} - ${formatDate(end)}` : 'No comparable period'
-}
-
-function impactLabel(value: string): string {
-  return value.replaceAll('_', ' ')
 }
 
 function formatDate(value: string): string {

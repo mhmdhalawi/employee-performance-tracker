@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import {
   CalendarDaysIcon,
   CircleAlertIcon,
-  Clock3Icon,
-  DatabaseIcon,
   DownloadIcon,
   FileTextIcon,
-  FileSpreadsheetIcon,
   MinusIcon,
   ShieldCheckIcon,
   TrendingDownIcon,
@@ -17,12 +14,17 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import ReportPreviewContent from '@/components/dashboard/ReportPreviewContent.vue'
 import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
+import EmployeeEvidenceTable from '@/components/dashboard/EmployeeEvidenceTable.vue'
+import EmployeeAttentionSummary from '@/components/dashboard/EmployeeAttentionSummary.vue'
+import EmployeeCalculationDetails from '@/components/dashboard/EmployeeCalculationDetails.vue'
+import { evidenceDescriptions } from '@/lib/employee-evidence'
+import { useEmployeeEvidence } from '@/composables/useEmployeeEvidence'
+import type { EvidenceKpi } from '@/types/employee-evidence'
 import { Progress } from '@/components/ui/progress'
-import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { downloadEmployeeReportPdf } from '@/lib/employee-report-pdf'
 import type { AnalysisFilters, EmployeeKpiResult, ErrorPayload, PerformanceAlert } from '@/types/analysis'
@@ -34,9 +36,13 @@ const props = defineProps<{
   employee: EmployeeKpiResult
   alerts: PerformanceAlert[]
   reportingPeriod: AnalysisFilters
+  latestSubmissionAt: string
+  isRefreshing: boolean
+  refreshError: string
 }>()
 const emit = defineEmits<{
   back: []
+  refresh: []
 }>()
 
 const reportPreviewOpen = ref(false)
@@ -44,72 +50,48 @@ const reportPreview = ref<EmployeeReportData | null>(null)
 const reportLoading = ref(false)
 const reportDownloading = ref(false)
 const reportError = ref('')
-
-const complianceBreakdown = computed(() => {
-  const match = props.employee.compliance_reason.match(
-    /attendance \(([^:]+): arrival ([^,]+), shift end ([^,]+), lunch ([^)]+)\), 35% reporting \(([^)]+)\), and 15% leave compliance \(([^)]+)\)/,
-  )
-  if (!match)
-    return null
-
-  return {
-    attendance: match[1],
-    arrival: match[2],
-    shiftEnd: match[3],
-    lunch: match[4],
-    reporting: match[5],
-    leave: match[6],
-  }
+const reportDownloadError = ref('')
+let reportController: AbortController | null = null
+let reportSequence = 0
+const { states: evidenceStates, load: loadEvidence } = useEmployeeEvidence(
+  () => ({ employeeId: props.employee.employee_id, period: props.reportingPeriod, latestSubmissionAt: props.latestSubmissionAt }),
+  () => emit('refresh'),
+)
+watch(() => `${props.employee.employee_id}:${JSON.stringify(props.reportingPeriod)}`, () => {
+  reportSequence++
+  reportController?.abort()
+  reportPreviewOpen.value = false
+  reportPreview.value = null
+  reportLoading.value = false
 })
+onScopeDispose(() => { reportSequence++; reportController?.abort() })
 
-const kpiCards = computed(() => [
+const kpiSections = computed(() => [
   {
+    kpi: 'productivity' as EvidenceKpi,
     label: 'Productivity',
     score: props.employee.productivity_score,
     reason: props.employee.productivity_reason,
-    weight: '35% of overall',
+    weight: 35,
   },
   {
+    kpi: 'compliance' as EvidenceKpi,
     label: 'Compliance',
     score: props.employee.compliance_score,
     reason: props.employee.compliance_reason,
-    weight: '30% of overall',
+    weight: 30,
   },
   {
+    kpi: 'quality' as EvidenceKpi,
     label: 'Quality',
     score: props.employee.quality_score,
     reason: props.employee.quality_reason,
-    weight: '35% of overall',
+    weight: 35,
   },
 ])
 
 function score(value: number | null): string {
   return value === null ? '—' : `${value.toFixed(1)}%`
-}
-
-function alertCodeLabel(code: string): string {
-  return code.replaceAll('_', ' ')
-}
-
-function impactLabel(impact: string): string {
-  const labels: Record<string, string> = {
-    lowers_confidence: 'Lowers confidence',
-    affects_score: 'Affects score',
-    excluded_from_scoring: 'Excluded from scoring',
-    blocks_score: 'Blocks score',
-    none: 'No scoring impact',
-  }
-  return labels[impact] ?? alertCodeLabel(impact)
-}
-
-function impactVariant(impact: string): 'destructive' | 'outline' | 'secondary' | 'warning' {
-  if (impact === 'blocks_score')
-    return 'destructive'
-  if (impact === 'lowers_confidence')
-    return 'warning'
-  if (impact === 'affects_score')
-    return 'secondary'
-  return 'outline'
 }
 
 function reportRequest(): EmployeeReportRequest | null {
@@ -123,9 +105,14 @@ function reportRequest(): EmployeeReportRequest | null {
 }
 
 async function generateReportPreview(): Promise<void> {
+  const sequence = ++reportSequence
+  reportController?.abort()
+  const controller = new AbortController()
+  reportController = controller
   reportPreviewOpen.value = true
   reportLoading.value = true
   reportError.value = ''
+  reportDownloadError.value = ''
   reportPreview.value = null
   const request = reportRequest()
   if (!request) {
@@ -136,6 +123,7 @@ async function generateReportPreview(): Promise<void> {
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/reports/employee/preview`, {
+      signal: controller.signal,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
@@ -145,15 +133,17 @@ async function generateReportPreview(): Promise<void> {
       throw new Error(payload.error?.message ?? 'The report preview could not be generated.')
     }
     const payload = await response.json() as EmployeeReportPreviewResponse
+    if (sequence !== reportSequence) return
     reportPreview.value = payload.report
   }
   catch (error) {
+    if (sequence !== reportSequence || controller.signal.aborted) return
     reportError.value = error instanceof TypeError
       ? 'The report service is temporarily unavailable. Please try again shortly.'
       : error instanceof Error ? error.message : 'The report preview could not be generated.'
   }
   finally {
-    reportLoading.value = false
+    if (sequence === reportSequence) reportLoading.value = false
   }
 }
 
@@ -161,12 +151,12 @@ async function downloadReport(): Promise<void> {
   if (!reportPreview.value || reportDownloading.value)
     return
   reportDownloading.value = true
-  reportError.value = ''
+  reportDownloadError.value = ''
   try {
     await downloadEmployeeReportPdf(reportPreview.value)
   }
   catch {
-    reportError.value = 'The PDF could not be created in this browser.'
+    reportDownloadError.value = 'The PDF could not be created in this browser. Try downloading again.'
   }
   finally {
     reportDownloading.value = false
@@ -188,7 +178,7 @@ function scoreChange(value: number | null): string {
 <template>
   <main class="min-h-svh bg-muted/30">
     <PerformanceHeader back @back="emit('back')">
-          <Button :disabled="reportLoading" @click="generateReportPreview">
+          <Button :disabled="reportLoading || isRefreshing" @click="generateReportPreview">
             <Spinner v-if="reportLoading" data-icon="inline-start" />
             <FileTextIcon v-else data-icon="inline-start" />
             Generate report
@@ -240,102 +230,22 @@ function scoreChange(value: number | null): string {
         </AlertDescription>
       </Alert>
 
-      <section aria-label="KPI scores" class="grid gap-4 md:grid-cols-3">
-        <Card v-for="item in kpiCards" :key="item.label">
-          <CardHeader>
-            <CardDescription>{{ item.label }} · {{ item.weight }}</CardDescription>
-            <CardTitle class="text-3xl tabular-nums">{{ score(item.score) }}</CardTitle>
-          </CardHeader>
-          <CardContent class="text-sm text-muted-foreground">{{ item.reason }}</CardContent>
-        </Card>
+      <Alert v-if="refreshError" variant="destructive">
+        <AlertTitle>Employee results could not refresh</AlertTitle>
+        <AlertDescription class="flex flex-col gap-2"><p>{{ refreshError }}</p><Button variant="outline" class="w-fit" :disabled="isRefreshing" @click="emit('refresh')">Retry results</Button></AlertDescription>
+      </Alert>
+      <p v-if="isRefreshing" role="status" class="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Refreshing employee results and evidence…</p>
+      <EmployeeAttentionSummary :items="alerts" />
+      <section aria-label="KPI evidence" class="flex min-w-0 flex-col gap-6">
+        <EmployeeEvidenceTable v-for="item in kpiSections" :key="item.kpi"
+          :kpi="item.kpi" :score="item.score" :weight="item.weight" :explanation="evidenceDescriptions[item.kpi]"
+          :rows="evidenceStates[item.kpi].data?.rows ?? []" :total="evidenceStates[item.kpi].data?.total_count ?? 0"
+          :page="evidenceStates[item.kpi].data?.page ?? 1" :loading="evidenceStates[item.kpi].loading"
+          :error="evidenceStates[item.kpi].error" :disabled="isRefreshing"
+          @page-change="loadEvidence(item.kpi, $event)" @retry="loadEvidence(item.kpi)" />
       </section>
 
-      <div class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
-        <div class="grid min-w-0 content-start gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle class="flex items-center gap-2">
-                <Clock3Icon aria-hidden="true" />
-                Compliance calculation
-              </CardTitle>
-              <CardDescription>Attendance, reporting, and leave evidence used in the score.</CardDescription>
-            </CardHeader>
-            <CardContent class="flex min-w-0 flex-col gap-4">
-              <template v-if="complianceBreakdown">
-                <section class="flex flex-col gap-3">
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="flex min-w-0 items-center gap-2">
-                      <span class="font-medium">Attendance</span>
-                      <Badge variant="secondary">50%</Badge>
-                    </div>
-                    <strong class="shrink-0 text-lg tabular-nums">{{ complianceBreakdown.attendance }}%</strong>
-                  </div>
-                  <dl class="grid grid-cols-3 gap-3 text-sm text-muted-foreground">
-                    <div class="flex flex-col gap-0.5"><dt>Arrival</dt><dd class="font-medium tabular-nums text-foreground">{{ complianceBreakdown.arrival }}%</dd></div>
-                    <div class="flex flex-col gap-0.5"><dt>Shift end</dt><dd class="font-medium tabular-nums text-foreground">{{ complianceBreakdown.shiftEnd }}%</dd></div>
-                    <div class="flex flex-col gap-0.5"><dt>Lunch</dt><dd class="font-medium tabular-nums text-foreground">{{ complianceBreakdown.lunch }}%</dd></div>
-                  </dl>
-                  <p class="text-sm text-muted-foreground">Actual arrival and shift end are compared with the schedule; lunch requires a valid check-out and return.</p>
-                </section>
-
-                <Separator />
-
-                <section class="flex flex-col gap-1">
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="flex min-w-0 items-center gap-2"><span class="font-medium">Reporting</span><Badge variant="secondary">35%</Badge></div>
-                    <strong class="shrink-0 text-lg tabular-nums">{{ complianceBreakdown.reporting }}%</strong>
-                  </div>
-                  <p class="text-sm text-muted-foreground">Submitted date is compared with the due date.</p>
-                </section>
-
-                <Separator />
-
-                <section class="flex flex-col gap-1">
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="flex min-w-0 items-center gap-2"><span class="font-medium">Leave</span><Badge variant="secondary">15%</Badge></div>
-                    <strong class="shrink-0 text-lg tabular-nums">{{ complianceBreakdown.leave }}%</strong>
-                  </div>
-                  <p class="text-sm text-muted-foreground">Approved annual leave and holidays are neutral; sick leave requires complete documentation.</p>
-                </section>
-              </template>
-              <p v-else class="text-sm text-muted-foreground">{{ employee.compliance_reason }}</p>
-              <p class="text-sm font-medium">Missing required evidence lowers confidence—it never becomes zero performance.</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div class="grid min-w-0 content-start gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Findings</CardTitle>
-              <CardDescription>Validated findings and their supporting evidence.</CardDescription>
-              <CardAction><Badge variant="secondary">{{ alerts.length }}</Badge></CardAction>
-            </CardHeader>
-            <CardContent class="flex flex-col gap-3">
-              <Alert v-for="alert in alerts" :key="alert.code" :variant="alert.severity === 'info' ? 'default' : 'warning'">
-                <TriangleAlertIcon v-if="alert.severity !== 'info'" aria-hidden="true" />
-                <FileSpreadsheetIcon v-else aria-hidden="true" />
-                <AlertTitle class="capitalize">
-                  {{ alertCodeLabel(alert.code) }}
-                  <Badge variant="outline">{{ alert.occurrence_count }} occurrences</Badge>
-                </AlertTitle>
-                <AlertDescription class="flex flex-col gap-2 [&_p]:mb-0">
-                  <Badge :variant="impactVariant(alert.scoring_impact)">{{ impactLabel(alert.scoring_impact) }}</Badge>
-                  <p>{{ alert.message }}</p>
-                  <details v-if="alert.record_ids.length">
-                    <summary class="cursor-pointer text-xs font-medium text-foreground">Supporting records ({{ alert.record_ids.length }})</summary>
-                    <div class="mt-2 flex flex-wrap gap-1">
-                      <Badge v-for="recordId in alert.record_ids" :key="recordId" variant="secondary">{{ recordId }}</Badge>
-                    </div>
-                  </details>
-                  <a v-if="alert.evidence_links[0]" class="text-primary underline-offset-4 hover:underline" :href="alert.evidence_links[0]" target="_blank" rel="noreferrer">Open evidence</a>
-                </AlertDescription>
-              </Alert>
-              <p v-if="!alerts.length" class="py-8 text-center text-sm text-muted-foreground">No findings for this employee.</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <EmployeeCalculationDetails :items="kpiSections.map(item => ({ name: item.label, explanation: item.reason }))" :confidence-explanation="employee.confidence_reason" />
     </div>
 
     <Dialog v-model:open="reportPreviewOpen">
@@ -369,6 +279,10 @@ function scoreChange(value: number | null): string {
           </Alert>
 
           <template v-else-if="reportPreview">
+            <Alert v-if="reportDownloadError" variant="destructive">
+              <AlertTitle>PDF could not be created</AlertTitle>
+              <AlertDescription>{{ reportDownloadError }}</AlertDescription>
+            </Alert>
             <Alert v-if="reportPreview.overall_score === null" variant="warning">
               <TriangleAlertIcon aria-hidden="true" />
               <AlertTitle>Overall result withheld</AlertTitle>
@@ -429,72 +343,22 @@ function scoreChange(value: number | null): string {
                     <Badge variant="secondary">Required {{ score(reportPreview.confidence_threshold) }}</Badge>
                   </div>
                   <Progress :model-value="reportPreview.data_confidence" :tone="reportPreview.overall_score === null ? 'warning' : 'default'" aria-label="Report evidence confidence" />
-                  <p class="text-sm leading-6 text-muted-foreground">
-                    {{ reportPreview.confidence_explanation }}
-                  </p>
+
                 </section>
               </CardContent>
             </Card>
 
-            <div class="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
-              <Card>
-                <CardHeader>
-                  <CardTitle>KPI profile</CardTitle>
-                  <CardDescription>Component scores and their contribution to the overall result.</CardDescription>
-                </CardHeader>
-                <CardContent class="flex flex-col gap-5">
-                  <section v-for="kpi in reportPreview.kpis" :key="kpi.name" class="flex flex-col gap-2">
-                    <div class="flex items-end justify-between gap-4">
-                      <div class="flex flex-col gap-0.5">
-                        <h3 class="font-medium">{{ kpi.name }}</h3>
-                        <p class="text-xs text-muted-foreground">{{ kpi.weight }}% of overall</p>
-                      </div>
-                      <strong class="text-2xl tabular-nums">{{ score(kpi.score) }}</strong>
-                    </div>
-                    <Progress :model-value="kpi.score" />
-                  </section>
-                </CardContent>
-              </Card>
-
-              <div class="flex flex-col gap-5">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Evidence snapshot</CardTitle>
-                    <CardDescription>Traceability included in the report.</CardDescription>
-                  </CardHeader>
-                  <CardContent class="flex flex-col gap-4">
-                    <div class="flex items-center justify-between gap-4">
-                      <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                        <DatabaseIcon aria-hidden="true" />
-                        Supporting records
-                      </div>
-                      <strong class="text-xl tabular-nums">{{ reportPreview.supporting_record_ids.length }}</strong>
-                    </div>
-                    <Separator />
-                    <div class="flex items-center justify-between gap-4">
-                      <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                        <TriangleAlertIcon aria-hidden="true" />
-                        Validated findings
-                      </div>
-                      <Badge :variant="reportPreview.findings.length ? 'warning' : 'outline'">
-                        {{ reportPreview.findings.length }}
-                      </Badge>
-                    </div>
-                    <div v-if="reportPreview.findings.length" class="flex flex-wrap gap-2">
-                      <Badge v-for="finding in reportPreview.findings.slice(0, 3)" :key="finding.code" variant="outline" class="capitalize">
-                        {{ impactLabel(finding.scoring_impact) }}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Alert>
-                  <ShieldCheckIcon aria-hidden="true" />
-                  <AlertTitle>Manager review required</AlertTitle>
-                  <AlertDescription>{{ reportPreview.manager_review_notice }}</AlertDescription>
-                </Alert>
-              </div>
-            </div>
+            <EmployeeAttentionSummary :items="reportPreview.findings" />
+            <EmployeeEvidenceTable v-for="kpi in reportPreview.kpis" :key="kpi.name"
+              :kpi="kpi.name.toLowerCase() as EvidenceKpi" :score="kpi.score" :weight="kpi.weight" :explanation="evidenceDescriptions[kpi.name.toLowerCase() as EvidenceKpi]"
+              :rows="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].rows"
+              :total="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].total_count" report />
+            <EmployeeCalculationDetails :items="reportPreview.kpis" :confidence-explanation="reportPreview.confidence_explanation" />
+            <Alert>
+              <ShieldCheckIcon aria-hidden="true" />
+              <AlertTitle>Manager review required</AlertTitle>
+              <AlertDescription>{{ reportPreview.manager_review_notice }}</AlertDescription>
+            </Alert>
           </template>
         <template #footer>
         <DialogFooter v-if="reportPreview" class="m-0 rounded-none">

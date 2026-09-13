@@ -301,6 +301,12 @@ fallbacks for avatars.
 
 ### Report architecture
 
+Employee Details reads three paginated canonical KPI evidence tables through
+`GET /api/v1/employees/{employee_id}/evidence`. Reuse the public evidence scope helpers;
+retain excluded audit records and backend finding impacts. See
+`docs/persistence.md` for typed contracts, date selection, and coherent canonical reads,
+and `docs/ux-guidelines.md` for shared table ownership and completed verification.
+
 Reports are transient, manager-reviewed exports generated in the browser with `pdfmake`; the
 backend does not render or store PDF files. Employee Details requests a typed, renderer-ready
 snapshot from `POST /api/v1/reports/employee/preview`, previews that exact snapshot, and passes it
@@ -310,6 +316,11 @@ optional prior comparable period. It filters clickable evidence links to absolut
 and returns `Cache-Control: no-store`; an unknown or non-renderable employee returns the typed
 `employee_report_not_found` error.
 
+Employee reports include complete selected-period evidence tables from the same canonical
+read context as their scores and prior comparison. Preview pagination never limits export.
+The page and preview present a conditional Needs attention summary and collapsed Calculation
+details; PDFs focus on performance, issues, trends, and records and omit formula explanations.
+
 Team and KPI summary exports do not have separate backend endpoints. The dashboard passes its
 current filtered `DashboardResponse` directly to `web/src/lib/dashboard-report-pdf.ts`. The team
 preview and all downloaded reports must preserve backend-provided scores, trends, confidence,
@@ -318,7 +329,7 @@ Every PDF includes a manager-review notice. Report filenames are sanitized, PDF 
 loaded only when an export is requested, object URLs are revoked after download, and generated
 files are not retained by the application.
 
-The implemented report family comprises a two-page portrait employee report, a landscape team
+The implemented report family comprises a portrait employee report with a complete evidence appendix, a landscape team
 summary, and landscape Productivity, Compliance, and Quality summaries. Saved/history reports,
 scheduled delivery, a data-quality report, server-side rendering, and authorization remain
 unimplemented. Because reports contain employee data and the backend has no authorization layer,
@@ -489,6 +500,7 @@ Current endpoints:
 | `POST` | `/api/v1/analyze-tables` | ingest an incremental JSON upsert batch and return a `201` receipt |
 | `POST` | `/api/v1/analyze-tables-preview` | analyze a complete JSON dataset without persistence and return the adjusted response with LLM usage/timing |
 | `GET` | `/api/v1/dashboard` | recalculate the aggregated canonical dashboard with optional filters |
+| `GET` | `/api/v1/employees/{employee_id}/evidence` | read a paginated employee KPI evidence table with exclusions and freshness metadata |
 | `POST` | `/api/v1/reports/employee/preview` | return a deterministic employee report snapshot for browser PDF generation |
 
 ---

@@ -112,6 +112,42 @@ latest completion time, and mapping summaries grouped by schema fingerprint. If 
 schemas expose different optional bindings for one evidence family, the materializer uses only
 the shared mapped fields and returns a limitation instead of silently changing confidence rules.
 
+## Employee evidence reads
+
+`GET /api/v1/employees/{employee_id}/evidence` reads typed canonical records from both upload
+and JSON submissions. Required `kpi` accepts `productivity`, `compliance`, or `quality`.
+Pagination defaults to `page=1&page_size=5`; pages must be positive and page size is capped
+at 50. Explicit dates and `period_weeks` use the dashboard's shared validation and resolution.
+The UI passes the dashboard's resolved dates.
+
+`EmployeeEvidenceResponse` returns the employee profile, KPI family, `applied_filters`,
+`latest_submission_at`, page metadata, `total_count`, and discriminated evidence rows.
+Each row contains `record_type`, `record_id`, a typed canonical `record`, associated
+`validation_findings`, `excluded_from_scoring`, and an optional `exclusion_reason`.
+Contracts live in `app/schemas/employee_evidence.py` and
+`web/src/types/employee-evidence.ts`; arbitrary original source columns are not exposed.
+Only canonical ID, name, team, and role are supported as profile fields.
+
+Shared scope helpers in `app/services/performance/scope.py` select work by assigned date,
+attendance by occurrence date, reports by due date, quality by review date, and leave by
+period overlap. Validation runs against the complete dataset before pagination. A review
+referencing work outside the selected period is not orphaned if that work exists in canonical
+state. Duplicate attendance and orphan reviews remain visible with explicit exclusions.
+Totals count displayed audit records, including exclusions; an eligible record must not
+automatically be labeled as contributing to the score, since neutral leave and coverage
+evidence have distinct roles. Ordering is business date descending, then type and ID ascending.
+
+The endpoint returns `Cache-Control: no-store`. Unknown employees return the typed 404
+`employee_evidence_not_found` error; invalid KPI/pagination values or out-of-range pages
+return the typed 400 `invalid_employee_evidence_query` error. An empty first page is valid.
+Only absolute HTTPS evidence links are returned as clickable links.
+
+Each canonical load uses one SQLite read transaction for metadata, records, and mappings.
+`load_dashboard_context()` shares that materialized state with dashboard/report assembly.
+Separate later requests can observe newer submissions; differing freshness timestamps
+cause the UI to discard mismatched evidence and refresh dashboard and tables together.
+This does not implement retained historical snapshots or change KPI arithmetic.
+
 ## Stored tables
 
 - `submissions`: immutable request JSON, delivery metadata, and processing status.
@@ -130,6 +166,14 @@ materialization path and returns a renderer-ready snapshot with `Cache-Control: 
 not add a report table, save the preview, or persist a PDF. The optional prior-period comparison is
 recalculated from canonical evidence when a complete, non-overlapping prior period falls within
 available coverage.
+
+Current scores, optional prior comparison, findings, and complete `evidence_tables` come
+from one shared canonical read context. The tables contain all selected-period work outputs,
+mixed attendance/submission/leave rows, and quality reviews, including labeled exclusions.
+The snapshot includes `latest_submission_at`. Preview pagination is presentation-only;
+download passes the complete unchanged payload to the browser generator without refetching.
+New submissions after preview do not change that download; Generate report obtains a fresh
+snapshot. A failed on-page evidence request does not prevent report assembly.
 
 The browser generates employee, team, and KPI PDFs with `pdfmake`. Team and KPI reports consume
 the current filtered `DashboardResponse` directly, so they create no additional backend reads or

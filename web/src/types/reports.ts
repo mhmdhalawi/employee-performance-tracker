@@ -1,4 +1,5 @@
 import type { KpiTrendPoint } from '@/types/analysis'
+import type { EmployeeEvidenceTables } from '@/types/employee-evidence'
 
 export interface EmployeeReportRequest {
   employee_id: string
@@ -37,6 +38,8 @@ export interface EmployeeReportData {
   role: string | null
   period: ReportPeriod
   generated_at: string
+  latest_submission_at: string
+  evidence_tables: EmployeeEvidenceTables
   overall_score: number | null
   result_status: string
   performance_tier: string | null

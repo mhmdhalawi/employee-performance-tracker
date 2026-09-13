@@ -9,6 +9,8 @@ from app.database.models import (
 def load_aggregation_state() -> StoredAggregationState | None:
     """Load canonical current state and mapping metadata from completed submissions."""
     with database_connection() as connection:
+        # Hold one SQLite read snapshot across metadata, evidence, and plan queries.
+        connection.execute("BEGIN")
         metadata = connection.execute(
             """
             SELECT COUNT(*) AS submission_count,
@@ -66,4 +68,3 @@ def load_aggregation_state() -> StoredAggregationState | None:
         included_submission_count=metadata["submission_count"],
         latest_submission_at=metadata["latest_submission_at"],
     )
-

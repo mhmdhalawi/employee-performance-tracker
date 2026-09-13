@@ -76,6 +76,19 @@ class EmployeeReportNotFoundError(AppError):
     code = "employee_report_not_found"
 
 
+class EmployeeEvidenceNotFoundError(AppError):
+    """The employee has no canonical profile available for evidence browsing."""
+
+    status_code = 404
+    code = "employee_evidence_not_found"
+
+
+class InvalidEmployeeEvidenceQueryError(AppError):
+    """The evidence KPI or pagination parameters are invalid."""
+
+    code = "invalid_employee_evidence_query"
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:

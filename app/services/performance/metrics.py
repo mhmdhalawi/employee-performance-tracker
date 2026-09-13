@@ -5,6 +5,7 @@ from typing import Protocol
 
 from app.schemas.performance import (
     AttendanceComplianceEvidence,
+    LeaveComplianceEvidence,
     PerformanceEvidenceDataset,
     QualityEvidence,
     SubmissionComplianceEvidence,
@@ -140,13 +141,7 @@ def leave_compliance(
     start_date: date | None,
     end_date: date | None,
 ) -> float:
-    requests = [
-        request
-        for request in dataset.leave_events
-        if request.employee_id == employee_id
-        and (start_date is None or request.end_date >= start_date)
-        and (end_date is None or request.start_date <= end_date)
-    ]
+    requests = leave_in_period(dataset, employee_id, start_date, end_date)
     sick_requests = [
         request for request in requests if request.category.casefold() == "sick leave"
     ]
@@ -160,6 +155,22 @@ def leave_compliance(
         / len(sick_requests)
         * 100
     )
+
+
+def leave_in_period(
+    dataset: PerformanceEvidenceDataset,
+    employee_id: str,
+    start_date: date | None,
+    end_date: date | None,
+) -> list[LeaveComplianceEvidence]:
+    """Select leave requests overlapping the inclusive reporting period."""
+    return [
+        request
+        for request in dataset.leave_events
+        if request.employee_id == employee_id
+        and (start_date is None or request.end_date >= start_date)
+        and (end_date is None or request.start_date <= end_date)
+    ]
 
 
 def performance_tier(overall: float | None) -> str | None:

@@ -3,6 +3,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.employee_evidence import EmployeeEvidenceTables
 from app.schemas.performance import FindingSeverity, KpiTrendPoint, ScoringImpact
 
 
@@ -62,6 +63,8 @@ class EmployeeReportData(BaseModel):
     role: str | None
     period: ReportPeriod
     generated_at: datetime
+    latest_submission_at: datetime
+    evidence_tables: EmployeeEvidenceTables
     overall_score: float | None
     result_status: str
     performance_tier: str | None

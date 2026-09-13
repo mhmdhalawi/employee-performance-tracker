@@ -13,6 +13,11 @@ from app.schemas.performance import (
 )
 from app.services.performance import metrics
 from app.services.performance.constants import COMPLETED_OUTPUT_STATUSES
+from app.services.performance.scope import (
+    EmployeeEvidence,
+    duplicate_attendance_ids,
+    employee_evidence,
+)
 from app.services.performance.validation import validate_dataset
 
 
@@ -20,14 +25,6 @@ from app.services.performance.validation import validate_dataset
 class ScoredKpi:
     score: float
     reason: str
-
-
-@dataclass(frozen=True, slots=True)
-class EmployeeEvidence:
-    projects: list[WorkOutputEvidence]
-    attendance: list[AttendanceComplianceEvidence]
-    reports: list[SubmissionComplianceEvidence]
-    reviews: list[QualityEvidence]
 
 
 def calculate_kpis(
@@ -47,12 +44,7 @@ def calculate_kpis(
         if validation_findings is not None
         else validate_dataset(dataset)
     )
-    duplicate_ids = {
-        record_id
-        for finding in findings
-        if finding.code == "duplicate_attendance"
-        for record_id in finding.record_ids[1:]
-    }
+    duplicate_ids = duplicate_attendance_ids(findings)
     blocking_employee_ids = {
         finding.employee_id
         for finding in findings
@@ -72,7 +64,7 @@ def calculate_kpis(
         if target is None:
             continue
 
-        evidence = _employee_evidence(
+        evidence = employee_evidence(
             dataset,
             employee.employee_id,
             start_date,
@@ -132,58 +124,6 @@ def calculate_kpis(
             )
         )
     return results
-
-
-def _employee_evidence(
-    dataset: PerformanceEvidenceDataset,
-    employee_id: str,
-    start_date: date | None,
-    end_date: date | None,
-    duplicate_ids: set[str],
-) -> EmployeeEvidence:
-    """Scope every evidence collection to one employee and the requested period."""
-    attendance = [
-        record
-        for record in metrics.in_period(
-            dataset.attendance_events,
-            employee_id,
-            lambda record: record.occurred_on,
-            start_date,
-            end_date,
-        )
-        if record.record_id not in duplicate_ids
-    ]
-    known_output_ids = {record.record_id for record in dataset.work_outputs}
-    # A review only counts as evidence when the work output it grades is present.
-    reviews = [
-        review
-        for review in metrics.in_period(
-            dataset.quality_events,
-            employee_id,
-            lambda review: review.occurred_on,
-            start_date,
-            end_date,
-        )
-        if review.related_output_id in known_output_ids
-    ]
-    return EmployeeEvidence(
-        projects=metrics.in_period(
-            dataset.work_outputs,
-            employee_id,
-            lambda project: project.assigned_date,
-            start_date,
-            end_date,
-        ),
-        attendance=attendance,
-        reports=metrics.in_period(
-            dataset.submission_events,
-            employee_id,
-            lambda report: report.due_date,
-            start_date,
-            end_date,
-        ),
-        reviews=reviews,
-    )
 
 
 def _score_productivity(

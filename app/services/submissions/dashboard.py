@@ -1,16 +1,31 @@
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from app.core.errors import DashboardNotFoundError
-from app.database import load_aggregation_state
+from app.database import StoredAggregationState, load_aggregation_state
 from app.schemas.uploads import (
     CalculationPlan,
     DashboardResponse,
     EmployeeFilterOption,
 )
-from app.services.aggregation import materialize_aggregation
+from app.services.aggregation import MaterializedAggregation, materialize_aggregation
 from app.services.analysis import build_analysis_response
 from app.services.filters import validate_analysis_period
 from app.services.performance import inspect_dataset
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardContext:
+    state: StoredAggregationState
+    materialized: MaterializedAggregation
+
+
+def load_dashboard_context() -> DashboardContext:
+    """Load one coherent canonical state for dashboard, evidence, and report calculations."""
+    state = load_aggregation_state()
+    if state is None:
+        raise DashboardNotFoundError("No completed data submission is available.")
+    return DashboardContext(state=state, materialized=materialize_aggregation(state))
 
 
 async def get_aggregated_dashboard(
@@ -21,15 +36,20 @@ async def get_aggregated_dashboard(
     end_date: date | None = None,
 ) -> DashboardResponse:
     """Recalculate one filtered dashboard from canonical cross-submission evidence."""
+    return build_dashboard(
+        load_dashboard_context(), employee_id, team, period_weeks, start_date, end_date
+    )
+
+
+def resolve_dashboard_period(
+    context: DashboardContext,
+    start_date: date | None,
+    end_date: date | None,
+    period_weeks: int | None,
+) -> tuple[date | None, date | None]:
+    """Resolve periods against canonical business dates using the dashboard's rules."""
     validate_analysis_period(start_date, end_date, period_weeks)
-
-    state = load_aggregation_state()
-    if state is None:
-        raise DashboardNotFoundError("No completed data submission is available.")
-    materialized = materialize_aggregation(state)
-    dataset = materialized.dataset
-    overview = inspect_dataset(dataset)
-
+    overview = inspect_dataset(context.materialized.dataset)
     effective_start = start_date
     effective_end = end_date
     if period_weeks is not None and overview.date_end is not None:
@@ -39,6 +59,28 @@ async def get_aggregated_dashboard(
             preset_start,
             overview.date_start or preset_start,
         )
+    return effective_start or overview.date_start, effective_end or overview.date_end
+
+
+def build_dashboard(
+    context: DashboardContext,
+    employee_id: str | None = None,
+    team: str | None = None,
+    period_weeks: int | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> DashboardResponse:
+    """Calculate a filtered dashboard without reloading its canonical state."""
+    state = context.state
+    materialized = context.materialized
+    dataset = materialized.dataset
+    overview = inspect_dataset(dataset)
+    effective_start, effective_end = resolve_dashboard_period(
+        context, start_date, end_date, period_weeks
+    )
+    # Unbounded dashboard scoring retains its existing 90-day target semantics.
+    if start_date is None and end_date is None and period_weeks is None:
+        effective_start = effective_end = None
 
     first_summary = materialized.mapping_summaries[0]
     first_plan = CalculationPlan(

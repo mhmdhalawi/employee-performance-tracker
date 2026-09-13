@@ -3,13 +3,26 @@ import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import EmployeeDetailPage from '@/components/dashboard/EmployeeDetailPage.vue'
 import { useDashboardBack } from '@/composables/useDashboardBack'
-import type { DashboardResponse } from '@/types/analysis'
+import type { DashboardFilters, DashboardResponse } from '@/types/analysis'
 
 defineOptions({ inheritAttrs: false })
 
 const props = defineProps<{
   analysis: DashboardResponse
+  isFiltering: boolean
+  filterError: string
 }>()
+const emit = defineEmits<{ filtersChange: [filters: DashboardFilters] }>()
+
+function refresh(): void {
+  const filters = props.analysis.applied_filters
+  emit('filtersChange', {
+    employee_id: filters.employee_id ?? undefined,
+    team: filters.team ?? undefined,
+    start_date: filters.start_date ?? undefined,
+    end_date: filters.end_date ?? undefined,
+  })
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -31,6 +44,10 @@ watch(employee, (currentEmployee) => {
     :employee="employee"
     :alerts="alerts"
     :reporting-period="analysis.applied_filters"
+    :latest-submission-at="analysis.latest_submission_at"
+    :is-refreshing="isFiltering"
+    :refresh-error="filterError"
+    @refresh="refresh"
     @back="returnToDashboard"
   />
 </template>
