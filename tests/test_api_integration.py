@@ -339,6 +339,52 @@ class AnalyzeApiIntegrationTests(TestCase):
         )
         self.assertEqual(invalid_period.status_code, 400)
 
+    def test_review_filter_finds_older_records_before_pagination(self) -> None:
+        tables = benchmark_tables()
+        attendance = [row for row in tables["Attendance"] if row["employee_id"] == "EMP-001"]
+        attendance[0].update({"actual_start": None, "actual_end": None, "lunch_in": None})
+        attendance[1]["actual_end"] = None
+        payload = {"tables": [
+            {"source_name": name, "rows": rows} for name, rows in tables.items()
+        ]}
+        self.assertEqual(self._post_benchmark_tables(payload=payload).status_code, 201)
+        dashboard_before = self.client.get("/api/v1/dashboard?employee_id=EMP-001").json()
+        path = "/api/v1/employees/EMP-001/evidence?kpi=compliance&page_size=1"
+        all_records = self.client.get(path).json()
+        self.assertFalse(all_records["review_only"])
+        self.assertEqual(all_records["all_records_count"], all_records["total_count"])
+        self.assertEqual(all_records["needs_review_count"], 2)
+        self.assertNotIn(all_records["rows"][0]["record_id"], {"ATT-001-1", "ATT-001-2"})
+        review = self.client.get(f"{path}&review_only=true").json()
+        self.assertTrue(review["review_only"])
+        self.assertEqual(review["total_count"], 2)
+        self.assertEqual(review["all_records_count"], all_records["total_count"])
+        self.assertEqual(review["needs_review_count"], 2)
+        self.assertEqual(review["rows"][0]["record_id"], "ATT-001-2")
+        second = self.client.get(f"{path}&review_only=true&page=2").json()
+        self.assertEqual(second["rows"][0]["record_id"], "ATT-001-1")
+        self.assertEqual(len(second["rows"][0]["validation_findings"]), 3)
+        invalid = self.client.get(f"{path}&review_only=true&page=3")
+        self.assertEqual(invalid.status_code, 400)
+        scoped = self.client.get(
+            f"{path}&review_only=true&start_date=2026-06-02&end_date=2026-06-05"
+        ).json()
+        self.assertEqual(scoped["needs_review_count"], 1)
+        self.assertEqual(scoped["rows"][0]["record_id"], "ATT-001-2")
+        empty = self.client.get(
+            "/api/v1/employees/EMP-001/evidence?kpi=quality&review_only=true"
+        ).json()
+        self.assertEqual(empty["total_count"], 0)
+        self.assertEqual(empty["needs_review_count"], 0)
+        self.assertEqual(empty["all_records_count"], 1)
+        self.assertEqual(empty["rows"], [])
+        dashboard_after = self.client.get("/api/v1/dashboard?employee_id=EMP-001").json()
+        self.assertEqual(dashboard_before["results"], dashboard_after["results"])
+        report = self.client.post("/api/v1/reports/employee/preview", json={
+            "employee_id": "EMP-001", "period_weeks": 12,
+        }).json()["report"]
+        self.assertEqual(report["evidence_tables"]["compliance"]["total_count"], all_records["total_count"])
+
     def test_employee_evidence_is_available_after_upload_and_preserves_exclusions(self) -> None:
         self.assertEqual(self._post_benchmark().status_code, 200)
         page = self.client.get(
@@ -351,6 +397,10 @@ class AnalyzeApiIntegrationTests(TestCase):
             finding["code"] == "duplicate_attendance"
             for finding in excluded[0]["validation_findings"]
         ))
+        review = self.client.get(
+            "/api/v1/employees/EMP-027/evidence?kpi=compliance&review_only=true&page_size=50"
+        ).json()
+        self.assertIn(excluded[0], review["rows"])
         report = self.client.post(
             "/api/v1/reports/employee/preview",
             json={"employee_id": "EMP-027", "period_weeks": 12},
@@ -418,6 +468,11 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         row = response.json()["rows"][0]
         self.assertTrue(row["excluded_from_scoring"])
+        review = self.client.get(
+            "/api/v1/employees/EMP-001/evidence?kpi=quality&review_only=true"
+        ).json()
+        self.assertEqual(review["needs_review_count"], 1)
+        self.assertEqual(review["rows"], [row])
         self.assertTrue(any(
             finding["code"] == "orphan_quality_evidence" for finding in row["validation_findings"]
         ))

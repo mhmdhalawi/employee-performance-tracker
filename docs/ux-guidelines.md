@@ -55,17 +55,68 @@ Completed API, browser, and PDF checks are recorded in
 
 ## Performance review presentation — 2026-09-14
 
-`EmployeeAttentionSummary.vue` and `EmployeeAttentionItem.vue` own the page/report Needs attention summary. Informational findings with no scoring impact are omitted from this summary. The first three issue groups are visible; Show all reveals the rest, and Supporting records disclosures expose IDs and safe HTTPS links. These are presentation choices over backend findings, with no new business calculations.
+Record-specific attention now lives in its KPI evidence table. `EmployeeAttentionSummary.vue`
+and `EmployeeAttentionItem.vue` remain only for findings not represented by evidence records,
+such as missing performance targets. Informational findings with no scoring impact remain
+omitted. Page fallback uses validated record-family findings; report preview checks its
+complete evidence snapshot. Supporting records retain safe HTTPS links and IDs.
 
 `EmployeeCalculationDetails.vue` owns the optional, initially collapsed calculation reference on both views. Main table descriptions label work, attendance/report/leave, and quality data without formulas. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. Report payload values and download snapshot handling remain unchanged.
+
+Calculation details now uses one short sentence per KPI for its documented component
+weights. The Evidence confidence explanation, detailed arithmetic, and the
+required-evidence checklist are omitted from this disclosure;
+backend explanations, evidence, scores, and report payloads remain unchanged.
 
 ## Employee table content
 
 | KPI | On-page columns |
 | --- | --- |
-| Productivity | Work record · Assigned / due · Completed · Status · Actual hours · Evidence · Details |
-| Compliance | Type · Date / period · Record ID · Source outcome · Evidence summary · Details |
-| Quality | Review ID · Work record · Review date · Accuracy · First pass · Rework · Evidence · Details |
+| Productivity | Work record · Status · Due → completed · Hours worked · Issues · Details |
+| Compliance | Type · Date / period · Source outcome · Issues / scoring note · Details |
+| Quality | Work / review · Review date · Accuracy · First pass / rework · Issues · Details |
+
+The simplified columns serve both Employee Details and report preview. All KPI tables use
+View record / Hide record controls; Compliance IDs remain in the disclosure, accessible
+button names, and mobile card titles. Mobile cards expose the same summary
+fields and issues. `EvidenceRecordIssues.vue` shows plain labels for backend findings,
+explicit exclusion reasons, or No findings; it does not infer new issues from dates or
+source statuses. The caption explains that No findings does not imply perfect performance
+or scoring eligibility and that approved annual/sick leave are neutral.
+
+Assigned dates, verification, detailed attendance times, submission completeness, leave
+documentation, full finding messages, and safe evidence links remain in View record.
+`evidenceSummaryColumns`/`evidenceSummaryCells` own compact presentation;
+`evidenceColumns`/`evidenceCells`/`evidenceDetails` retain complete source presentation
+for the existing PDF generator. `evidenceDisclosureDetails` exposes individual attendance
+times on page/preview; missing fields identified by backend findings receive a warning
+surface and explicit Needs review text. Storage and calculation contracts are unchanged.
+
+Every KPI table has All records / Needs review controls and a clickable affected-record
+count in its header. The initial mode is All records. Server counts cover the complete
+employee/period scope; switching modes requests page 1, with chronological ordering in
+either mode. Each table has independent mode and pagination state. Mode changes are
+committed only on successful fetch; failure retains the previous page/mode and Retry
+repeats the attempted request. Paging always uses the visible committed mode. A new
+dashboard scope resets modes and pages. Empty review scope says No records need review.
+
+Report preview applies the same controls to its complete supplied snapshot before local
+pagination, without modifying that snapshot or limiting PDF export. Actionable records
+have a subtle warning surface on desktop and mobile. Multiple findings on one record
+count once; source statuses alone do not become new findings.
+
+Evidence updates keep the last successful rows and empty state visible. A reserved
+status line shows Updating records only after 180 ms, so fast responses do not flash a
+spinner or insert a large loading block. Open disclosures survive updates when their
+record remains in the returned page. Controls remain disabled while fetching, with
+`data-busy` preserving their opacity through shared Button/Toggle styles; genuinely
+unavailable controls keep the usual disabled treatment.
+
+Visited evidence pages are cached only in component memory for 30 seconds, bounded to
+eight pages per KPI. Keys include employee, resolved dates, snapshot timestamp, mode,
+and page. Cache hits avoid repeat requests. Scope/dashboard refresh, freshness mismatch,
+and disposal clear caches; retries bypass them. Scores, review counts, and rows continue
+to come from backend responses. Nothing is saved to browser storage or SQLite.
 
 Compliance uses one mixed table. Attendance details include scheduled/actual start and end,
 lunch out/in, record status, and explicitly labeled source-record confidence. Submission
@@ -114,3 +165,32 @@ PDF layout verification remains manual; there is no automated PDF layout regress
 Vite retains its large-chunk warning; PDF dependencies remain lazy-loaded. These checks
 apply to read-only employee review and transient exports, without adding ingestion controls,
 editing, per-record performance scores, saved reports, or server PDF generation.
+
+## Simplified evidence table verification — 2026-09-14
+
+The loading refinement passed the production build, strict UI audit, and live Vite
+component read. Vue rendering checks confirmed that existing records and empty review
+states remain visible during fetching, with reserved status space and opt-in busy
+controls. Mocked-fetch checks covered cache revisits, 30-second expiry, eight-page
+capacity, failed-request retry, freshness invalidation, and dashboard-refresh reloads.
+Visual and keyboard checks still require a connected browser.
+
+The subsequent table-local review change passed all 65 backend regression tests,
+`uv run ruff check app tests`, `pnpm build`, and the strict premium audit. Live EMP-005
+review reads returned ATT-00276 and ATT-00263 together on page 1, with two affected
+records out of 78 Compliance records. Vue rendering verified counts, plain labels,
+missing-field highlights, empty review scope, and non-record fallback. A mocked-fetch
+composable smoke check verified failed-filter retention/retry and stale-response
+protection. Browser visual and keyboard verification remained unavailable because no
+browser surface was connected. API filters changed; SQLite storage, KPI calculations,
+complete report snapshots, and PDF rendering did not.
+
+- `pnpm build` passed, including TypeScript checks. The premium strict static audit
+  reported zero findings; its JSON output is in `storage/employee-tables-premium-audit.json`.
+- The local Vite page and transformed table component returned HTTP 200. A read-only Vue
+  server-rendering smoke check used 15 live canonical records across the three tables and
+  verified record disclosures, loading/error/empty states, exclusions, real zero, false
+  first-pass approval, and the unchanged original cell formatter used by PDF export.
+- No browser surface was connected to the session; the in-app browser was unavailable.
+  Desktop/mobile visual layout and keyboard interaction were not verified in this pass.
+  The PDF renderer, API, scoring, persistence, and fetch/pagination behavior were unchanged.

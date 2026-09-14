@@ -4,7 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
-defineProps<{ items: { name: string, explanation: string }[], confidenceExplanation?: string }>()
+const items = [
+  { name: 'Productivity', explanation: '60% completion, 40% time efficiency.' },
+  { name: 'Compliance', explanation: '50% attendance, 35% reporting, 15% leave compliance.' },
+  { name: 'Quality', explanation: '60% accuracy, 25% first-pass approval, 15% rework.' },
+]
 </script>
 
 <template>
@@ -15,14 +19,9 @@ defineProps<{ items: { name: string, explanation: string }[], confidenceExplanat
       </CardHeader>
       <CollapsibleContent as-child>
         <CardContent class="flex flex-col gap-4">
-          <p class="text-sm text-muted-foreground">Optional reference for reviewing how the results were calculated.</p>
           <section v-for="item in items" :key="item.name" class="flex min-w-0 flex-col gap-1">
             <h3 class="font-medium">{{ item.name }}</h3>
             <p class="break-words text-sm text-muted-foreground">{{ item.explanation }}</p>
-          </section>
-          <section v-if="confidenceExplanation" class="flex flex-col gap-1">
-            <h3 class="font-medium">Evidence confidence</h3>
-            <p class="break-words text-sm text-muted-foreground">{{ confidenceExplanation }}</p>
           </section>
         </CardContent>
       </CollapsibleContent>

@@ -137,6 +137,7 @@ async def get_employee_evidence(
     start_date: date | None = None,
     end_date: date | None = None,
     period_weeks: int | None = None,
+    review_only: bool = False,
 ) -> EmployeeEvidenceResponse:
     """Read a bounded evidence page; raise typed errors for unknown employees or bad paging."""
     if kpi not in ("productivity", "compliance", "quality"):
@@ -153,8 +154,10 @@ async def get_employee_evidence(
     )
     tables = build_employee_evidence_tables(dataset, employee_id, resolved_start, resolved_end)
     table = getattr(tables, kpi)
+    review_rows = [row for row in table.rows if evidence_needs_review(row)]
+    selected_rows = review_rows if review_only else table.rows
     offset = (page - 1) * page_size
-    if offset >= table.total_count and page != 1:
+    if offset >= len(selected_rows) and page != 1:
         raise InvalidEmployeeEvidenceQueryError("The requested evidence page is out of range.")
     return EmployeeEvidenceResponse(
         employee=employee,
@@ -169,6 +172,17 @@ async def get_employee_evidence(
             period_weeks=period_weeks,
         ),
         latest_submission_at=datetime.fromisoformat(context.state.latest_submission_at),
-        total_count=table.total_count,
-        rows=table.rows[offset : offset + page_size],
+        total_count=len(selected_rows),
+        all_records_count=table.total_count,
+        needs_review_count=len(review_rows),
+        review_only=review_only,
+        rows=selected_rows[offset : offset + page_size],
+    )
+
+
+def evidence_needs_review(row: EmployeeEvidenceRow) -> bool:
+    """Include exclusions and actionable findings in the full-table review scope."""
+    return row.excluded_from_scoring or any(
+        finding.severity != "info" or finding.scoring_impact != "none"
+        for finding in row.validation_findings
     )

@@ -80,4 +80,7 @@ export interface EmployeeEvidenceResponse extends EvidenceTable {
   latest_submission_at: string
   page: number
   page_size: number
+  all_records_count: number
+  needs_review_count: number
+  review_only: boolean
 }

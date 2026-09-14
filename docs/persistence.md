@@ -120,6 +120,15 @@ Pagination defaults to `page=1&page_size=5`; pages must be positive and page siz
 at 50. Explicit dates and `period_weeks` use the dashboard's shared validation and resolution.
 The UI passes the dashboard's resolved dates.
 
+`review_only=true` selects excluded records and records with a warning/error or a finding
+whose impact is not `none`. Filtering happens across the complete selected-period table
+before pagination. `needs_review_count` counts affected records once; `all_records_count`
+counts the unfiltered selected-period table. Both counts are returned in either mode,
+along with `review_only`. `total_count` and pages describe the active mode. Informational
+findings with no scoring impact and neutral leave alone do not require review. Empty
+review page 1 is valid; later out-of-range review pages return the existing typed error.
+No review flags or filtered copies are persisted.
+
 `EmployeeEvidenceResponse` returns the employee profile, KPI family, `applied_filters`,
 `latest_submission_at`, page metadata, `total_count`, and discriminated evidence rows.
 Each row contains `record_type`, `record_id`, a typed canonical `record`, associated

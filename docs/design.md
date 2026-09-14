@@ -34,6 +34,23 @@ Employee Details replaces its three standalone KPI score cards with three full-w
 
 Desktop uses semantic tables; phones use labeled record cards showing the same independently paginated records. Shared `EmployeeEvidenceTable.vue` and `EvidenceRecordDetails.vue` own both Employee Details and report preview presentation. IDs and text wrap, and shared Collapsible controls reveal full values, findings, scoring impacts, and safe evidence links.
 
+The approved table simplification combines related dates/IDs and first-pass/rework fields,
+moves secondary source values into View record, and gives backend findings and exclusions
+a dedicated Issues column. `EvidenceRecordIssues.vue` shares issue presentation between
+desktop tables and mobile cards. Existing Cedar tokens, Geist typography, natural page
+scrolling, pagination, complete record disclosures, and the downloaded PDF layout remain.
+
+Record-specific Needs attention cards are replaced by table-local affected-record counts,
+All records / Needs review controls, plain finding labels, and restrained gold row
+emphasis. Attendance disclosures expose scheduled/actual times individually and mark
+missing fields identified by backend findings. Shared table and record components own
+the same behavior on page, mobile cards, and report preview; PDF layout stays unchanged.
+
+Background evidence requests preserve the existing record surface. A reserved small
+status line and delayed spinner communicate longer updates without moving table rows.
+Shared controls expose an opt-in busy presentation that keeps opacity stable while
+preserving disabled behavior; ordinary disabled states retain their existing treatment.
+
 The portrait employee PDF presents scores, relevant Needs attention issues, and trends, followed by complete performance records; formula explanations and metric definitions are omitted. Section titles and column headings repeat on continuation pages; ordinary records stay together and oversized notes may flow across pages. The existing PDF palette is preserved.
 
 See [evidence read contracts](persistence.md#employee-evidence-reads) and

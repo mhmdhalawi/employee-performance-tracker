@@ -77,4 +77,7 @@ class EmployeeEvidenceResponse(BaseModel):
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=50)
     total_count: int = Field(ge=0)
+    all_records_count: int = Field(ge=0)
+    needs_review_count: int = Field(ge=0)
+    review_only: bool = False
     rows: list[EmployeeEvidenceRow]

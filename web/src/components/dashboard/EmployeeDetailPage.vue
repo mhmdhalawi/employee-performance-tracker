@@ -22,6 +22,7 @@ import EmployeeEvidenceTable from '@/components/dashboard/EmployeeEvidenceTable.
 import EmployeeAttentionSummary from '@/components/dashboard/EmployeeAttentionSummary.vue'
 import EmployeeCalculationDetails from '@/components/dashboard/EmployeeCalculationDetails.vue'
 import { evidenceDescriptions } from '@/lib/employee-evidence'
+import { attentionOutsideRecords } from '@/lib/employee-presentation'
 import { useEmployeeEvidence } from '@/composables/useEmployeeEvidence'
 import type { EvidenceKpi } from '@/types/employee-evidence'
 import { Progress } from '@/components/ui/progress'
@@ -89,6 +90,11 @@ const kpiSections = computed(() => [
     weight: 35,
   },
 ])
+
+const generalAttention = computed(() => attentionOutsideRecords(props.alerts,
+  props.employee.validation_findings.filter(finding => ['productivity_evidence', 'attendance', 'submission_evidence', 'leave_evidence', 'quality_evidence', 'source_records'].includes(finding.source_type ?? ''))))
+const reportGeneralAttention = computed(() => reportPreview.value ? attentionOutsideRecords(reportPreview.value.findings,
+  Object.values(reportPreview.value.evidence_tables).flatMap(table => table.rows.flatMap(row => row.validation_findings))) : [])
 
 function score(value: number | null): string {
   return value === null ? '—' : `${value.toFixed(1)}%`
@@ -235,17 +241,19 @@ function scoreChange(value: number | null): string {
         <AlertDescription class="flex flex-col gap-2"><p>{{ refreshError }}</p><Button variant="outline" class="w-fit" :disabled="isRefreshing" @click="emit('refresh')">Retry results</Button></AlertDescription>
       </Alert>
       <p v-if="isRefreshing" role="status" class="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Refreshing employee results and evidence…</p>
-      <EmployeeAttentionSummary :items="alerts" />
+      <EmployeeAttentionSummary :items="generalAttention" />
       <section aria-label="KPI evidence" class="flex min-w-0 flex-col gap-6">
         <EmployeeEvidenceTable v-for="item in kpiSections" :key="item.kpi"
           :kpi="item.kpi" :score="item.score" :weight="item.weight" :explanation="evidenceDescriptions[item.kpi]"
           :rows="evidenceStates[item.kpi].data?.rows ?? []" :total="evidenceStates[item.kpi].data?.total_count ?? 0"
+          :all-records-count="evidenceStates[item.kpi].data?.all_records_count" :needs-review-count="evidenceStates[item.kpi].data?.needs_review_count"
+          :review-only="evidenceStates[item.kpi].data?.review_only ?? false"
           :page="evidenceStates[item.kpi].data?.page ?? 1" :loading="evidenceStates[item.kpi].loading"
           :error="evidenceStates[item.kpi].error" :disabled="isRefreshing"
-          @page-change="loadEvidence(item.kpi, $event)" @retry="loadEvidence(item.kpi)" />
+          @page-change="loadEvidence(item.kpi, $event, evidenceStates[item.kpi].data?.review_only ?? false)" @review-change="loadEvidence(item.kpi, 1, $event)" @retry="loadEvidence(item.kpi)" />
       </section>
 
-      <EmployeeCalculationDetails :items="kpiSections.map(item => ({ name: item.label, explanation: item.reason }))" :confidence-explanation="employee.confidence_reason" />
+      <EmployeeCalculationDetails />
     </div>
 
     <Dialog v-model:open="reportPreviewOpen">
@@ -348,12 +356,12 @@ function scoreChange(value: number | null): string {
               </CardContent>
             </Card>
 
-            <EmployeeAttentionSummary :items="reportPreview.findings" />
+            <EmployeeAttentionSummary :items="reportGeneralAttention" />
             <EmployeeEvidenceTable v-for="kpi in reportPreview.kpis" :key="kpi.name"
               :kpi="kpi.name.toLowerCase() as EvidenceKpi" :score="kpi.score" :weight="kpi.weight" :explanation="evidenceDescriptions[kpi.name.toLowerCase() as EvidenceKpi]"
               :rows="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].rows"
               :total="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].total_count" report />
-            <EmployeeCalculationDetails :items="reportPreview.kpis" :confidence-explanation="reportPreview.confidence_explanation" />
+            <EmployeeCalculationDetails />
             <Alert>
               <ShieldCheckIcon aria-hidden="true" />
               <AlertTitle>Manager review required</AlertTitle>
