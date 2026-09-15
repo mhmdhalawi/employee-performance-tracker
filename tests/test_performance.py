@@ -27,8 +27,30 @@ class PerformanceQaTests(TestCase):
         self.assertEqual(result.compliance_score, 100)
         self.assertEqual(result.quality_score, 100)
         self.assertEqual(result.data_confidence, 100)
+        self.assertEqual(result.confidence_threshold, 100)
         self.assertEqual(result.overall_score, 100)
         self.assertEqual(result.result_status, "Top Performer")
+
+    def test_partial_evidence_is_withheld_even_with_legacy_70_percent_target(self) -> None:
+        dataset = _dataset()
+        for day in range(2, 6):
+            dataset.attendance_events.append(
+                dataset.attendance_events[0].model_copy(
+                    update={"record_id": f"ATT-{day:03d}", "occurred_on": date(2026, 6, day)}
+                )
+            )
+        dataset.attendance_events[-1] = dataset.attendance_events[-1].model_copy(
+            update={"actual_end": None}
+        )
+
+        result = calculate_kpis(dataset)[0]
+
+        self.assertEqual(result.data_confidence, 80)
+        self.assertEqual(result.confidence_threshold, 100)
+        self.assertEqual(result.compliance_score, 100)
+        self.assertIsNone(result.overall_score)
+        self.assertIsNone(result.performance_tier)
+        self.assertEqual(result.result_status, "Insufficient data")
 
     def test_overall_score_status_bands(self) -> None:
         cases = (

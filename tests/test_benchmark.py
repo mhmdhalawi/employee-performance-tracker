@@ -23,6 +23,7 @@ class CedarBenchmarkRegressionTests(TestCase):
     def test_all_30_expected_results_are_reproduced(self) -> None:
         self.assertEqual(len(self.results), 30)
         self.assertEqual(self.import_issues, [])
+        self.assertTrue(all(result.confidence_threshold == 100 for result in self.results.values()))
         tolerance = self.expected["tolerance"]
         for employee_id, result in self.results.items():
             expected = dict(self.expected["default"])

@@ -64,8 +64,8 @@ Dataset.xlsx`. Its `00_Start_Here` sheet defines the intended product and guardr
 - The benchmark contains 30 employees over the 12-week period from 2026-05-25 through
   2026-08-22.
 - Productivity is 35%, Compliance is 30%, and Quality is 35% of the overall result.
-- Below 70% evidence confidence, return `Insufficient data`; do not present a misleading low
-  score.
+- The workbook's original 70% evidence gate is superseded by the client's 100% requirement.
+  Below 100% confidence, return `Insufficient data`; do not present a misleading low score.
 - Productivity evidence comes from completed projects and actual hours. Compliance evidence
   comes from attendance, reports, and leave. Quality evidence comes from accuracy,
   first-pass approval, and rework.
@@ -445,9 +445,10 @@ attendance (50%), reports (35%), and leave compliance (15%); Quality combines ac
 first-pass rate (25%), and rework (15%). Employee data confidence is the lowest required-
 evidence coverage across project evidence, attendance check-outs, submitted-report evidence,
 and quality-review evidence.
-When confidence is below the employee's configured threshold (70% by default), retain the
+When confidence is below the client-required 100% threshold, retain the
 component KPI calculations for traceability but return `Insufficient data` with no overall
-score or performance tier.
+score or performance tier. Legacy `minimum_confidence` values on performance targets remain
+accepted for ingestion compatibility but cannot lower this threshold.
 
 Exclude duplicate attendance before scoring. Approved annual and sick leave are neutral and
 must not reduce compliance. Python owns all arithmetic, and every number returned must be

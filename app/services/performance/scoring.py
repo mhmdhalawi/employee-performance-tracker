@@ -12,7 +12,10 @@ from app.schemas.performance import (
     WorkOutputEvidence,
 )
 from app.services.performance import metrics
-from app.services.performance.constants import COMPLETED_OUTPUT_STATUSES
+from app.services.performance.constants import (
+    COMPLETED_OUTPUT_STATUSES,
+    REQUIRED_EVIDENCE_CONFIDENCE,
+)
 from app.services.performance.scope import (
     EmployeeEvidence,
     duplicate_attendance_ids,
@@ -93,7 +96,7 @@ def calculate_kpis(
             evidence.reviews,
             dataset.mapped_fields.get("attendance_events", set()),
         )
-        confidence_threshold = target.minimum_confidence * 100
+        confidence_threshold = REQUIRED_EVIDENCE_CONFIDENCE
         score_is_allowed = (
             confidence >= confidence_threshold
             and employee.employee_id not in blocking_employee_ids

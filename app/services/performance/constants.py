@@ -1,3 +1,5 @@
+REQUIRED_EVIDENCE_CONFIDENCE = 100.0
+
 REQUIRED_EVIDENCE_MATRIX: dict[str, tuple[str, ...]] = {
     "productivity": (
         "verified completion status",

@@ -242,6 +242,8 @@ class AnalyzeApiIntegrationTests(TestCase):
         employee = dashboard.json()["results"][0]
         self.assertEqual(report["overall_score"], employee["overall_score"])
         self.assertEqual(report["data_confidence"], employee["data_confidence"])
+        self.assertEqual(report["confidence_threshold"], 100)
+        self.assertEqual(employee["confidence_threshold"], 100)
         self.assertEqual(
             [item["score"] for item in report["kpis"]],
             [

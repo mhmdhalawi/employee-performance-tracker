@@ -26,7 +26,7 @@ class PerformanceTarget(BaseModel):
     employee_id: str = Field(min_length=1)
     target_outputs_90d: float = Field(gt=0)
     target_avg_effort_hours: float = Field(gt=0)
-    minimum_confidence: float = Field(default=0.70, ge=0, le=1)
+    minimum_confidence: float = Field(default=1.0, ge=0, le=1)
     source_version: int | None = Field(default=None, ge=0)
     source_updated_at: datetime | None = None
 

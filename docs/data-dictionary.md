@@ -8,9 +8,10 @@ the normalized meaning and formulas below do not.
 
 Missing required evidence changes evidence confidence, never employee performance. The
 employee confidence value is the lowest coverage across the required source families below.
-When it falls below the configured threshold (70% by default), component KPIs remain visible
+When it falls below the client-required 100% threshold, component KPIs remain visible
 for auditability but the overall score and performance tier are withheld as
-`Insufficient data`.
+`Insufficient data`. The `minimum_confidence` target field remains accepted for historical
+source compatibility; a stored value below 1.0 does not relax the production gate.
 
 Eligible overall scores are rounded to two decimals before assigning a status, so the
 status matches the score displayed by the API and reports.

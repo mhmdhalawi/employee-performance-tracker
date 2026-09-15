@@ -27,9 +27,15 @@ current user request.
 | Compliance | 30% | Attendance, reports, and leave | Approved leave is neutral |
 | Quality | 35% | Accuracy, first-pass approval, and rework | Missing reviews lower confidence |
 
-The overall result combines the three KPI scores at 35% / 30% / 35%. Evidence confidence
-below 70% produces `Insufficient data`. Calculations are deterministic Python outputs; the AI
-may explain them but may not create or alter numerical results.
+The overall result combines the three KPI scores at 35% / 30% / 35%. The workbook originally
+specified a 70% evidence-confidence gate. The client's current requirement is 100%: any lower
+confidence produces `Insufficient data`, even when a source target still says 70%. Calculations
+are deterministic Python outputs; the AI may explain them but may not create or alter numerical
+results.
+
+Workbook `Expected_KPI` statuses were authored under the older gate. Any employee whose
+confidence is from 70% through 99.99% can now have a withheld overall result even if the
+workbook previously marked that result eligible; component KPI values remain auditable.
 
 ### Compliance calculation contract
 
@@ -84,7 +90,7 @@ workbook remains authoritative if this copied context becomes inconsistent with 
 | QA-06 | Overdue project | Projects | Due date passed without completion | Productivity risk is shown | High | Passed |
 | QA-07 | Low accuracy | Quality_Reviews | Accuracy below 75% | Quality coaching recommendation appears | Critical | Passed |
 | QA-08 | Rework burden | Quality_Reviews | High rework with failed first pass | Quality score reflects both signals | High | Passed |
-| QA-09 | Insufficient evidence | All | Verified evidence falls below 70% | Show `Insufficient data`, not low score | Critical | Passed |
+| QA-09 | Insufficient evidence | All | Workbook case: verified evidence falls below 70%; production also gates 70–99.99% | Show `Insufficient data`, not low score | Critical | Passed |
 | QA-10 | Calculation parity | Expected_KPI | Dashboard uses same inputs | Every employee score matches within 0.1 | Critical | Passed with documented exception |
 | QA-11 | Team filter | Employees + KPIs | Select one team | Only selected team records display | Medium | Passed |
 | QA-12 | Evidence trace | All | Open an alert | Alert links to supporting record IDs | Critical | Passed |
