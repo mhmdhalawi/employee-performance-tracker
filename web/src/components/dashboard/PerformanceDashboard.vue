@@ -261,7 +261,7 @@ function formatDate(value: string): string {
           <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Employee performance</h1><Badge variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
           <p class="text-sm text-muted-foreground">Review KPI scores, evidence confidence, trends, and findings.</p>
         </div>
-        <FieldGroup class="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] lg:w-[38rem] lg:shrink-0">
+        <FieldGroup class="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] lg:w-152 lg:shrink-0">
           <Field class="min-w-0 gap-1.5"><FieldLabel for="employee-filter">Employee</FieldLabel><Select :model-value="employee" :disabled="isFiltering" @update:model-value="applyFilter('employee_id', $event)"><SelectTrigger id="employee-filter" class="w-full bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All employees</SelectItem><SelectItem v-for="row in employeeOptions" :key="row.employee_id" :value="row.employee_id">{{ employeeLabel(row) }}</SelectItem></SelectGroup></SelectContent></Select></Field>
           <Field class="min-w-0 gap-1.5"><FieldLabel for="team-filter">Team</FieldLabel><Select :model-value="team" :disabled="isFiltering" @update:model-value="applyFilter('team', $event)"><SelectTrigger id="team-filter" class="w-full bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All teams</SelectItem><SelectItem v-for="item in teams" :key="item" :value="item">{{ item }}</SelectItem></SelectGroup></SelectContent></Select></Field>
           <Field class="min-w-0 gap-1.5"><FieldLabel for="period-filter">Reporting period</FieldLabel><ReportingPeriodPicker :mode="period" :filters="analysis.applied_filters" :coverage-start="analysis.coverage_start" :coverage-end="analysis.coverage_end" :disabled="isFiltering" @change="applyPeriodFilter" /></Field>
@@ -301,7 +301,7 @@ function formatDate(value: string): string {
           </div>
           <article v-for="row in paginatedRows" :key="row.employee_id" class="flex flex-col gap-3 border-b pb-4 last:border-0 last:pb-0">
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0"><h3 class="break-words font-medium">{{ employeeLabel(row) }}</h3><p class="text-xs text-muted-foreground">{{ row.employee_id }} · {{ row.team ?? 'Team not provided' }}</p></div>
+              <div class="min-w-0"><h3 class="wrap-break-word font-medium">{{ employeeLabel(row) }}</h3><p class="text-xs text-muted-foreground">{{ row.employee_id }} · {{ row.team ?? 'Team not provided' }}</p></div>
               <div class="shrink-0 text-right"><p class="text-xs text-muted-foreground">Overall</p><p class="font-semibold tabular-nums">{{ score(row.overall_score) }}</p></div>
             </div>
             <div class="flex flex-wrap items-center gap-2"><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge><span class="text-xs">{{ row.data_confidence.toFixed(0) }}% confidence · {{ alertCount(row.employee_id) }} findings</span></div>
