@@ -9,6 +9,7 @@ defineOptions({ inheritAttrs: false })
 
 const props = defineProps<{
   analysis: DashboardResponse
+  requestedFilters: DashboardFilters
   isFiltering: boolean
   filterError: string
 }>()
@@ -19,8 +20,10 @@ function refresh(): void {
   emit('filtersChange', {
     employee_id: filters.employee_id ?? undefined,
     team: filters.team ?? undefined,
-    start_date: filters.start_date ?? undefined,
-    end_date: filters.end_date ?? undefined,
+    period_weeks: props.requestedFilters.period_weeks,
+    period_preset: props.requestedFilters.period_preset,
+    start_date: props.requestedFilters.start_date,
+    end_date: props.requestedFilters.end_date,
   })
 }
 

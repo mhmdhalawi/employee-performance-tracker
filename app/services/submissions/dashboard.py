@@ -10,7 +10,11 @@ from app.schemas.uploads import (
 )
 from app.services.aggregation import MaterializedAggregation, materialize_aggregation
 from app.services.analysis import build_analysis_response
-from app.services.filters import validate_analysis_period
+from app.services.filters import (
+    available_period_overlap,
+    rolling_period_start,
+    validate_analysis_period,
+)
 from app.services.performance import inspect_dataset
 
 
@@ -34,10 +38,12 @@ async def get_aggregated_dashboard(
     period_weeks: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    period_preset: str | None = None,
 ) -> DashboardResponse:
     """Recalculate one filtered dashboard from canonical cross-submission evidence."""
     return build_dashboard(
-        load_dashboard_context(), employee_id, team, period_weeks, start_date, end_date
+        load_dashboard_context(), employee_id, team, period_weeks, start_date, end_date,
+        period_preset
     )
 
 
@@ -46,9 +52,10 @@ def resolve_dashboard_period(
     start_date: date | None,
     end_date: date | None,
     period_weeks: int | None,
+    period_preset: str | None = None,
 ) -> tuple[date | None, date | None]:
     """Resolve periods against canonical business dates using the dashboard's rules."""
-    validate_analysis_period(start_date, end_date, period_weeks)
+    validate_analysis_period(start_date, end_date, period_weeks, period_preset)
     overview = inspect_dataset(context.materialized.dataset)
     effective_start = start_date
     effective_end = end_date
@@ -59,6 +66,10 @@ def resolve_dashboard_period(
             preset_start,
             overview.date_start or preset_start,
         )
+    if period_preset is not None and overview.date_end is not None:
+        effective_end = overview.date_end
+        months = {"month": 1, "six-months": 6, "year": 12}[period_preset]
+        effective_start = rolling_period_start(effective_end, months)
     return effective_start or overview.date_start, effective_end or overview.date_end
 
 
@@ -69,6 +80,7 @@ def build_dashboard(
     period_weeks: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    period_preset: str | None = None,
 ) -> DashboardResponse:
     """Calculate a filtered dashboard without reloading its canonical state."""
     state = context.state
@@ -76,11 +88,20 @@ def build_dashboard(
     dataset = materialized.dataset
     overview = inspect_dataset(dataset)
     effective_start, effective_end = resolve_dashboard_period(
-        context, start_date, end_date, period_weeks
+        context, start_date, end_date, period_weeks, period_preset
     )
+    selected_start, selected_end = effective_start, effective_end
+    score_period_start: date | None = None
+    score_period_end: date | None = None
+    score_period_start, score_period_end = available_period_overlap(
+        selected_start, selected_end, overview.date_start, overview.date_end
+    )
+    if score_period_start is not None and score_period_end is not None:
+        effective_start, effective_end = score_period_start, score_period_end
     # Unbounded dashboard scoring retains its existing 90-day target semantics.
-    if start_date is None and end_date is None and period_weeks is None:
+    if start_date is None and end_date is None and period_weeks is None and period_preset is None:
         effective_start = effective_end = None
+        score_period_start = score_period_end = None
 
     first_summary = materialized.mapping_summaries[0]
     first_plan = CalculationPlan(
@@ -100,7 +121,12 @@ def build_dashboard(
         team=team,
         start_date=effective_start,
         end_date=effective_end,
+        selected_start_date=selected_start,
+        selected_end_date=selected_end,
+        score_period_start_date=score_period_start,
+        score_period_end_date=score_period_end,
         period_weeks=period_weeks,
+        period_preset=period_preset,
         additional_limitations=materialized.limitations,
         limitation_classifications=classifications,
         model="deterministic-aggregation",

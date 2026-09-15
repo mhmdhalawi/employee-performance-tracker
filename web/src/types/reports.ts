@@ -10,6 +10,8 @@ export interface EmployeeReportRequest {
 export interface ReportPeriod {
   start_date: string
   end_date: string
+  score_period_start_date: string | null
+  score_period_end_date: string | null
   prior_start_date: string | null
   prior_end_date: string | null
 }

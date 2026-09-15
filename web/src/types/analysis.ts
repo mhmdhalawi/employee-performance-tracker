@@ -15,6 +15,9 @@ export interface AnalysisFilters {
   start_date: string | null
   end_date: string | null
   period_weeks: 4 | 8 | 12 | null
+  period_preset: 'month' | 'six-months' | 'year' | null
+  score_period_start_date: string | null
+  score_period_end_date: string | null
 }
 
 export interface DatasetOverview {
@@ -92,6 +95,7 @@ export interface DashboardFilters {
   start_date?: string
   end_date?: string
   period_weeks?: 4 | 8 | 12
+  period_preset?: 'month' | 'six-months' | 'year'
 }
 
 export interface EmployeeFilterOption {

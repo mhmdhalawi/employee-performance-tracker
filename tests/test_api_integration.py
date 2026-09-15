@@ -887,6 +887,95 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertEqual(conflict.status_code, 400)
         self.assertEqual(invalid.status_code, 400)
 
+    def test_month_presets_share_the_dashboard_and_evidence_period(self) -> None:
+        first = self._single_employee_batch("START", "2026-05-01")
+        latest = self._single_employee_batch("END", "2026-06-30")
+        self._post_benchmark_tables(payload=first)
+        self._post_benchmark_tables(payload=latest)
+
+        expected_starts = {
+            "month": "2026-05-31",
+            "six-months": "2025-12-31",
+            "year": "2025-07-01",
+        }
+        for preset, expected_start in expected_starts.items():
+            with self.subTest(preset=preset):
+                dashboard = self.client.get(f"/api/v1/dashboard?period_preset={preset}")
+                evidence = self.client.get(
+                    f"/api/v1/employees/EMP-001/evidence?kpi=quality&period_preset={preset}"
+                )
+                self.assertEqual(dashboard.status_code, 200)
+                self.assertEqual(evidence.status_code, 200)
+                filters = dashboard.json()["applied_filters"]
+                self.assertEqual(filters["start_date"], expected_start)
+                self.assertEqual(filters["end_date"], "2026-06-30")
+                self.assertEqual(filters["period_preset"], preset)
+                self.assertEqual(
+                    filters["score_period_start_date"],
+                    "2026-05-31" if preset == "month" else "2026-05-01",
+                )
+                self.assertEqual(filters["score_period_end_date"], "2026-06-30")
+                self.assertEqual(evidence.json()["applied_filters"]["start_date"], expected_start)
+                self.assertEqual(evidence.json()["applied_filters"]["end_date"], "2026-06-30")
+
+        available_range = self.client.get(
+            "/api/v1/dashboard?start_date=2026-05-01&end_date=2026-06-30"
+        ).json()
+        year_range = self.client.get("/api/v1/dashboard?period_preset=year").json()
+        self.assertEqual(year_range["summary"], available_range["summary"])
+        self.assertEqual(year_range["results"], available_range["results"])
+
+        report = self.client.post(
+            "/api/v1/reports/employee/preview",
+            json={"employee_id": "EMP-001", "period_preset": "month"},
+        )
+        self.assertEqual(report.status_code, 200)
+        self.assertEqual(report.json()["report"]["period"]["start_date"], "2026-05-31")
+        self.assertEqual(report.json()["report"]["period"]["end_date"], "2026-06-30")
+
+        year_report = self.client.post(
+            "/api/v1/reports/employee/preview",
+            json={"employee_id": "EMP-001", "period_preset": "year"},
+        )
+        self.assertEqual(year_report.status_code, 200)
+        self.assertEqual(year_report.json()["report"]["period"]["start_date"], "2025-07-01")
+        self.assertEqual(
+            year_report.json()["report"]["period"]["score_period_start_date"],
+            "2026-05-01",
+        )
+
+        one_day = self.client.get(
+            "/api/v1/dashboard?start_date=2026-06-30&end_date=2026-06-30"
+        )
+        self.assertEqual(one_day.status_code, 200)
+        self.assertEqual(one_day.json()["applied_filters"]["start_date"], "2026-06-30")
+        self.assertEqual(one_day.json()["applied_filters"]["end_date"], "2026-06-30")
+
+        empty_range = self.client.get(
+            "/api/v1/dashboard?start_date=2025-01-01&end_date=2025-01-07"
+        )
+        self.assertEqual(empty_range.status_code, 200)
+        self.assertEqual(empty_range.json()["applied_filters"]["start_date"], "2025-01-01")
+        self.assertEqual(empty_range.json()["applied_filters"]["end_date"], "2025-01-07")
+        self.assertIsNone(empty_range.json()["applied_filters"]["score_period_start_date"])
+        self.assertEqual(empty_range.json()["summary"]["scored_employee_count"], 0)
+
+        self.assertEqual(
+            self.client.get("/api/v1/dashboard?period_preset=quarter").status_code, 400
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/v1/dashboard?period_preset=month&period_weeks=4"
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/v1/dashboard?period_preset=month&start_date=2026-06-01"
+            ).status_code,
+            400,
+        )
+
     def test_filter_facets_remain_unfiltered(self) -> None:
         self._post_benchmark_tables()
 

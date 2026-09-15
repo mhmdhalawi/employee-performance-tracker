@@ -95,16 +95,27 @@ requested scope. It never averages previously calculated submission scores and n
 mapping model.
 
 Supported filters are `employee_id`, case-insensitive `team`, explicit inclusive `start_date` and
-`end_date`, or `period_weeks=4|8|12`. Week presets and explicit dates are mutually exclusive. A
-preset is anchored to the combined evidence's latest business date:
+`end_date`, `period_preset=month|six-months|year`, or legacy `period_weeks=4|8|12`.
+Presets and explicit dates are mutually exclusive. A preset is anchored to the combined
+evidence's latest business date:
 
 ```text
 effective_end = combined coverage end
 effective_start = max(combined coverage start, effective_end - (period_weeks * 7 - 1 days))
 ```
 
-The resolved dates are returned in `applied_filters`. Results, summary averages, confidence,
-alerts, supporting evidence, and trends all use that same scope. Employee and team options are
+For the calendar presets, subtract 1, 6, or 12 calendar months from `effective_end`, clamp
+the day to the earlier month's last day, and add one day for an inclusive start. Keep the
+full selected range even when it begins before combined coverage. The dashboard UI uses
+these rolling presets; the week query remains
+available for existing API clients.
+
+`applied_filters.start_date` and `end_date` contain the selected range.
+`score_period_start_date` and `score_period_end_date` contain its overlap with canonical
+evidence coverage for bounded dashboard requests. Python calculates scores from this
+available window, so empty earlier/later dates do not lower productivity through an
+unsupported longer target. A wholly empty selected range has no scoring overlap, zero
+evidence confidence, and withheld overall results. Employee and team options are
 computed from the unfiltered combined dimensions so filters remain usable after a narrow response.
 
 The dedicated `DashboardResponse` also returns combined coverage, contributing-submission count,
@@ -117,7 +128,8 @@ the shared mapped fields and returns a limitation instead of silently changing c
 `GET /api/v1/employees/{employee_id}/evidence` reads typed canonical records from both upload
 and JSON submissions. Required `kpi` accepts `productivity`, `compliance`, or `quality`.
 Pagination defaults to `page=1&page_size=5`; pages must be positive and page size is capped
-at 50. Explicit dates and `period_weeks` use the dashboard's shared validation and resolution.
+at 50. Explicit dates, `period_preset`, and `period_weeks` use the dashboard's shared
+validation and resolution.
 The UI passes the dashboard's resolved dates.
 
 `review_only=true` selects excluded records and records with a warning/error or a finding

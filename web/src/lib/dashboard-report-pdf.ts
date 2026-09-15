@@ -160,10 +160,16 @@ function baseDocument(reportLabel: string, content: Content[]): TDocumentDefinit
 }
 
 function reportHeading(title: string, team: string, analysis: DashboardResponse): Content {
+  const filters = analysis.applied_filters
+  const scorePeriod = filters.score_period_start_date && filters.score_period_end_date
+    && (filters.score_period_start_date !== filters.start_date || filters.score_period_end_date !== filters.end_date)
+    ? `Scores use available evidence: ${formatDate(filters.score_period_start_date)} - ${formatDate(filters.score_period_end_date)}.`
+    : ''
   return {
     stack: [
       { text: title, style: 'title' },
       { text: `${team} · ${formatPeriod(analysis)} · Current filtered dashboard`, color: muted },
+      ...(scorePeriod ? [{ text: scorePeriod, color: muted, margin: [0, 4, 0, 0] } as Content] : []),
     ],
     margin: [0, 0, 0, 12],
   }

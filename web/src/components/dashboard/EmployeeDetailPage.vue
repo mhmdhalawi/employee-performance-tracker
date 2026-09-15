@@ -261,7 +261,10 @@ function scoreChange(value: number | null): string {
         </p>
       </header>
 
-      <p v-if="reportingPeriod.start_date && reportingPeriod.end_date" class="text-sm text-muted-foreground">Reporting period: {{ formatReportDate(reportingPeriod.start_date) }} – {{ formatReportDate(reportingPeriod.end_date) }}</p>
+      <div v-if="reportingPeriod.start_date && reportingPeriod.end_date" class="flex flex-col gap-1 text-sm text-muted-foreground">
+        <p>Reporting period: {{ formatReportDate(reportingPeriod.start_date) }} – {{ formatReportDate(reportingPeriod.end_date) }}</p>
+        <p v-if="reportingPeriod.score_period_start_date && reportingPeriod.score_period_end_date && (reportingPeriod.score_period_start_date !== reportingPeriod.start_date || reportingPeriod.score_period_end_date !== reportingPeriod.end_date)">Scores use available evidence: {{ formatReportDate(reportingPeriod.score_period_start_date) }} – {{ formatReportDate(reportingPeriod.score_period_end_date) }}.</p>
+      </div>
 
       <Card>
         <CardHeader class="gap-4 sm:flex sm:flex-row sm:items-center sm:justify-between">
@@ -383,6 +386,9 @@ function scoreChange(value: number | null): string {
                   </CardTitle>
                   <CardDescription>
                     {{ reportPreview.employee_id }} · {{ reportPreview.team ?? 'Team not provided' }}<template v-if="reportPreview.role"> · {{ reportPreview.role }}</template>
+                  </CardDescription>
+                  <CardDescription v-if="reportPreview.period.score_period_start_date && reportPreview.period.score_period_end_date && (reportPreview.period.score_period_start_date !== reportPreview.period.start_date || reportPreview.period.score_period_end_date !== reportPreview.period.end_date)">
+                    Scores use available evidence: {{ formatReportDate(reportPreview.period.score_period_start_date) }} – {{ formatReportDate(reportPreview.period.score_period_end_date) }}.
                   </CardDescription>
                 </div>
                 <Badge variant="outline" class="w-fit whitespace-normal">

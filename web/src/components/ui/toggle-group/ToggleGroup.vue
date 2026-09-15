@@ -15,6 +15,7 @@ const props = withDefaults(defineProps<ToggleGroupRootProps & {
   variant?: ToggleGroupVariants['variant']
   size?: ToggleGroupVariants['size']
   spacing?: number
+  tone?: 'brand'
 }>(), {
   spacing: 0,
 })
@@ -25,9 +26,10 @@ provide('toggleGroup', {
   variant: props.variant,
   size: props.size,
   spacing: props.spacing,
+  tone: props.tone,
 })
 
-const delegatedProps = reactiveOmit(props, 'class', 'size', 'variant')
+const delegatedProps = reactiveOmit(props, 'class', 'size', 'variant', 'tone')
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
 

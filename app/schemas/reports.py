@@ -10,16 +10,25 @@ from app.schemas.performance import FindingSeverity, KpiTrendPoint, ScoringImpac
 class EmployeeReportRequest(BaseModel):
     employee_id: str = Field(min_length=1, max_length=200)
     period_weeks: Literal[4, 8, 12] | None = None
+    period_preset: Literal["month", "six-months", "year"] | None = None
     start_date: date | None = None
     end_date: date | None = None
 
     @model_validator(mode="after")
     def validate_period(self) -> Self:
         if self.period_weeks is not None and (
+            self.start_date is not None
+            or self.end_date is not None
+            or self.period_preset is not None
+        ):
+            raise ValueError(
+                "period_weeks cannot be combined with period_preset, start_date, or end_date."
+            )
+        if self.period_preset is not None and (
             self.start_date is not None or self.end_date is not None
         ):
             raise ValueError(
-                "period_weeks cannot be combined with start_date or end_date."
+                "period_preset cannot be combined with start_date or end_date."
             )
         if (self.start_date is None) != (self.end_date is None):
             raise ValueError("start_date and end_date must be provided together.")
@@ -35,6 +44,8 @@ class EmployeeReportRequest(BaseModel):
 class ReportPeriod(BaseModel):
     start_date: date
     end_date: date
+    score_period_start_date: date | None = None
+    score_period_end_date: date | None = None
     prior_start_date: date | None = None
     prior_end_date: date | None = None
 

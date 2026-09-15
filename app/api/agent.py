@@ -68,6 +68,7 @@ async def latest_dashboard(
     employee_id: str | None = None,
     team: str | None = None,
     period_weeks: int | None = None,
+    period_preset: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> DashboardResponse:
@@ -75,6 +76,7 @@ async def latest_dashboard(
         employee_id=employee_id,
         team=team,
         period_weeks=period_weeks,
+        period_preset=period_preset,
         start_date=start_date,
         end_date=end_date,
     )

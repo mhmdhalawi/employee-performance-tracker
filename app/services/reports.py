@@ -25,6 +25,7 @@ async def build_employee_report_preview(
             context,
             employee_id=request.employee_id,
             period_weeks=request.period_weeks,
+            period_preset=request.period_preset,
             start_date=request.start_date,
             end_date=request.end_date,
         )
@@ -86,6 +87,8 @@ async def build_employee_report_preview(
         period=ReportPeriod(
             start_date=start_date,
             end_date=end_date,
+            score_period_start_date=dashboard.applied_filters.score_period_start_date,
+            score_period_end_date=dashboard.applied_filters.score_period_end_date,
             prior_start_date=prior_start,
             prior_end_date=prior_end,
         ),

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, DownloadIcon, EyeIcon, FileTextIcon, TriangleAlertIcon } from '@lucide/vue'
 import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
+import ReportingPeriodPicker from '@/components/dashboard/ReportingPeriodPicker.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,7 @@ import type { DashboardFilters, DashboardResponse, EmployeeKpiResult } from '@/t
 
 const props = defineProps<{
   analysis: DashboardResponse
+  requestedFilters: DashboardFilters
   isFiltering?: boolean
   filterError?: string
 }>()
@@ -37,10 +39,18 @@ const emit = defineEmits<{
   filtersChange: [filters: DashboardFilters]
 }>()
 const router = useRouter()
+type PeriodChoice = 'full' | 'month' | 'six-months' | 'year' | 'range'
 
 const employee = computed(() => props.analysis.applied_filters.employee_id ?? 'all')
 const team = computed(() => props.analysis.applied_filters.team ?? 'all')
-const period = computed(() => String(props.analysis.applied_filters.period_weeks ?? 'full'))
+const period = computed<PeriodChoice>(() => {
+  const filters = props.requestedFilters
+  if (filters.period_preset)
+    return filters.period_preset
+  if (filters.start_date && filters.end_date)
+    return 'range'
+  return 'full'
+})
 const lastAttempt = ref<DashboardFilters>({})
 const currentPage = ref(1)
 const pageSize = ref('10')
@@ -103,9 +113,27 @@ const alertCountsByEmployee = computed(() => props.analysis.alerts.reduce<Record
 ))
 const appliedPeriod = computed(() => {
   const filters = props.analysis.applied_filters
-  return filters?.start_date && filters.end_date
+  const presetLabel = period.value === 'month' ? 'Last month'
+    : period.value === 'six-months' ? 'Last 6 months'
+      : period.value === 'year' ? 'Last year' : ''
+  if (filters.start_date && filters.start_date === filters.end_date)
+    return `${presetLabel ? `${presetLabel} · ` : ''}${formatDate(filters.start_date)}`
+  const dates = filters.start_date && filters.end_date
     ? `${formatDate(filters.start_date)} – ${formatDate(filters.end_date)}`
     : 'Full available period'
+  return presetLabel ? `${presetLabel} · ${dates}` : dates
+})
+
+const scoreScopeNotice = computed(() => {
+  const filters = props.analysis.applied_filters
+  const scoreStart = filters.score_period_start_date
+  const scoreEnd = filters.score_period_end_date
+  if (period.value === 'full') return ''
+  if (!scoreStart || !scoreEnd)
+    return 'No evidence is on file in the selected range. Overall scores are withheld.'
+  if (scoreStart !== filters.start_date || scoreEnd !== filters.end_date)
+    return `Dates without evidence remain in the selected range. Scores use available evidence from ${formatDate(scoreStart)} to ${formatDate(scoreEnd)}.`
+  return ''
 })
 
 
@@ -119,8 +147,12 @@ function buildFilters(): DashboardFilters {
     filters.employee_id = employee.value
   if (team.value !== 'all')
     filters.team = team.value
-  if (period.value !== 'full')
-    filters.period_weeks = Number.parseInt(period.value, 10) as 4 | 8 | 12
+  if (period.value === 'range') {
+    filters.start_date = props.requestedFilters.start_date
+    filters.end_date = props.requestedFilters.end_date
+  }
+  else if (period.value !== 'full')
+    filters.period_preset = period.value
   return filters
 }
 
@@ -171,7 +203,7 @@ function openEmployeeDetails(row: EmployeeKpiResult): void {
   void router.push({ name: 'employee-detail', params: { employeeId: row.employee_id } })
 }
 
-function applyFilter(key: 'employee_id' | 'team' | 'period_weeks', value: unknown): void {
+function applyFilter(key: 'employee_id' | 'team', value: unknown): void {
   const filters = buildFilters()
   const selected = String(value)
   if (key === 'team') {
@@ -183,11 +215,16 @@ function applyFilter(key: 'employee_id' | 'team' | 'period_weeks', value: unknow
     if (selected === 'all') delete filters.employee_id
     else filters.employee_id = selected
   }
-  else {
-    if (selected === 'full') delete filters.period_weeks
-    else filters.period_weeks = Number(selected) as 4 | 8 | 12
-  }
   requestFilters(filters)
+}
+
+function applyPeriodFilter(selection: Pick<DashboardFilters, 'period_preset' | 'start_date' | 'end_date'>): void {
+  const filters = buildFilters()
+  delete filters.period_weeks
+  delete filters.period_preset
+  delete filters.start_date
+  delete filters.end_date
+  requestFilters({ ...filters, ...selection })
 }
 
 function requestFilters(filters: DashboardFilters): void {
@@ -224,15 +261,18 @@ function formatDate(value: string): string {
           <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Employee performance</h1><Badge variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
           <p class="text-sm text-muted-foreground">Review KPI scores, evidence confidence, trends, and findings.</p>
         </div>
-        <FieldGroup class="grid w-full gap-3 sm:grid-cols-3 lg:w-[34rem] lg:shrink-0">
+        <FieldGroup class="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] lg:w-[38rem] lg:shrink-0">
           <Field class="min-w-0 gap-1.5"><FieldLabel for="employee-filter">Employee</FieldLabel><Select :model-value="employee" :disabled="isFiltering" @update:model-value="applyFilter('employee_id', $event)"><SelectTrigger id="employee-filter" class="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All employees</SelectItem><SelectItem v-for="row in employeeOptions" :key="row.employee_id" :value="row.employee_id">{{ employeeLabel(row) }}</SelectItem></SelectGroup></SelectContent></Select></Field>
           <Field class="min-w-0 gap-1.5"><FieldLabel for="team-filter">Team</FieldLabel><Select :model-value="team" :disabled="isFiltering" @update:model-value="applyFilter('team', $event)"><SelectTrigger id="team-filter" class="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All teams</SelectItem><SelectItem v-for="item in teams" :key="item" :value="item">{{ item }}</SelectItem></SelectGroup></SelectContent></Select></Field>
-          <Field class="min-w-0 gap-1.5"><FieldLabel for="period-filter">Reporting period</FieldLabel><Select :model-value="period" :disabled="isFiltering" @update:model-value="applyFilter('period_weeks', $event)"><SelectTrigger id="period-filter" class="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="full">Full period</SelectItem><SelectItem value="4">Last 4 weeks</SelectItem><SelectItem value="8">Last 8 weeks</SelectItem><SelectItem value="12">Last 12 weeks</SelectItem></SelectGroup></SelectContent></Select></Field>
+          <Field class="min-w-0 gap-1.5"><FieldLabel for="period-filter">Reporting period</FieldLabel><ReportingPeriodPicker :mode="period" :filters="analysis.applied_filters" :coverage-start="analysis.coverage_start" :coverage-end="analysis.coverage_end" :disabled="isFiltering" @change="applyPeriodFilter" /></Field>
         </FieldGroup>
       </section>
 
       <div class="flex flex-wrap items-center justify-between gap-2 text-sm" aria-live="polite">
-        <p>{{ analysis.summary.scored_employee_count }} scored · {{ analysis.summary.insufficient_data_count }} withheld · {{ analysis.summary.total_employee_count }} employees</p>
+        <div class="flex flex-col gap-1">
+          <p>{{ analysis.summary.scored_employee_count }} scored · {{ analysis.summary.insufficient_data_count }} withheld · {{ analysis.summary.total_employee_count }} employees</p>
+          <p v-if="scoreScopeNotice" class="text-muted-foreground">{{ scoreScopeNotice }}</p>
+        </div>
         <Button v-if="employee !== 'all' || team !== 'all' || period !== 'full'" variant="ghost" size="sm" :disabled="isFiltering" @click="requestFilters({})">Clear filters</Button>
       </div>
 

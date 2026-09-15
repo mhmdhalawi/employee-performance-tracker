@@ -168,6 +168,9 @@ class AnalysisFilters(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     period_weeks: Literal[4, 8, 12] | None = None
+    period_preset: Literal["month", "six-months", "year"] | None = None
+    score_period_start_date: date | None = None
+    score_period_end_date: date | None = None
 
 
 class SubmissionReceipt(BaseModel):

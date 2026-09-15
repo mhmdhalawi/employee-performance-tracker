@@ -15,6 +15,8 @@ from app.schemas.employee_evidence import (
 )
 from app.schemas.performance import PerformanceEvidenceDataset, ValidationFinding
 from app.schemas.uploads import AnalysisFilters
+from app.services.filters import available_period_overlap
+from app.services.performance.overview import inspect_dataset
 from app.services.performance.scope import (
     duplicate_attendance_ids,
     employee_evidence,
@@ -138,6 +140,7 @@ async def get_employee_evidence(
     end_date: date | None = None,
     period_weeks: int | None = None,
     review_only: bool = False,
+    period_preset: str | None = None,
 ) -> EmployeeEvidenceResponse:
     """Read a bounded evidence page; raise typed errors for unknown employees or bad paging."""
     if kpi not in ("productivity", "compliance", "quality"):
@@ -150,8 +153,14 @@ async def get_employee_evidence(
     if employee is None:
         raise EmployeeEvidenceNotFoundError(f"Employee '{employee_id}' is not available.")
     resolved_start, resolved_end = resolve_dashboard_period(
-        context, start_date, end_date, period_weeks
+        context, start_date, end_date, period_weeks, period_preset
     )
+    overview = inspect_dataset(dataset)
+    score_period_start, score_period_end = available_period_overlap(
+        resolved_start, resolved_end, overview.date_start, overview.date_end
+    )
+    if start_date is None and end_date is None and period_weeks is None and period_preset is None:
+        score_period_start = score_period_end = None
     tables = build_employee_evidence_tables(dataset, employee_id, resolved_start, resolved_end)
     table = getattr(tables, kpi)
     review_rows = [row for row in table.rows if evidence_needs_review(row)]
@@ -170,6 +179,9 @@ async def get_employee_evidence(
             start_date=resolved_start,
             end_date=resolved_end,
             period_weeks=period_weeks,
+            period_preset=period_preset,
+            score_period_start_date=score_period_start,
+            score_period_end_date=score_period_end,
         ),
         latest_submission_at=datetime.fromisoformat(context.state.latest_submission_at),
         total_count=len(selected_rows),

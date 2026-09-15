@@ -37,6 +37,10 @@ export async function createEmployeeReportPdfBytes(report: EmployeeReportData): 
 function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
   const employeeName = report.employee_name || report.employee_id
   const period = `${formatDate(report.period.start_date)} - ${formatDate(report.period.end_date)}`
+  const scorePeriod = report.period.score_period_start_date && report.period.score_period_end_date
+    && (report.period.score_period_start_date !== report.period.start_date || report.period.score_period_end_date !== report.period.end_date)
+    ? `Scores use available evidence: ${formatDate(report.period.score_period_start_date)} - ${formatDate(report.period.score_period_end_date)}.`
+    : ''
   const overall = report.overall_score === null ? 'Withheld' : score(report.overall_score)
   const status = report.performance_tier || report.result_status
   const attention = needsAttention(report.findings)
@@ -65,7 +69,8 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
     content: [
       { text: employeeName, style: 'title' },
       { text: `${report.employee_id}  |  ${report.team || 'Team not provided'}${report.role ? `  |  ${report.role}` : ''}`, color: muted },
-      { text: period, margin: [0, 4, 0, 18], color: muted },
+      { text: period, margin: [0, 4, 0, scorePeriod ? 3 : 18], color: muted },
+      ...(scorePeriod ? [{ text: scorePeriod, margin: [0, 0, 0, 14], color: muted } as Content] : []),
       {
         table: {
           widths: ['*', '*', '*'],

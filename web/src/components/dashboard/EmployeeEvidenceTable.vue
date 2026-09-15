@@ -108,7 +108,7 @@ watch(() => props.rows, rows => {
                     </Button>
                   </PopoverTrigger>
                   <PopoverPortal>
-                    <PopoverContent side="bottom" align="start" :side-offset="6" class="z-[60] w-56 max-w-[calc(100vw-2rem)] rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md outline-none"
+                    <PopoverContent side="bottom" align="start" :side-offset="6" class="z-60 w-56 max-w-[calc(100vw-2rem)] rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md outline-none"
                       :aria-label="`${evidenceLabels[kpi]} calculation`">
                       {{ evidenceCalculations[kpi] }}
                     </PopoverContent>
@@ -121,7 +121,7 @@ watch(() => props.rows, rows => {
         </div>
         <strong class="text-3xl tabular-nums" :aria-label="`${evidenceLabels[kpi]} score`">{{ score === null ? '—' : `${score.toFixed(1)}%` }}</strong>
       </div>
-      <CardDescription class="whitespace-normal break-words">{{ explanation }}</CardDescription>
+      <CardDescription class="whitespace-normal wrap-break-word">{{ explanation }}</CardDescription>
       <Button v-if="reviewCount" variant="link" size="sm" class="h-auto w-fit max-w-full whitespace-normal" :data-busy="loading && !disabled" :disabled="loading || disabled" @click="changeFilter('review')">
         <TriangleAlertIcon data-icon="inline-start" />{{ reviewCount }} {{ reviewCount === 1 ? 'record needs' : 'records need' }} review
       </Button>
@@ -156,11 +156,11 @@ watch(() => props.rows, rows => {
             <Collapsible v-for="row in visibleRows" :key="rowKey(row)" v-model:open="openRows[rowKey(row)]" as-child>
               <TableBody>
                 <TableRow :class="cn(evidenceNeedsReview(row) && 'bg-warning/10 hover:bg-warning/15')">
-                  <TableCell v-for="(cell, index) in evidenceSummaryCells(row)" :key="index" class="align-top whitespace-normal break-words">
+                  <TableCell v-for="(cell, index) in evidenceSummaryCells(row)" :key="index" class="align-top whitespace-normal wrap-break-word">
                     {{ cell }}
                   </TableCell>
                   <TableCell class="align-top whitespace-normal"><EvidenceRecordIssues :row="row" /></TableCell>
-                  <TableCell class="align-top"><CollapsibleTrigger as-child><Button variant="ghost" size="sm" class="h-auto max-w-full whitespace-normal break-words" :aria-label="`${openRows[rowKey(row)] ? 'Hide' : 'View'} record ${row.record_type} ${row.record_id}`">{{ recordLabel(row) }}<ChevronDownIcon data-icon="inline-end" /></Button></CollapsibleTrigger></TableCell>
+                  <TableCell class="align-top"><CollapsibleTrigger as-child><Button variant="ghost" size="sm" class="h-auto max-w-full whitespace-normal wrap-break-word" :aria-label="`${openRows[rowKey(row)] ? 'Hide' : 'View'} record ${row.record_type} ${row.record_id}`">{{ recordLabel(row) }}<ChevronDownIcon data-icon="inline-end" /></Button></CollapsibleTrigger></TableCell>
                 </TableRow>
                 <CollapsibleContent as-child><TableRow><TableCell :colspan="columns.length + 2" class="bg-muted/30 p-4"><EvidenceRecordDetails :row="row" /></TableCell></TableRow></CollapsibleContent>
               </TableBody>
@@ -170,10 +170,10 @@ watch(() => props.rows, rows => {
         <div class="flex flex-col gap-3 md:hidden">
           <Collapsible v-for="row in visibleRows" :key="rowKey(row)" v-model:open="openRows[rowKey(row)]" as-child>
             <Card :class="cn('min-w-0', evidenceNeedsReview(row) && 'bg-warning/10')">
-              <CardHeader><CardTitle class="break-words">{{ row.record_id }}</CardTitle></CardHeader>
+              <CardHeader><CardTitle class="wrap-break-words">{{ row.record_id }}</CardTitle></CardHeader>
               <CardContent class="flex min-w-0 flex-col gap-4">
-                <dl class="grid grid-cols-2 gap-3 text-sm"><div v-for="(cell, index) in evidenceSummaryCells(row)" :key="index" class="min-w-0"><dt class="text-muted-foreground">{{ columns[index] }}</dt><dd class="break-words">{{ cell }}</dd></div><div class="col-span-2 min-w-0"><dt class="text-muted-foreground">{{ issuesLabel }}</dt><dd><EvidenceRecordIssues :row="row" /></dd></div></dl>
-                <CollapsibleTrigger as-child><Button variant="outline" class="h-auto w-fit max-w-full whitespace-normal break-words" :aria-label="`${openRows[rowKey(row)] ? 'Hide' : 'View'} record ${row.record_type} ${row.record_id}`">{{ recordLabel(row) }}<ChevronDownIcon data-icon="inline-end" /></Button></CollapsibleTrigger>
+                <dl class="grid grid-cols-2 gap-3 text-sm"><div v-for="(cell, index) in evidenceSummaryCells(row)" :key="index" class="min-w-0"><dt class="text-muted-foreground">{{ columns[index] }}</dt><dd class="wrap-break-word">{{ cell }}</dd></div><div class="col-span-2 min-w-0"><dt class="text-muted-foreground">{{ issuesLabel }}</dt><dd><EvidenceRecordIssues :row="row" /></dd></div></dl>
+                <CollapsibleTrigger as-child><Button variant="outline" class="h-auto w-fit max-w-full whitespace-normal wrap-break-word" :aria-label="`${openRows[rowKey(row)] ? 'Hide' : 'View'} record ${row.record_type} ${row.record_id}`">{{ recordLabel(row) }}<ChevronDownIcon data-icon="inline-end" /></Button></CollapsibleTrigger>
                 <CollapsibleContent><EvidenceRecordDetails :row="row" /></CollapsibleContent>
               </CardContent>
             </Card>

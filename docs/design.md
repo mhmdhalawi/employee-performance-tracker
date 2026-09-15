@@ -75,6 +75,29 @@ points without joining across missing weeks, and preserves the separate evidence
 Insufficient-data reports keep the overall result withheld while showing auditable component
 trends.
 
+## Reporting date range — 2026-09-15
+
+The dashboard period control opens a compact dialog with quick ranges beside a two-month
+shadcn-vue RangeCalendar on desktop; phones show one month and stack the controls. Calendar
+range interiors use Cedar's pale teal secondary surface, endpoints use primary teal, and the
+quick-range selection uses the shared ToggleGroup's brand tone. Date text fields offer typed
+YYYY-MM-DD entry without a browser-native calendar popup. The existing white surfaces, Geist
+type, semantic borders, focus ring, and restrained gold attention treatment remain.
+
+The range highlighted in the dialog is a preview. The backend resolves rolling Last month,
+Last 6 months, and Last year presets against the latest evidence date and calculates the
+committed filtered response. Explicit custom ranges use inclusive UTC dates; setting both
+dates equal selects one day. The selected label changes with the successful response, and
+short ranges keep the existing insufficient-data status when evidence
+confidence is low.
+
+When a preset extends before the first canonical evidence date, the calendar preview keeps
+the full selected range. The dialog names the chosen preset and explains the missing earlier
+records. The calendar and typed custom dates also allow dates outside evidence coverage.
+After Apply, the dashboard badge retains the full selected dates; a separate note shows the
+available date window used for scores. Employee details and report previews preserve that
+same distinction.
+
 ## Original brand proposal and unresolved assets
 
 ## Goal

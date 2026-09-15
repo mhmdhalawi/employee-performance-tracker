@@ -118,6 +118,9 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
               </div>
               <CardTitle class="text-3xl">{{ analysis.applied_filters.team || 'All teams' }}</CardTitle>
               <CardDescription>Current dashboard filters are applied to every value in this preview.</CardDescription>
+              <CardDescription v-if="analysis.applied_filters.score_period_start_date && analysis.applied_filters.score_period_end_date && (analysis.applied_filters.score_period_start_date !== analysis.applied_filters.start_date || analysis.applied_filters.score_period_end_date !== analysis.applied_filters.end_date)">
+                Scores use available evidence: {{ formatDate(analysis.applied_filters.score_period_start_date) }} – {{ formatDate(analysis.applied_filters.score_period_end_date) }}.
+              </CardDescription>
             </div>
             <Badge v-if="analysis.applied_filters.start_date && analysis.applied_filters.end_date" variant="outline" class="w-fit whitespace-normal">
               <CalendarDaysIcon data-icon="inline-start" />

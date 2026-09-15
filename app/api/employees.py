@@ -18,9 +18,11 @@ async def employee_evidence(
     start_date: date | None = None,
     end_date: date | None = None,
     period_weeks: int | None = None,
+    period_preset: str | None = None,
     review_only: bool = False,
 ) -> EmployeeEvidenceResponse:
     response.headers["Cache-Control"] = "no-store"
     return await get_employee_evidence(
-        employee_id, kpi, page, page_size, start_date, end_date, period_weeks, review_only
+        employee_id, kpi, page, page_size, start_date, end_date, period_weeks,
+        review_only, period_preset
     )

@@ -10,6 +10,7 @@ import { toggleVariants } from '@/components/ui/toggle'
 
 type ToggleGroupVariants = VariantProps<typeof toggleVariants> & {
   spacing?: number
+  tone?: 'brand'
 }
 
 const props = defineProps<ToggleGroupItemProps & {
@@ -38,6 +39,7 @@ const forwardedProps = useForwardProps(delegatedProps)
         variant: context?.variant || variant,
         size: context?.size || size,
       }),
+      context?.tone === 'brand' && 'data-[state=on]:border-primary/30 data-[state=on]:bg-secondary data-[state=on]:text-primary',
       props.class)"
   >
     <slot v-bind="slotProps" />

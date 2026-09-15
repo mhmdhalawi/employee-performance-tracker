@@ -21,6 +21,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const isAuth = ref<boolean | undefined>(undefined)
 const dashboardRequestError = ref('')
 const analysis = ref<DashboardResponse | null>(null)
+const appliedRequestFilters = ref<DashboardFilters>({})
 const isSubmitting = ref(false)
 const isFiltering = ref(false)
 const filterError = ref('')
@@ -71,6 +72,7 @@ async function requestStoredDashboard(
     if (sequence !== requestSequence)
       return
     analysis.value = result
+    appliedRequestFilters.value = { ...filters }
   }
   catch (error) {
     if (sequence !== requestSequence)
@@ -108,6 +110,7 @@ watch(isAuth, (authenticated) => {
     <component
       :is="Component"
       :analysis="analysis"
+      :requested-filters="appliedRequestFilters"
       :is-filtering="isFiltering"
       :filter-error="filterError"
       @filters-change="requestStoredDashboard($event, true)"
