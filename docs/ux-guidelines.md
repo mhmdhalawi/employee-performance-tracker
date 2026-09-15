@@ -111,6 +111,14 @@ pagination, without modifying that snapshot or limiting PDF export. Actionable r
 have a subtle warning surface on desktop and mobile. Multiple findings on one record
 count once; source statuses alone do not become new findings.
 
+Each evidence table uses the dashboard's range, page-size Select, and page-navigation
+footer. Five rows remain the default; managers can choose 15, 30, or All independently
+for Productivity, Compliance, and Quality. A page-size change starts at page 1 and is
+committed only after a successful live fetch. All loads successive API pages of at most
+50 rows, checks their canonical freshness, and shows the complete selected mode. The
+report preview uses the same sizes locally against its complete snapshot; choosing a
+preview size never changes which records the PDF exports.
+
 Evidence updates keep the last successful rows and empty state visible. A reserved
 status line shows Updating records only after 180 ms, so fast responses do not flash a
 spinner or insert a large loading block. Open disclosures survive updates when their

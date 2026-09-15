@@ -34,6 +34,11 @@ Employee Details replaces its three standalone KPI score cards with three full-w
 
 Desktop uses semantic tables; phones use labeled record cards showing the same independently paginated records. Shared `EmployeeEvidenceTable.vue` and `EvidenceRecordDetails.vue` own both Employee Details and report preview presentation. IDs and text wrap, and shared Collapsible controls reveal full values, findings, scoring impacts, and safe evidence links.
 
+The evidence sections reuse the main dashboard table's white card, compact table,
+muted range-and-page-size footer, and outline page controls. Each KPI defaults to five
+rows and offers 15, 30, or All. The report preview uses those display options while
+retaining the complete employee/KPI record set for PDF export.
+
 The approved table simplification combines related dates/IDs and first-pass/rework fields,
 moves secondary source values into View record, and gives backend findings and exclusions
 a dedicated Issues column. `EvidenceRecordIssues.vue` shares issue presentation between

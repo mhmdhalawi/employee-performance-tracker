@@ -1,6 +1,7 @@
 import type { AnalysisFilters, ValidationFinding } from '@/types/analysis'
 
 export type EvidenceKpi = 'productivity' | 'compliance' | 'quality'
+export type EvidencePageSize = 5 | 15 | 30 | 'all'
 
 interface EvidenceRecord {
   record_id: string

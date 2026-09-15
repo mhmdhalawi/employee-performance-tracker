@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Spinner } from '@/components/ui/spinner'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import EvidenceRecordDetails from '@/components/dashboard/EvidenceRecordDetails.vue'
 import EvidenceRecordIssues from '@/components/dashboard/EvidenceRecordIssues.vue'
 import { evidenceSummaryCells, evidenceSummaryColumns, evidenceLabels, evidenceNeedsReview, evidenceCalculations } from '@/lib/employee-evidence'
 import { cn } from '@/lib/utils'
-import type { EmployeeEvidenceRow, EvidenceKpi } from '@/types/employee-evidence'
+import type { EmployeeEvidenceRow, EvidenceKpi, EvidencePageSize } from '@/types/employee-evidence'
 
 const props = withDefaults(defineProps<{
   kpi: EvidenceKpi
@@ -26,17 +27,18 @@ const props = withDefaults(defineProps<{
   needsReviewCount?: number
   reviewOnly?: boolean
   page?: number
-  pageSize?: number
+  pageSize?: EvidencePageSize
   loading?: boolean
   error?: string
   report?: boolean
   disabled?: boolean
 }>(), { page: 1, pageSize: 5, loading: false, error: '', report: false, disabled: false, reviewOnly: false })
-const emit = defineEmits<{ pageChange: [page: number], reviewChange: [reviewOnly: boolean], retry: [] }>()
+const emit = defineEmits<{ pageChange: [page: number], reviewChange: [reviewOnly: boolean], pageSizeChange: [pageSize: EvidencePageSize], retry: [] }>()
 const openRows = ref<Record<string, boolean>>({})
 const calculationOpen = ref(false)
 const previewPage = ref(1)
 const previewReviewOnly = ref(false)
+const previewPageSize = ref<EvidencePageSize>(5)
 const showUpdating = ref(false)
 let indicatorTimer: ReturnType<typeof setTimeout> | undefined
 watch(() => props.loading, loading => {
@@ -48,15 +50,17 @@ onScopeDispose(() => clearTimeout(indicatorTimer))
 const columns = computed(() => evidenceSummaryColumns(props.kpi))
 const issuesLabel = computed(() => props.kpi === 'compliance' ? 'Issues / scoring note' : 'Issues')
 const activePage = computed(() => props.report ? previewPage.value : props.page)
+const activePageSize = computed(() => props.report ? previewPageSize.value : props.pageSize)
+const numericPageSize = computed(() => activePageSize.value === 'all' ? Math.max(1, selectedTotal.value) : activePageSize.value)
 const activeReviewOnly = computed(() => props.report ? previewReviewOnly.value : props.reviewOnly)
 const reviewCount = computed(() => props.report ? props.rows.filter(evidenceNeedsReview).length : props.needsReviewCount)
 const allCount = computed(() => props.allRecordsCount ?? props.total)
 const previewRows = computed(() => previewReviewOnly.value ? props.rows.filter(evidenceNeedsReview) : props.rows)
 const selectedTotal = computed(() => props.report ? previewRows.value.length : props.total)
 const visibleRows = computed(() => props.report
-  ? previewRows.value.slice((previewPage.value - 1) * props.pageSize, previewPage.value * props.pageSize)
+  ? previewRows.value.slice((previewPage.value - 1) * numericPageSize.value, previewPage.value * numericPageSize.value)
   : props.rows)
-const range = computed(() => selectedTotal.value === 0 ? '0 records' : `Records ${(activePage.value - 1) * props.pageSize + 1}–${Math.min(activePage.value * props.pageSize, selectedTotal.value)} of ${selectedTotal.value}${activeReviewOnly.value ? ' needing review' : ''}`)
+const range = computed(() => selectedTotal.value === 0 ? '0–0 of 0' : `${(activePage.value - 1) * numericPageSize.value + 1}–${Math.min(activePage.value * numericPageSize.value, selectedTotal.value)} of ${selectedTotal.value}${activeReviewOnly.value ? ' needing review' : ''}`)
 function rowKey(row: EmployeeEvidenceRow): string { return `${row.record_type}:${row.record_id}` }
 function recordLabel(row: EmployeeEvidenceRow): string {
   return `${openRows.value[rowKey(row)] ? 'Hide' : 'View'} record`
@@ -64,6 +68,13 @@ function recordLabel(row: EmployeeEvidenceRow): string {
 function changePage(page: number): void {
   if (props.report) previewPage.value = page
   else emit('pageChange', page)
+}
+function changePageSize(value: unknown): void {
+  if (value !== '5' && value !== '15' && value !== '30' && value !== 'all') return
+  const size = value === 'all' ? 'all' : Number(value) as 5 | 15 | 30
+  if (props.loading || props.disabled || size === activePageSize.value) return
+  if (props.report) { previewPageSize.value = size; previewPage.value = 1 }
+  else emit('pageSizeChange', size)
 }
 function changeFilter(value: unknown): void {
   if (value !== 'all' && value !== 'review') return
@@ -116,7 +127,7 @@ watch(() => props.rows, rows => {
       </Button>
     </CardHeader>
     <CardContent class="flex min-w-0 flex-col gap-4" :aria-busy="loading">
-      <p v-if="report" class="text-sm text-muted-foreground">All {{ total }} records are included in the PDF. Browse the preview below.</p>
+      <p v-if="report" class="text-sm text-muted-foreground">All {{ total }} records are included in the PDF. Choose how many to show in this preview.</p>
       <ToggleGroup type="single" variant="outline" :model-value="activeReviewOnly ? 'review' : 'all'" :data-busy="loading && !disabled && reviewCount !== undefined" :disabled="loading || disabled || reviewCount === undefined" :aria-label="`${evidenceLabels[kpi]} record filter`" @update:model-value="changeFilter">
         <ToggleGroupItem value="all">All records ({{ reviewCount === undefined ? '…' : allCount }})</ToggleGroupItem>
         <ToggleGroupItem value="review">Needs review ({{ reviewCount ?? '…' }})</ToggleGroupItem>
@@ -171,11 +182,18 @@ watch(() => props.rows, rows => {
         <p class="text-xs text-muted-foreground md:hidden">No findings does not imply perfect performance or scoring eligibility. Source statuses do not replace calculated results.<template v-if="kpi === 'compliance'"> Approved annual and sick leave are neutral.</template></p>
       </template>
     </CardContent>
-    <CardFooter class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-sm text-muted-foreground" aria-live="polite">{{ range }}</p>
+    <CardFooter class="flex flex-col gap-4 sm:flex-row sm:justify-between">
+      <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground" aria-live="polite">
+        <span>{{ range }}</span>
+        <Select :model-value="String(activePageSize)" :disabled="loading || disabled" @update:model-value="changePageSize">
+          <SelectTrigger class="w-20" :aria-label="`${evidenceLabels[kpi]} rows per page`"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectGroup><SelectItem value="5">5</SelectItem><SelectItem value="15">15</SelectItem><SelectItem value="30">30</SelectItem><SelectItem value="all">All</SelectItem></SelectGroup></SelectContent>
+        </Select>
+        <span>rows per page</span>
+      </div>
       <nav class="flex gap-2" :aria-label="`${evidenceLabels[kpi]} evidence pages`">
         <Button variant="outline" size="sm" :data-busy="loading && !disabled && activePage > 1" :disabled="loading || disabled || activePage <= 1" @click="changePage(activePage - 1)"><ChevronLeftIcon data-icon="inline-start" />Previous</Button>
-        <Button variant="outline" size="sm" :data-busy="loading && !disabled && activePage * pageSize < selectedTotal" :disabled="loading || disabled || activePage * pageSize >= selectedTotal" @click="changePage(activePage + 1)">Next<ChevronRightIcon data-icon="inline-end" /></Button>
+        <Button variant="outline" size="sm" :data-busy="loading && !disabled && activePage * numericPageSize < selectedTotal" :disabled="loading || disabled || activePage * numericPageSize >= selectedTotal" @click="changePage(activePage + 1)">Next<ChevronRightIcon data-icon="inline-end" /></Button>
       </nav>
     </CardFooter>
   </Card>

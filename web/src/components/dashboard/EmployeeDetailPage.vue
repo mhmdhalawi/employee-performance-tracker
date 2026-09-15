@@ -318,9 +318,9 @@ function scoreChange(value: number | null): string {
           :rows="evidenceStates[item.kpi].data?.rows ?? []" :total="evidenceStates[item.kpi].data?.total_count ?? 0"
           :all-records-count="evidenceStates[item.kpi].data?.all_records_count" :needs-review-count="evidenceStates[item.kpi].data?.needs_review_count"
           :review-only="evidenceStates[item.kpi].data?.review_only ?? false"
-          :page="evidenceStates[item.kpi].data?.page ?? 1" :loading="evidenceStates[item.kpi].loading"
+          :page="evidenceStates[item.kpi].data?.page ?? 1" :page-size="evidenceStates[item.kpi].committedPageSize" :loading="evidenceStates[item.kpi].loading"
           :error="evidenceStates[item.kpi].error" :disabled="isRefreshing"
-          @page-change="loadEvidence(item.kpi, $event, evidenceStates[item.kpi].data?.review_only ?? false)" @review-change="loadEvidence(item.kpi, 1, $event)" @retry="loadEvidence(item.kpi)" />
+          @page-change="loadEvidence(item.kpi, $event, evidenceStates[item.kpi].data?.review_only ?? false, evidenceStates[item.kpi].committedPageSize)" @review-change="loadEvidence(item.kpi, 1, $event, evidenceStates[item.kpi].committedPageSize)" @page-size-change="loadEvidence(item.kpi, 1, evidenceStates[item.kpi].data?.review_only ?? false, $event)" @retry="loadEvidence(item.kpi)" />
       </section>
 
     </div>
