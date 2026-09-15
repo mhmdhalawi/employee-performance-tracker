@@ -56,6 +56,20 @@ The portrait employee PDF presents scores, relevant Needs attention issues, and 
 See [evidence read contracts](persistence.md#employee-evidence-reads) and
 [implementation verification](ux-guidelines.md#employee-review-verification--2026-09-14).
 
+## Employee weekly trends — 2026-09-15
+
+The home dashboard, Employee Details, and employee report preview share one weekly KPI chart
+component. Employee Details loads the backend's existing dashboard trend contract with the
+employee ID and active resolved dates; the report preview uses the employee-scoped trend points
+in its snapshot. All three views retain Cedar's teal Productivity, gold Compliance, and dark
+Quality series, the visible legend, missing-score gaps, and an expandable exact-values table.
+
+The browser-generated employee PDF draws those same snapshot points as a compact vector chart
+above its weekly-values table. It labels the score scale and series patterns, shows isolated
+points without joining across missing weeks, and preserves the separate evidence appendix.
+Insufficient-data reports keep the overall result withheld while showing auditable component
+trends.
+
 ## Original brand proposal and unresolved assets
 
 ## Goal

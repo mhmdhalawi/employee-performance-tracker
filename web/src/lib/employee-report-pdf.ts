@@ -1,5 +1,6 @@
-import type { Content, ContentColumns, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
+import type { CanvasElement, Content, ContentColumns, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
 import type { EmployeeReportData, ReportFinding } from '@/types/reports'
+import type { KpiTrendPoint } from '@/types/analysis'
 import type { EmployeeEvidenceRow, EvidenceKpi } from '@/types/employee-evidence'
 import { needsAttention } from '@/lib/employee-presentation'
 import { evidenceCells, evidenceDetails, evidenceImpact, evidenceDescriptions, evidenceLabels, evidenceLink } from '@/lib/employee-evidence'
@@ -9,6 +10,7 @@ const cedarLight = '#E7F3F3'
 const ink = '#0D0D0D'
 const muted = '#555B59'
 const line = '#D8DDDC'
+const compliance = '#C18426'
 
 export async function downloadEmployeeReportPdf(report: EmployeeReportData): Promise<void> {
   const bytes = await createEmployeeReportPdfBytes(report)
@@ -97,7 +99,7 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
         margin: [0, 6, 0, 16],
       },
       ...attentionBlocks,
-      { text: 'Weekly trend', style: 'sectionTitle' },
+      trendChart(report.trends),
       trendTable(report),
       { text: report.manager_review_notice, style: 'notice', margin: [0, 12, 0, 0] },
       { text: 'Employee performance records', style: 'title', pageBreak: 'before' },
@@ -231,11 +233,87 @@ function trendTable(report: EmployeeReportData): Content {
       vLineColor: () => line,
       paddingLeft: () => 5,
       paddingRight: () => 5,
-      paddingTop: () => 4,
-      paddingBottom: () => 4,
+      paddingTop: () => 2,
+      paddingBottom: () => 2,
     },
     fontSize: 7,
     margin: [0, 5, 0, 0],
+  }
+}
+
+function trendChart(trends: KpiTrendPoint[]): Content {
+  if (!trends.length)
+    return { text: 'Weekly KPI trend', style: 'sectionTitle' }
+
+  const left = 8
+  const right = 450
+  const top = 8
+  const bottom = 98
+  const x = (index: number) => trends.length === 1 ? (left + right) / 2
+    : left + (right - left) * index / (trends.length - 1)
+  const y = (value: number) => bottom - Math.max(0, Math.min(100, value)) * (bottom - top) / 100
+  const canvas: CanvasElement[] = [
+    ...[top, (top + bottom) / 2, bottom].map(position => ({
+      type: 'line' as const, x1: left, y1: position, x2: right, y2: position,
+      lineColor: line, lineWidth: 0.5,
+    })),
+  ]
+  const series: { field: 'productivity_score' | 'compliance_score' | 'quality_score', color: string, dash?: { length: number, space: number } }[] = [
+    { field: 'productivity_score', color: cedar },
+    { field: 'compliance_score', color: compliance, dash: { length: 6, space: 3 } },
+    { field: 'quality_score', color: ink, dash: { length: 2, space: 3 } },
+  ]
+  for (const item of series) {
+    for (let index = 0; index < trends.length; index++) {
+      const value = trends[index]![item.field]
+      if (value === null) continue
+      if (index > 0) {
+        const previous = trends[index - 1]![item.field]
+        if (previous !== null) {
+          canvas.push({
+            type: 'line', x1: x(index - 1), y1: y(previous), x2: x(index), y2: y(value),
+            lineColor: item.color, lineWidth: 1.8, dash: item.dash,
+          })
+        }
+      }
+      canvas.push({ type: 'ellipse', x: x(index), y: y(value), r1: 1.7, color: item.color })
+    }
+  }
+
+  return {
+    unbreakable: true,
+    stack: [
+      { text: 'Weekly KPI trend', style: 'sectionTitle', margin: [0, 0, 0, 5] },
+      { text: 'Employee scores by week. Gaps mean no score is available.', color: muted, fontSize: 8, margin: [0, 0, 0, 5] },
+      {
+        columns: [
+          { text: 'Productivity · solid', color: cedar },
+          { text: 'Compliance · dashed', color: muted },
+          { text: 'Quality · dotted', color: ink },
+        ],
+        fontSize: 8,
+        margin: [0, 0, 0, 5],
+      },
+      {
+        columns: [
+          { width: 27, stack: [
+            { text: '100%', margin: [0, 4, 0, 37] },
+            { text: '50%', margin: [0, 0, 0, 37] },
+            { text: '0%' },
+          ], fontSize: 7, color: muted },
+          { width: '*', canvas },
+        ],
+      },
+      {
+        columns: [
+          { text: formatDate(trends[0]!.period_end) },
+          { text: formatDate(trends[trends.length - 1]!.period_end), alignment: 'right' },
+        ],
+        color: muted,
+        fontSize: 7,
+        margin: [27, 1, 0, 7],
+      },
+    ],
   }
 }
 

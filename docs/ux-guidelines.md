@@ -68,6 +68,12 @@ weights. The Evidence confidence explanation, detailed arithmetic, and the
 required-evidence checklist are omitted from this disclosure;
 backend explanations, evidence, scores, and report payloads remain unchanged.
 
+`WeeklyKpiTrend.vue` owns the shared chart, legend, missing-score gaps, and exact weekly-values
+disclosure on the dashboard, Employee Details, and employee report preview. Employee Details
+requests employee-scoped trends with its current resolved dates and refreshes when the canonical
+submission timestamp differs. Report preview and PDF use the report snapshot's own trends, so
+the generated file cannot drift from the preview.
+
 ## Employee table content
 
 | KPI | On-page columns |

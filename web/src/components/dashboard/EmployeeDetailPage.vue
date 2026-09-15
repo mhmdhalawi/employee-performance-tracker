@@ -21,6 +21,7 @@ import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
 import EmployeeEvidenceTable from '@/components/dashboard/EmployeeEvidenceTable.vue'
 import EmployeeAttentionSummary from '@/components/dashboard/EmployeeAttentionSummary.vue'
 import EmployeeCalculationDetails from '@/components/dashboard/EmployeeCalculationDetails.vue'
+import WeeklyKpiTrend from '@/components/dashboard/WeeklyKpiTrend.vue'
 import { evidenceDescriptions } from '@/lib/employee-evidence'
 import { attentionOutsideRecords } from '@/lib/employee-presentation'
 import { useEmployeeEvidence } from '@/composables/useEmployeeEvidence'
@@ -28,7 +29,7 @@ import type { EvidenceKpi } from '@/types/employee-evidence'
 import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { downloadEmployeeReportPdf } from '@/lib/employee-report-pdf'
-import type { AnalysisFilters, EmployeeKpiResult, ErrorPayload, PerformanceAlert } from '@/types/analysis'
+import type { AnalysisFilters, DashboardResponse, EmployeeKpiResult, ErrorPayload, KpiTrendPoint, PerformanceAlert } from '@/types/analysis'
 import type { EmployeeReportData, EmployeeReportPreviewResponse, EmployeeReportRequest } from '@/types/reports'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
@@ -52,8 +53,15 @@ const reportLoading = ref(false)
 const reportDownloading = ref(false)
 const reportError = ref('')
 const reportDownloadError = ref('')
+const employeeTrends = ref<KpiTrendPoint[] | null>(null)
+const trendsLoading = ref(false)
+const trendsError = ref('')
+const trendsStale = ref(false)
 let reportController: AbortController | null = null
 let reportSequence = 0
+let trendsController: AbortController | null = null
+let trendsSequence = 0
+let trendsRefreshRequested = false
 const { states: evidenceStates, load: loadEvidence } = useEmployeeEvidence(
   () => ({ employeeId: props.employee.employee_id, period: props.reportingPeriod, latestSubmissionAt: props.latestSubmissionAt }),
   () => emit('refresh'),
@@ -65,7 +73,17 @@ watch(() => `${props.employee.employee_id}:${JSON.stringify(props.reportingPerio
   reportPreview.value = null
   reportLoading.value = false
 })
-onScopeDispose(() => { reportSequence++; reportController?.abort() })
+watch(() => [props.employee.employee_id, props.reportingPeriod, props.latestSubmissionAt], () => {
+  trendsRefreshRequested = false
+  employeeTrends.value = null
+  void loadEmployeeTrends()
+}, { immediate: true })
+onScopeDispose(() => {
+  reportSequence++
+  reportController?.abort()
+  trendsSequence++
+  trendsController?.abort()
+})
 
 const kpiSections = computed(() => [
   {
@@ -108,6 +126,45 @@ function reportRequest(): EmployeeReportRequest | null {
     start_date: props.reportingPeriod.start_date,
     end_date: props.reportingPeriod.end_date,
   }
+}
+
+async function loadEmployeeTrends(): Promise<void> {
+  const sequence = ++trendsSequence
+  trendsController?.abort()
+  const controller = new AbortController()
+  trendsController = controller
+  trendsLoading.value = true
+  trendsError.value = ''
+  trendsStale.value = false
+  const employeeId = props.employee.employee_id
+  const latestSubmissionAt = props.latestSubmissionAt
+  const query = new URLSearchParams({ employee_id: employeeId })
+  if (props.reportingPeriod.start_date) query.set('start_date', props.reportingPeriod.start_date)
+  if (props.reportingPeriod.end_date) query.set('end_date', props.reportingPeriod.end_date)
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/dashboard?${query}`, { signal: controller.signal })
+    if (!response.ok) {
+      const payload = await response.json() as ErrorPayload
+      throw new Error(payload.error?.message ?? 'Weekly trends could not be loaded.')
+    }
+    const payload = await response.json() as DashboardResponse
+    if (sequence !== trendsSequence) return
+    if (new Date(payload.latest_submission_at).getTime() !== new Date(latestSubmissionAt).getTime()) {
+      employeeTrends.value = null
+      trendsStale.value = true
+      trendsError.value = 'Employee data has changed. Refreshing the results and trends.'
+      if (!trendsRefreshRequested) { trendsRefreshRequested = true; emit('refresh') }
+      return
+    }
+    employeeTrends.value = payload.trends
+  }
+  catch (error) {
+    if (sequence !== trendsSequence || controller.signal.aborted) return
+    trendsError.value = error instanceof TypeError
+      ? 'Weekly trends are temporarily unavailable. Retry to load them.'
+      : error instanceof Error ? error.message : 'Weekly trends could not be loaded.'
+  }
+  finally { if (sequence === trendsSequence) trendsLoading.value = false }
 }
 
 async function generateReportPreview(): Promise<void> {
@@ -242,6 +299,20 @@ function scoreChange(value: number | null): string {
       </Alert>
       <p v-if="isRefreshing" role="status" class="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Refreshing employee results and evidence…</p>
       <EmployeeAttentionSummary :items="generalAttention" />
+      <div v-if="trendsLoading && employeeTrends === null" role="status" class="flex min-h-96 items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Spinner />Loading employee trends…
+      </div>
+      <Alert v-else-if="trendsError" :variant="trendsStale ? 'warning' : 'destructive'">
+        <AlertTitle>Weekly trend unavailable</AlertTitle>
+        <AlertDescription class="flex flex-col gap-2">
+          <p>{{ trendsError }}</p>
+          <Button variant="outline" class="w-fit" :disabled="trendsLoading || isRefreshing" @click="trendsStale ? emit('refresh') : loadEmployeeTrends()">
+            {{ trendsStale ? 'Retry results' : 'Retry trend' }}
+          </Button>
+        </AlertDescription>
+      </Alert>
+      <WeeklyKpiTrend v-else-if="employeeTrends !== null" :trends="employeeTrends"
+        description="This employee and the selected reporting period apply. Gaps mean no score is available." />
       <section aria-label="KPI evidence" class="flex min-w-0 flex-col gap-6">
         <EmployeeEvidenceTable v-for="item in kpiSections" :key="item.kpi"
           :kpi="item.kpi" :score="item.score" :weight="item.weight" :explanation="evidenceDescriptions[item.kpi]"
@@ -356,6 +427,8 @@ function scoreChange(value: number | null): string {
               </CardContent>
             </Card>
 
+            <WeeklyKpiTrend :trends="reportPreview.trends"
+              description="This employee and the report period apply. Gaps mean no score is available." />
             <EmployeeAttentionSummary :items="reportGeneralAttention" />
             <EmployeeEvidenceTable v-for="kpi in reportPreview.kpis" :key="kpi.name"
               :kpi="kpi.name.toLowerCase() as EvidenceKpi" :score="kpi.score" :weight="kpi.weight" :explanation="evidenceDescriptions[kpi.name.toLowerCase() as EvidenceKpi]"
