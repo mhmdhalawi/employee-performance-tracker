@@ -1,6 +1,6 @@
 {
   "tolerance": 0.1,
-  "default": {"productivity_score":100.0,"compliance_score":100.0,"quality_score":100.0,"data_confidence":100.0,"overall_score":100.0,"result_status":"Top performer"},
+  "default": {"productivity_score":100.0,"compliance_score":100.0,"quality_score":100.0,"data_confidence":100.0,"overall_score":100.0,"result_status":"Top Performer"},
   "overrides": {
     "EMP-027":{"data_confidence":60.0,"overall_score":null,"result_status":"Insufficient data"},
     "EMP-028":{"data_confidence":60.0,"overall_score":null,"result_status":"Insufficient data"},

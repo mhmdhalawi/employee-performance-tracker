@@ -103,7 +103,8 @@ def calculate_kpis(
             if score_is_allowed
             else None
         )
-        performance_tier = metrics.performance_tier(overall)
+        rounded_overall = round(overall, 2) if overall is not None else None
+        performance_tier = metrics.performance_tier(rounded_overall)
         results.append(
             KpiResult(
                 employee_id=employee.employee_id,
@@ -117,7 +118,7 @@ def calculate_kpis(
                 data_confidence=round(confidence, 2),
                 confidence_threshold=round(confidence_threshold, 2),
                 confidence_reason=confidence_reason,
-                overall_score=round(overall, 2) if overall is not None else None,
+                overall_score=rounded_overall,
                 result_status=performance_tier or "Insufficient data",
                 performance_tier=performance_tier,
                 supporting_record_ids=_supporting_record_ids(evidence),

@@ -176,13 +176,15 @@ def leave_in_period(
 def performance_tier(overall: float | None) -> str | None:
     if overall is None:
         return None
+    if overall >= 95:
+        return "Top Performer"
     if overall >= 90:
-        return "Top performer"
+        return "Excellent"
     if overall >= 80:
-        return "Strong"
+        return "Good"
     if overall >= 70:
-        return "Solid"
-    return "Needs support"
+        return "Average"
+    return "Underperforming"
 
 
 def evidence_confidence(

@@ -16,6 +16,7 @@ from app.services.performance import (
     calculate_kpis,
     validate_dataset,
 )
+from app.services.performance.metrics import performance_tier
 
 
 class PerformanceQaTests(TestCase):
@@ -27,7 +28,24 @@ class PerformanceQaTests(TestCase):
         self.assertEqual(result.quality_score, 100)
         self.assertEqual(result.data_confidence, 100)
         self.assertEqual(result.overall_score, 100)
-        self.assertEqual(result.result_status, "Top performer")
+        self.assertEqual(result.result_status, "Top Performer")
+
+    def test_overall_score_status_bands(self) -> None:
+        cases = (
+            (100.0, "Top Performer"),
+            (95.0, "Top Performer"),
+            (94.99, "Excellent"),
+            (90.0, "Excellent"),
+            (89.99, "Good"),
+            (80.0, "Good"),
+            (79.99, "Average"),
+            (70.0, "Average"),
+            (69.99, "Underperforming"),
+            (None, None),
+        )
+        for score, expected in cases:
+            with self.subTest(score=score):
+                self.assertEqual(performance_tier(score), expected)
 
     def test_duplicate_attendance_is_flagged_excluded_and_traceable(self) -> None:
         dataset = _dataset()

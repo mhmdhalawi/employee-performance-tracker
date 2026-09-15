@@ -12,6 +12,17 @@ When it falls below the configured threshold (70% by default), component KPIs re
 for auditability but the overall score and performance tier are withheld as
 `Insufficient data`.
 
+Eligible overall scores are rounded to two decimals before assigning a status, so the
+status matches the score displayed by the API and reports.
+
+| Overall score | Status |
+| --- | --- |
+| 95–100% | Top Performer |
+| 90–94.99% | Excellent |
+| 80–89.99% | Good |
+| 70–79.99% | Average |
+| Below 70% | Underperforming |
+
 | KPI family | Required evidence | Missing-evidence behavior |
 | --- | --- | --- |
 | Productivity | Verified `completion_status`; `actual_effort_hours` for completed work | Lower productivity evidence coverage; do not substitute zero effort or performance |
