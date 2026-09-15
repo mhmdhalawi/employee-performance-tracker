@@ -20,7 +20,6 @@ import ReportPreviewContent from '@/components/dashboard/ReportPreviewContent.vu
 import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
 import EmployeeEvidenceTable from '@/components/dashboard/EmployeeEvidenceTable.vue'
 import EmployeeAttentionSummary from '@/components/dashboard/EmployeeAttentionSummary.vue'
-import EmployeeCalculationDetails from '@/components/dashboard/EmployeeCalculationDetails.vue'
 import WeeklyKpiTrend from '@/components/dashboard/WeeklyKpiTrend.vue'
 import { evidenceDescriptions } from '@/lib/employee-evidence'
 import { attentionOutsideRecords } from '@/lib/employee-presentation'
@@ -324,7 +323,6 @@ function scoreChange(value: number | null): string {
           @page-change="loadEvidence(item.kpi, $event, evidenceStates[item.kpi].data?.review_only ?? false)" @review-change="loadEvidence(item.kpi, 1, $event)" @retry="loadEvidence(item.kpi)" />
       </section>
 
-      <EmployeeCalculationDetails />
     </div>
 
     <Dialog v-model:open="reportPreviewOpen">
@@ -434,7 +432,6 @@ function scoreChange(value: number | null): string {
               :kpi="kpi.name.toLowerCase() as EvidenceKpi" :score="kpi.score" :weight="kpi.weight" :explanation="evidenceDescriptions[kpi.name.toLowerCase() as EvidenceKpi]"
               :rows="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].rows"
               :total="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].total_count" report />
-            <EmployeeCalculationDetails />
             <Alert>
               <ShieldCheckIcon aria-hidden="true" />
               <AlertTitle>Manager review required</AlertTitle>

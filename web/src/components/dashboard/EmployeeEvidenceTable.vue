@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, ref, watch } from 'vue'
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TriangleAlertIcon } from '@lucide/vue'
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CircleHelpIcon, TriangleAlertIcon } from '@lucide/vue'
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import EvidenceRecordDetails from '@/components/dashboard/EvidenceRecordDetails.vue'
 import EvidenceRecordIssues from '@/components/dashboard/EvidenceRecordIssues.vue'
-import { evidenceSummaryCells, evidenceSummaryColumns, evidenceLabels, evidenceNeedsReview } from '@/lib/employee-evidence'
+import { evidenceSummaryCells, evidenceSummaryColumns, evidenceLabels, evidenceNeedsReview, evidenceCalculations } from '@/lib/employee-evidence'
 import { cn } from '@/lib/utils'
 import type { EmployeeEvidenceRow, EvidenceKpi } from '@/types/employee-evidence'
 
@@ -33,6 +34,7 @@ const props = withDefaults(defineProps<{
 }>(), { page: 1, pageSize: 5, loading: false, error: '', report: false, disabled: false, reviewOnly: false })
 const emit = defineEmits<{ pageChange: [page: number], reviewChange: [reviewOnly: boolean], retry: [] }>()
 const openRows = ref<Record<string, boolean>>({})
+const calculationOpen = ref(false)
 const previewPage = ref(1)
 const previewReviewOnly = ref(false)
 const showUpdating = ref(false)
@@ -80,9 +82,30 @@ watch(() => props.rows, rows => {
 <template>
   <Card class="min-w-0" :aria-label="`${evidenceLabels[kpi]} evidence`">
     <CardHeader>
-      <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div class="flex min-w-0 flex-col gap-1">
-          <CardTitle><h2>{{ evidenceLabels[kpi] }} evidence</h2></CardTitle>
+          <CardTitle>
+            <h2 :aria-label="`${evidenceLabels[kpi]} evidence`">
+              {{ evidenceLabels[kpi] }}
+              <span class="inline-flex items-center gap-0.5 align-middle">
+                evidence
+                <PopoverRoot v-if="!report" v-model:open="calculationOpen">
+                  <PopoverTrigger as-child>
+                    <Button variant="ghost" size="icon-sm" class="size-7 rounded-full"
+                      :aria-label="`How ${evidenceLabels[kpi]} score is calculated`">
+                      <CircleHelpIcon aria-hidden="true" class="size-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverPortal>
+                    <PopoverContent side="bottom" align="start" :side-offset="6" class="z-[60] w-56 max-w-[calc(100vw-2rem)] rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md outline-none"
+                      :aria-label="`${evidenceLabels[kpi]} calculation`">
+                      {{ evidenceCalculations[kpi] }}
+                    </PopoverContent>
+                  </PopoverPortal>
+                </PopoverRoot>
+              </span>
+            </h2>
+          </CardTitle>
           <CardDescription>{{ weight }}% of overall</CardDescription>
         </div>
         <strong class="text-3xl tabular-nums" :aria-label="`${evidenceLabels[kpi]} score`">{{ score === null ? '—' : `${score.toFixed(1)}%` }}</strong>

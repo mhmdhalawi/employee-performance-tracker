@@ -61,9 +61,9 @@ such as missing performance targets. Informational findings with no scoring impa
 omitted. Page fallback uses validated record-family findings; report preview checks its
 complete evidence snapshot. Supporting records retain safe HTTPS links and IDs.
 
-`EmployeeCalculationDetails.vue` owns the optional, initially collapsed calculation reference on both views. Main table descriptions label work, attendance/report/leave, and quality data without formulas. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. Report payload values and download snapshot handling remain unchanged.
+`EmployeeEvidenceTable.vue` owns a help icon beside “evidence” in each KPI heading on Employee Details; report preview omits it. Its floating, initially closed calculation panel opens by click, tap, or keyboard and shows only the matching Productivity, Compliance, or Quality sentence; Escape closes it. The separate Calculation details card has been removed. Main table descriptions still label work, attendance/report/leave, and quality data without formulas. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. Report payload values and download snapshot handling remain unchanged.
 
-Calculation details now uses one short sentence per KPI for its documented component
+Each table calculation panel uses one short sentence for its documented component
 weights. The Evidence confidence explanation, detailed arithmetic, and the
 required-evidence checklist are omitted from this disclosure;
 backend explanations, evidence, scores, and report payloads remain unchanged.

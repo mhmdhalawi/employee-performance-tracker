@@ -30,7 +30,7 @@ Remaining follow-ups include sign-in refinements, official compact/reversed logo
 
 ## Employee evidence tables — 2026-09-14
 
-Employee Details replaces its three standalone KPI score cards with three full-width evidence sections, ordered Productivity, Compliance, and Quality. Each header retains the backend score and overall weight with a short performance-record description. Calculation explanations are available in an optional collapsed disclosure. Overall result and evidence confidence retain their existing sections.
+Employee Details replaces its three standalone KPI score cards with three full-width evidence sections, ordered Productivity, Compliance, and Quality. Each header retains the backend score and overall weight with a short performance-record description. On Employee Details, a small help icon beside “evidence” in each KPI heading opens that KPI's calculation sentence in a floating panel; the report preview omits these icons. There is no separate calculation card. Overall result and evidence confidence retain their existing sections.
 
 Desktop uses semantic tables; phones use labeled record cards showing the same independently paginated records. Shared `EmployeeEvidenceTable.vue` and `EvidenceRecordDetails.vue` own both Employee Details and report preview presentation. IDs and text wrap, and shared Collapsible controls reveal full values, findings, scoring impacts, and safe evidence links.
 

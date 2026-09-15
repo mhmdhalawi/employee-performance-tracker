@@ -11,6 +11,11 @@ export const evidenceDescriptions: Record<EvidenceKpi, string> = {
   compliance: 'Attendance, report submissions, and leave records.',
   quality: 'Work accuracy, first-pass approval, and rework.',
 }
+export const evidenceCalculations: Record<EvidenceKpi, string> = {
+  productivity: '60% completion, 40% time efficiency.',
+  compliance: '50% attendance, 35% reporting, 15% leave compliance.',
+  quality: '60% accuracy, 25% first-pass approval, 15% rework.',
+}
 export function evidenceDate(value: string | null): string {
   return value === null ? 'Not provided' : new Intl.DateTimeFormat('en', {
     dateStyle: 'medium', timeZone: 'UTC',
