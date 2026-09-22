@@ -9,6 +9,10 @@ const ink = '#0D0D0D'
 const muted = '#555B59'
 const line = '#D8DDDC'
 
+function scoredPopulation(count: number): string {
+  return `${count} scored employee${count === 1 ? '' : 's'}`
+}
+
 const kpiDetails: Record<DashboardKpi, { label: string, weight: number, description: string }> = {
   productivity: {
     label: 'Productivity',
@@ -71,16 +75,17 @@ function downloadPdf(bytes: Uint8Array, filename: string): void {
 
 function teamDocumentDefinition(analysis: DashboardResponse): TDocumentDefinitions {
   const team = analysis.applied_filters.team || 'All teams'
+  const population = scoredPopulation(analysis.summary.scored_employee_count)
   const content: Content[] = [
     reportHeading('Team performance', team, analysis),
     {
       table: {
         widths: ['*', '*', '*', '*'],
         body: [[
-          metricCell('Overall average', optionalScore(analysis.summary.average_overall_score), 'Scored employees only'),
-          metricCell('Productivity', optionalScore(analysis.summary.average_productivity_score), '35% of overall'),
-          metricCell('Compliance', optionalScore(analysis.summary.average_compliance_score), '30% of overall'),
-          metricCell('Quality', optionalScore(analysis.summary.average_quality_score), '35% of overall'),
+          metricCell('Overall average', optionalScore(analysis.summary.average_overall_score), population),
+          metricCell('Productivity', optionalScore(analysis.summary.average_productivity_score), `${population} · 35% of overall`),
+          metricCell('Compliance', optionalScore(analysis.summary.average_compliance_score), `${population} · 30% of overall`),
+          metricCell('Quality', optionalScore(analysis.summary.average_quality_score), `${population} · 35% of overall`),
         ]],
       },
       layout: cardLayout(),
@@ -111,7 +116,7 @@ function kpiDocumentDefinition(analysis: DashboardResponse, kpi: DashboardKpi): 
       table: {
         widths: ['*', '*', '*'],
         body: [[
-          metricCell('Average score', optionalScore(average), `${analysis.summary.total_employee_count} employees`),
+          metricCell('Average score', optionalScore(average), scoredPopulation(analysis.summary.scored_employee_count)),
           metricCell('Overall weight', `${details.weight}%`, 'Configured contribution'),
           metricCell('Reporting status', `${analysis.summary.scored_employee_count} scored`, `${analysis.summary.insufficient_data_count} withheld`),
         ]],

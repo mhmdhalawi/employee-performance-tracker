@@ -96,12 +96,16 @@ const lastVisibleRow = computed(() => Math.min(
   currentPage.value * numericPageSize.value,
   filteredRows.value.length,
 ))
-const summaryCards = computed(() => [
-  { label: 'Overall score', value: props.analysis.summary.average_overall_score, detail: 'Scored employees only', color: 'var(--primary)', kpi: null },
-  { label: 'Productivity', value: props.analysis.summary.average_productivity_score, detail: '35% of overall', color: 'var(--chart-1)', kpi: 'productivity' as const },
-  { label: 'Compliance', value: props.analysis.summary.average_compliance_score, detail: '30% of overall', color: 'var(--chart-2)', kpi: 'compliance' as const },
-  { label: 'Quality', value: props.analysis.summary.average_quality_score, detail: '35% of overall', color: 'var(--chart-3)', kpi: 'quality' as const },
-])
+const summaryCards = computed(() => {
+  const count = props.analysis.summary.scored_employee_count
+  const population = `${count} scored employee${count === 1 ? '' : 's'}`
+  return [
+    { label: 'Overall score', value: props.analysis.summary.average_overall_score, detail: population, color: 'var(--primary)', kpi: null },
+    { label: 'Productivity', value: props.analysis.summary.average_productivity_score, detail: `${population} · 35% of overall`, color: 'var(--chart-1)', kpi: 'productivity' as const },
+    { label: 'Compliance', value: props.analysis.summary.average_compliance_score, detail: `${population} · 30% of overall`, color: 'var(--chart-2)', kpi: 'compliance' as const },
+    { label: 'Quality', value: props.analysis.summary.average_quality_score, detail: `${population} · 35% of overall`, color: 'var(--chart-3)', kpi: 'quality' as const },
+  ]
+})
 
 const alertCountsByEmployee = computed(() => props.analysis.alerts.reduce<Record<string, number>>(
   (counts, alert) => {

@@ -11,6 +11,8 @@ from app.schemas.performance import (
     SubmissionComplianceEvidence,
     WorkOutputEvidence,
 )
+from app.schemas.uploads import CalculationPlan
+from app.services.analysis import build_analysis_response
 from app.services.performance import (
     build_performance_alerts,
     calculate_kpis,
@@ -20,6 +22,57 @@ from app.services.performance.metrics import performance_tier
 
 
 class PerformanceQaTests(TestCase):
+    def test_summary_averages_only_scored_employees(self) -> None:
+        dataset = _dataset()
+        withheld = _dataset(employee_id="EMP-002", team="Operations", suffix="002")
+        withheld.work_outputs[0] = withheld.work_outputs[0].model_copy(
+            update={"completion_status": "overdue", "completed_date": None}
+        )
+        withheld.attendance_events[0] = withheld.attendance_events[0].model_copy(
+            update={"actual_start": time(9, 10), "actual_end": None}
+        )
+        withheld.quality_events[0] = withheld.quality_events[0].model_copy(
+            update={"accuracy_ratio": 0.5}
+        )
+        for collection in (
+            "employees",
+            "performance_targets",
+            "work_outputs",
+            "attendance_events",
+            "submission_events",
+            "leave_events",
+            "quality_events",
+        ):
+            getattr(dataset, collection).extend(getattr(withheld, collection))
+
+        plan = CalculationPlan(selected_tables=[], table_classifications=[])
+        response = build_analysis_response(dataset, plan, import_issues=[])
+        summary = response.summary
+
+        self.assertEqual(summary.total_employee_count, 2)
+        self.assertEqual(summary.scored_employee_count, 1)
+        self.assertEqual(summary.insufficient_data_count, 1)
+        withheld_result = next(
+            result for result in response.results if result.employee_id == "EMP-002"
+        )
+        self.assertIsNone(withheld_result.overall_score)
+        self.assertLess(withheld_result.productivity_score, 100)
+        self.assertLess(withheld_result.compliance_score, 100)
+        self.assertLess(withheld_result.quality_score, 100)
+        self.assertEqual(summary.average_overall_score, 100)
+        self.assertEqual(summary.average_productivity_score, 100)
+        self.assertEqual(summary.average_compliance_score, 100)
+        self.assertEqual(summary.average_quality_score, 100)
+
+        withheld_only = build_analysis_response(
+            dataset, plan, import_issues=[], team="Operations"
+        ).summary
+        self.assertEqual(withheld_only.scored_employee_count, 0)
+        self.assertIsNone(withheld_only.average_overall_score)
+        self.assertIsNone(withheld_only.average_productivity_score)
+        self.assertIsNone(withheld_only.average_compliance_score)
+        self.assertIsNone(withheld_only.average_quality_score)
+
     def test_perfect_evidence_calculates_expected_scores(self) -> None:
         result = calculate_kpis(_dataset())[0]
 

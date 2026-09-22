@@ -133,7 +133,7 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
                 <p class="text-sm text-primary-foreground">Average overall score</p>
                 <p class="text-5xl font-semibold tracking-tight tabular-nums">{{ score(analysis.summary.average_overall_score) }}</p>
               </div>
-              <p class="text-xs text-primary-foreground">Scored employees only</p>
+              <p class="text-xs text-primary-foreground">{{ analysis.summary.scored_employee_count }} scored employee{{ analysis.summary.scored_employee_count === 1 ? '' : 's' }}</p>
             </section>
             <section class="flex flex-col justify-center gap-2 rounded-lg border p-5">
               <p class="text-sm text-muted-foreground">Scored results</p>
@@ -154,7 +154,7 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
               <CardDescription>{{ kpi.label }}</CardDescription>
               <CardTitle class="text-3xl tabular-nums">{{ score(analysis.summary[kpi.key]) }}</CardTitle>
             </CardHeader>
-            <CardContent class="text-xs text-muted-foreground">{{ kpi.weight }}</CardContent>
+            <CardContent class="text-xs text-muted-foreground">{{ analysis.summary.scored_employee_count }} scored employee{{ analysis.summary.scored_employee_count === 1 ? '' : 's' }} · {{ kpi.weight }}</CardContent>
           </Card>
         </section>
 

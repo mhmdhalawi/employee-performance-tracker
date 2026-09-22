@@ -225,11 +225,14 @@ def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
     )
     total_count = len(kpi_results)
     insufficient_count = len(insufficient_ids)
-    scored_count = total_count - insufficient_count
+    scored_results = [
+        result for result in kpi_results if result.overall_score is not None
+    ]
+    scored_count = len(scored_results)
     scored_overall = [
-        result.overall_score
-        for result in kpi_results
-        if result.overall_score is not None
+        score
+        for result in scored_results
+        if (score := result.overall_score) is not None
     ]
     narrative = (
         f"Analyzed {total_count} employees. {scored_count} received an overall "
@@ -244,12 +247,14 @@ def _build_analysis_summary(kpi_results: list[KpiResult]) -> AnalysisSummary:
         performance_tier_counts=dict(sorted(tier_counts.items())),
         average_overall_score=average(scored_overall),
         average_productivity_score=average(
-            [result.productivity_score for result in kpi_results]
+            result.productivity_score for result in scored_results
         ),
         average_compliance_score=average(
-            [result.compliance_score for result in kpi_results]
+            result.compliance_score for result in scored_results
         ),
-        average_quality_score=average([result.quality_score for result in kpi_results]),
+        average_quality_score=average(
+            result.quality_score for result in scored_results
+        ),
         narrative=narrative,
     )
 
