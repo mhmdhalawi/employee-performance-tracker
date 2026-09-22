@@ -45,9 +45,12 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
   const overall = report.overall_score === null ? 'Withheld' : score(report.overall_score)
   const status = report.performance_tier || report.result_status
   const attention = needsAttention(report.findings)
-  const attentionBlocks: Content[] = attention.length
-    ? [{ text: 'Needs attention', style: 'sectionTitle', margin: [0, 12, 0, 5] }, ...attention.map(findingBlock)]
-    : []
+  const attentionBlocks: Content[] = (['data_issue', 'performance_alert'] as const).flatMap(category => {
+    const findings = attention.filter(finding => finding.category === category)
+    return findings.length
+      ? [{ text: category === 'data_issue' ? 'Data Issues' : 'Performance Alerts', style: 'sectionTitle', margin: [0, 12, 0, 5] } as Content, ...findings.map(findingBlock)]
+      : []
+  })
 
   return {
     pageSize: 'A4',
@@ -129,7 +132,7 @@ function evidenceNotes(row: EmployeeEvidenceRow): Content {
   if (row.excluded_from_scoring)
     stack.push({ text: wrapLongWords(`Excluded from scoring: ${row.exclusion_reason}`), bold: true })
   for (const finding of row.validation_findings) {
-    stack.push({ text: wrapLongWords(`${evidenceImpact(finding.scoring_impact)}: ${finding.message} Records: ${finding.record_ids.join(', ')}`), margin: [0, 3, 0, 0] })
+    stack.push({ text: wrapLongWords(`${finding.category === 'data_issue' ? 'Data Issue' : 'Performance Alert'} · ${evidenceImpact(finding.scoring_impact)}: ${finding.message} Action: ${finding.action} Records: ${finding.record_ids.join(', ')}`), margin: [0, 3, 0, 0] })
   }
   const link = evidenceLink(row)
   if (link) {
@@ -327,6 +330,7 @@ function findingBlock(finding: ReportFinding): Content {
   const stack: Content[] = [
     { text: `${finding.code.replaceAll('_', ' ')} - ${finding.occurrence_count} occurrences`, bold: true },
     { text: wrapLongWords(finding.message), color: muted, margin: [0, 2, 0, 1] },
+    { text: wrapLongWords(`Action: ${finding.action}`), color: muted, margin: [0, 2, 0, 1] },
     { text: wrapLongWords(`Records: ${finding.record_ids.join(', ') || 'None'}`), color: muted, fontSize: 7 },
     ...finding.evidence_links.map<Content>(link => ({
       text: wrapLongWords(link),

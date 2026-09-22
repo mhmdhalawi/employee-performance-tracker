@@ -478,11 +478,23 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertTrue(any(
             finding["code"] == "orphan_quality_evidence" for finding in row["validation_findings"]
         ))
+        issue = next(
+            finding for finding in row["validation_findings"]
+            if finding["code"] == "orphan_quality_evidence"
+        )
+        self.assertEqual(issue["category"], "data_issue")
+        self.assertTrue(issue["action"])
         report = self.client.post(
             "/api/v1/reports/employee/preview",
             json={"employee_id": "EMP-001", "period_weeks": 12},
         ).json()["report"]
         self.assertEqual(report["evidence_tables"]["quality"]["rows"], [row])
+        self.assertTrue(any(
+            finding["code"] == issue["code"]
+            and finding["category"] == issue["category"]
+            and finding["action"] == issue["action"]
+            for finding in report["findings"]
+        ))
 
     def test_json_submission_is_available_as_latest_dashboard(self) -> None:
         submitted = self._post_benchmark_tables()

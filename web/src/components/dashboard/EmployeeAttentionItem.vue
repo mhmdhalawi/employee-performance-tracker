@@ -21,6 +21,7 @@ function safeLinks(item: AttentionItem): string[] {
     <AlertTitle class="capitalize">{{ issue.code.replaceAll('_', ' ') }} <Badge variant="outline">{{ issue.occurrence_count }} occurrences</Badge></AlertTitle>
     <AlertDescription class="flex min-w-0 flex-col gap-2 [&_p]:mb-0">
       <p class="break-words">{{ issue.message }}</p>
+      <p class="break-words"><strong>Action:</strong> {{ issue.action }}</p>
       <Collapsible v-if="issue.record_ids.length || safeLinks(issue).length">
         <CollapsibleTrigger as-child><Button variant="link" size="sm" class="max-w-full whitespace-normal">Supporting records for {{ issue.code.replaceAll('_', ' ') }}</Button></CollapsibleTrigger>
         <CollapsibleContent class="flex flex-col gap-2 pt-2">

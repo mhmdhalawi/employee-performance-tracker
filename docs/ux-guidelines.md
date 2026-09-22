@@ -33,7 +33,7 @@ There are no create/edit/delete controls, bulk selection, or toast-based mutatio
 
 ## Presentation semantics
 
-- “Findings” counts grouped employee alerts consistently on list/detail pages. Each detail finding separately labels its occurrence count.
+- Employee results show separate Data Issues and Performance Alerts counts. The backend assigns one category and review action to each finding; record details, report previews, and PDFs preserve that classification.
 - Overall averages show scored, withheld, and total counts from the response. Null scores remain a dash with a withheld-status explanation.
 - Weekly chart values and coverage populations follow the filtered backend response. Missing values are labeled per KPI in the data table, never shown as zero.
 - Screens and PDFs display Gregorian dates as `DD/MM/YYYY`; the API keeps UTC date-only `YYYY-MM-DD` fields. Display the reporting period on employee details and include the year for historical clarity.
@@ -61,9 +61,15 @@ Completed API, browser, and PDF checks are recorded in
 
 Record-specific attention now lives in its KPI evidence table. `EmployeeAttentionSummary.vue`
 and `EmployeeAttentionItem.vue` remain only for findings not represented by evidence records,
-such as missing performance targets. Informational findings with no scoring impact remain
+such as employee-level data issues. Informational findings with no scoring impact remain
 omitted. Page fallback uses validated record-family findings; report preview checks its
 complete evidence snapshot. Supporting records retain safe HTTPS links and IDs.
+
+Data Issues cover missing, unverified, duplicate, or disconnected source evidence, including
+incomplete leave documentation even when it affects a score. Performance Alerts cover verified
+overdue work, late submissions, and low accuracy. Each finding retains its reason, action,
+record IDs, and scoring impact. Employee list counts, record labels, summary cards, and PDF
+sections use the backend category. Unverified outcomes do not create performance alerts.
 
 `EmployeeEvidenceTable.vue` owns a help icon beside “evidence” in each KPI heading on Employee Details; report preview omits it. Its floating, initially closed calculation panel opens by click, tap, or keyboard and shows only the matching Productivity, Compliance, or Quality sentence; Escape closes it. The separate Calculation details card has been removed. Main table descriptions still label work, attendance/report/leave, and quality data without formulas. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. Report payload values and download snapshot handling remain unchanged.
 

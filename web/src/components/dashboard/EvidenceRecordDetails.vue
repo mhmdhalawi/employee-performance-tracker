@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { evidenceDisclosureDetails, evidenceFieldHasFinding, evidenceImpact, evidenceIssueLabel, evidenceLink } from '@/lib/employee-evidence'
+import { findingCategoryLabel } from '@/lib/employee-presentation'
 import { cn } from '@/lib/utils'
 import type { EmployeeEvidenceRow } from '@/types/employee-evidence'
 
@@ -23,9 +24,10 @@ defineProps<{ row: EmployeeEvidenceRow }>()
       <a :href="evidenceLink(row)!" target="_blank" rel="noopener noreferrer">Open evidence for {{ row.record_id }}</a>
     </Button>
     <Alert v-for="(finding, index) in row.validation_findings" :key="`${finding.code}-${index}`" :variant="finding.severity === 'info' ? 'default' : 'warning'">
-      <AlertTitle>{{ evidenceIssueLabel(finding.code) }}</AlertTitle>
+      <AlertTitle>{{ findingCategoryLabel[finding.category] }} · {{ evidenceIssueLabel(finding.code) }}</AlertTitle>
       <AlertDescription class="flex flex-col gap-2">
         <p>{{ finding.message }}</p>
+        <p><strong>Action:</strong> {{ finding.action }}</p>
         <Badge variant="outline" class="w-fit">{{ evidenceImpact(finding.scoring_impact) }}</Badge>
         <p class="break-words">Records: {{ finding.record_ids.join(', ') }}</p>
       </AlertDescription>

@@ -32,11 +32,15 @@ export interface ValidationFinding {
   code: string
   severity: 'error' | 'warning' | 'info'
   message: string
+  category: FindingCategory
+  action: string
   record_ids: string[]
   employee_id: string | null
   source_type: string | null
   scoring_impact: string
 }
+
+export type FindingCategory = 'data_issue' | 'performance_alert'
 
 export interface EmployeeKpiResult {
   employee_id: string
@@ -80,6 +84,8 @@ export interface PerformanceAlert {
   code: string
   severity: 'error' | 'warning' | 'info'
   message: string
+  category: FindingCategory
+  action: string
   employee_id: string | null
   employee_name: string | null
   team: string | null

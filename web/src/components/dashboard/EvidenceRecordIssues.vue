@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge'
 import { evidenceIssueLabel } from '@/lib/employee-evidence'
+import { findingCategoryLabel } from '@/lib/employee-presentation'
 import type { EmployeeEvidenceRow } from '@/types/employee-evidence'
 
 defineProps<{ row: EmployeeEvidenceRow }>()
@@ -13,6 +14,7 @@ defineProps<{ row: EmployeeEvidenceRow }>()
       <p class="break-words">{{ row.exclusion_reason }}</p>
     </template>
     <div v-for="(finding, index) in row.validation_findings" :key="`${finding.code}-${index}`" class="flex flex-col gap-1">
+      <Badge variant="outline" class="w-fit">{{ findingCategoryLabel[finding.category] }}</Badge>
       <p class="break-words">{{ evidenceIssueLabel(finding.code) }}</p>
     </div>
     <p v-if="!row.excluded_from_scoring && !row.validation_findings.length" class="text-muted-foreground">No findings</p>

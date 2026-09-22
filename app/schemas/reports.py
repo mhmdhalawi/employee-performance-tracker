@@ -62,6 +62,8 @@ class ReportFinding(BaseModel):
     severity: FindingSeverity
     scoring_impact: ScoringImpact
     message: str
+    category: Literal["data_issue", "performance_alert"] = "data_issue"
+    action: str = "Review and correct the source evidence."
     occurrence_count: int = Field(ge=1)
     record_ids: list[str]
     evidence_links: list[str]

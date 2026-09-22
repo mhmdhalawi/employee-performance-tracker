@@ -1,4 +1,4 @@
-import type { KpiTrendPoint } from '@/types/analysis'
+import type { FindingCategory, KpiTrendPoint } from '@/types/analysis'
 import type { EmployeeEvidenceTables } from '@/types/employee-evidence'
 
 export interface EmployeeReportRequest {
@@ -28,6 +28,8 @@ export interface ReportFinding {
   severity: 'error' | 'warning' | 'info'
   scoring_impact: string
   message: string
+  category: FindingCategory
+  action: string
   occurrence_count: number
   record_ids: string[]
   evidence_links: string[]

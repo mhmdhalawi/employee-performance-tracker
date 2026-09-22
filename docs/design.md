@@ -56,7 +56,7 @@ status line and delayed spinner communicate longer updates without moving table 
 Shared controls expose an opt-in busy presentation that keeps opacity stable while
 preserving disabled behavior; ordinary disabled states retain their existing treatment.
 
-The portrait employee PDF presents scores, relevant Needs attention issues, and trends, followed by complete performance records; formula explanations and metric definitions are omitted. Section titles and column headings repeat on continuation pages; ordinary records stay together and oversized notes may flow across pages. The existing PDF palette is preserved.
+The portrait employee PDF presents scores, Data Issues, Performance Alerts, and trends, followed by complete performance records; formula explanations and metric definitions are omitted. Section titles and column headings repeat on continuation pages; ordinary records stay together and oversized notes may flow across pages. The existing PDF palette is preserved. Each finding states a review action, and dashboard rows count the two categories separately.
 
 See [evidence read contracts](persistence.md#employee-evidence-reads) and
 [implementation verification](ux-guidelines.md#employee-review-verification--2026-09-14).

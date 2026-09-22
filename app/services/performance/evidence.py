@@ -27,7 +27,9 @@ def build_performance_alerts(
         for finding in findings
         if finding.employee_id in included_employee_ids
         and (
-            not finding.record_ids
+            finding.scoring_impact == "blocks_score"
+            or finding.source_type in ("employees", "performance_targets")
+            or not finding.record_ids
             or bool(set(finding.record_ids) & included_record_ids)
         )
     ]
@@ -63,6 +65,8 @@ def build_performance_alerts(
             code=code,
             severity=severity,
             message=message,
+            category=group_findings[0].category,
+            action=group_findings[0].action,
             employee_id=group_employee_id,
             employee_name=(
                 employee_by_id[group_employee_id].employee_name

@@ -26,6 +26,8 @@ from app.services.performance import (
     summarize_validation,
     validate_dataset,
 )
+from app.services.performance.finding_presentation import describe_finding
+from app.services.performance.scope import duplicate_attendance_ids, employee_evidence
 from app.utils.numbers import average
 
 _ATTENDANCE_CHECK_FIELDS: dict[str, set[str]] = {
@@ -60,7 +62,7 @@ def build_analysis_response(
     """Construct one deterministic response from a validated evidence dataset."""
     validation_findings = [
         *validate_dataset(performance_dataset),
-        *(additional_validation_findings or []),
+        *(describe_finding(finding) for finding in (additional_validation_findings or [])),
     ]
     overview = inspect_dataset(performance_dataset)
     available_teams = overview.teams
@@ -93,6 +95,27 @@ def build_analysis_response(
         for result in kpi_results
         for record_id in result.supporting_record_ids
     }
+    duplicate_ids = duplicate_attendance_ids(validation_findings)
+    for result in kpi_results:
+        evidence = employee_evidence(
+            performance_dataset,
+            result.employee_id,
+            effective_start,
+            effective_end,
+            duplicate_ids,
+            include_excluded=True,
+        )
+        included_record_ids.update(
+            record.record_id
+            for collection in (
+                evidence.projects,
+                evidence.attendance,
+                evidence.reports,
+                evidence.leave,
+                evidence.reviews,
+            )
+            for record in collection
+        )
     scoped_findings = [
         finding
         for finding in validation_findings

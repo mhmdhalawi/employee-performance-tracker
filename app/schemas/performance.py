@@ -114,6 +114,8 @@ class ValidationFinding(BaseModel):
     code: str
     severity: FindingSeverity
     message: str
+    category: Literal["data_issue", "performance_alert"] = "data_issue"
+    action: str = "Review and correct the source evidence."
     record_ids: list[str]
     employee_id: str | None = None
     source_type: str | None = None
@@ -197,6 +199,8 @@ class PerformanceAlert(BaseModel):
     code: str
     severity: FindingSeverity
     message: str
+    category: Literal["data_issue", "performance_alert"] = "data_issue"
+    action: str = "Review and correct the source evidence."
     employee_id: str | None
     employee_name: str | None
     team: str | None

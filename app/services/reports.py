@@ -69,6 +69,8 @@ async def build_employee_report_preview(
             severity=alert.severity,
             scoring_impact=alert.scoring_impact,
             message=alert.message,
+            category=alert.category,
+            action=alert.action,
             occurrence_count=alert.occurrence_count,
             record_ids=alert.record_ids,
             evidence_links=[

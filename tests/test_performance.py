@@ -22,6 +22,61 @@ from app.services.performance.metrics import performance_tier
 
 
 class PerformanceQaTests(TestCase):
+    def test_findings_have_distinct_categories_and_review_actions(self) -> None:
+        dataset = _dataset()
+        dataset.work_outputs[0] = dataset.work_outputs[0].model_copy(
+            update={"completion_status": "overdue", "completed_date": None}
+        )
+        dataset.submission_events[0] = dataset.submission_events[0].model_copy(
+            update={"submitted_date": date(2026, 6, 3)}
+        )
+        dataset.quality_events[0] = dataset.quality_events[0].model_copy(
+            update={"accuracy_ratio": 0.5}
+        )
+        dataset.attendance_events[0] = dataset.attendance_events[0].model_copy(
+            update={"actual_end": None}
+        )
+        dataset.leave_events[0] = dataset.leave_events[0].model_copy(
+            update={"category": "sick leave", "documentation_complete": False}
+        )
+
+        findings = validate_dataset(dataset)
+        by_code = {finding.code: finding for finding in findings}
+        for code in ("overdue_work_output", "late_submission", "low_accuracy"):
+            self.assertEqual(by_code[code].category, "performance_alert")
+        for code in ("missing_actual_end", "incomplete_sick_leave_documentation"):
+            self.assertEqual(by_code[code].category, "data_issue")
+        self.assertTrue(all(finding.action.strip() for finding in findings))
+
+        response = build_analysis_response(
+            dataset, CalculationPlan(selected_tables=[], table_classifications=[]), []
+        )
+        self.assertEqual(
+            {(alert.code, alert.category, alert.action) for alert in response.alerts},
+            {(finding.code, finding.category, finding.action) for finding in findings},
+        )
+
+    def test_unverified_outcomes_do_not_create_performance_alerts(self) -> None:
+        dataset = _dataset()
+        dataset.work_outputs[0] = dataset.work_outputs[0].model_copy(
+            update={
+                "completion_status": "overdue",
+                "completed_date": None,
+                "verification_status": "missing",
+            }
+        )
+        dataset.quality_events[0] = dataset.quality_events[0].model_copy(
+            update={"accuracy_ratio": 0.5, "verification_status": "missing"}
+        )
+
+        findings = validate_dataset(dataset)
+        self.assertNotIn("overdue_work_output", {finding.code for finding in findings})
+        self.assertNotIn("low_accuracy", {finding.code for finding in findings})
+        self.assertEqual(
+            {finding.code for finding in findings},
+            {"missing_productivity_evidence", "missing_quality_evidence"},
+        )
+
     def test_summary_averages_only_scored_employees(self) -> None:
         dataset = _dataset()
         withheld = _dataset(employee_id="EMP-002", team="Operations", suffix="002")

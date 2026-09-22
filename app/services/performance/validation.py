@@ -12,13 +12,14 @@ from app.services.performance.constants import (
     COMPLETED_OUTPUT_STATUSES,
     NEUTRAL_ATTENDANCE_OUTCOMES,
 )
+from app.services.performance.finding_presentation import describe_finding
 from app.services.performance.metrics import required_attendance_fields
 
 
 def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFinding]:
     """Find scoring-relevant data quality issues without discarding their evidence."""
     employee_ids = {employee.employee_id for employee in dataset.employees}
-    return [
+    findings = [
         *_identity_findings(dataset, employee_ids),
         *_attendance_findings(dataset, employee_ids),
         *_work_output_findings(dataset, employee_ids),
@@ -26,6 +27,7 @@ def validate_dataset(dataset: PerformanceEvidenceDataset) -> list[ValidationFind
         *_leave_findings(dataset, employee_ids),
         *_quality_findings(dataset, employee_ids),
     ]
+    return [describe_finding(finding) for finding in findings]
 
 
 def _identity_findings(
@@ -183,6 +185,7 @@ def _work_output_findings(
         if (
             record.completion_status.casefold() == "overdue"
             and record.completed_date is None
+            and record.verification_status.casefold() == "verified"
         ):
             findings.append(
                 ValidationFinding(
@@ -311,7 +314,7 @@ def _quality_findings(
                     scoring_impact="excluded_from_scoring",
                 )
             )
-        if review.accuracy_ratio < 0.75:
+        if review.accuracy_ratio < 0.75 and review.verification_status.casefold() == "verified":
             findings.append(
                 ValidationFinding(
                     code="low_accuracy",
