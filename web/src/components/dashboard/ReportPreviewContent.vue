@@ -3,7 +3,7 @@ import { DialogContent } from '@/components/ui/dialog'
 </script>
 
 <template>
-  <DialogContent class="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
+  <DialogContent class="flex max-h-[calc(100svh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)] 2xl:max-w-[1400px]">
     <div class="shrink-0 pr-6">
       <slot name="header" />
     </div>

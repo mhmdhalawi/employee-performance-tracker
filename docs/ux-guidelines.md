@@ -22,7 +22,7 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 | Select/Listbox | `components/ui/select` and `FieldLabel` | Authored Reka select, associated visible labels, keyboard selection, Escape/focus restoration; verify open popup at narrow widths |
 | Reporting dates | `ReportingPeriodPicker.vue`, shared RangeCalendar/Dialog/ToggleGroup/Input | Two-month desktop and one-month phone calendar; inclusive bounded dates; typed validation, keyboard range selection, stable footer, Apply/Cancel and failed-request retention |
 | Results navigation | `PerformanceDashboard.vue`, shared Table/Pagination | Desktop table and mobile employee cards use the same paginated/sorted rows; preserve all score/status fields |
-| Report overlay | `ReportPreviewContent.vue`, shared Dialog | Accessible dialog title/description, contained body scroll, complete cards, reachable footer, Escape; verify desktop, phone, and short height |
+| Report overlay | `ReportPreviewContent.vue`, shared Dialog | Accessible dialog title/description, viewport-bounded width up to 1400px, contained body scroll, complete cards, reachable footer, Escape; verify desktop, phone, and short height |
 | Employee evidence | `EmployeeEvidenceTable.vue`, `EvidenceRecordDetails.vue`, shared Table/Collapsible | Three independently paginated tables; identical mobile records; keyboard disclosures; full source values and backend exclusion labels |
 | Confidence | `components/ui/progress/Progress.vue` | Warning tone for withheld employee results plus percentage and explicit status; no tier inference |
 | Charts | Dashboard Unovis lines and weekly-values table | Map null to a non-numeric line gap, preserve real zero, no interpolated missing data; distinct series patterns and textual values |
@@ -33,7 +33,7 @@ There are no create/edit/delete controls, bulk selection, or toast-based mutatio
 
 ## Presentation semantics
 
-- Employee results show separate Data Issues and Performance Alerts counts. The backend assigns one category and review action to each finding; record details, report previews, and PDFs preserve that classification.
+- Employee results show separate Data Issues and Performance Alerts columns in the table and both counts on employee cards below `2xl`. The backend assigns one category and review action to each finding; record details, report previews, and PDFs preserve that classification.
 - Overall averages show scored, withheld, and total counts from the response. Null scores remain a dash with a withheld-status explanation.
 - Weekly chart values and coverage populations follow the filtered backend response. Missing values are labeled per KPI in the data table, never shown as zero.
 - Screens and PDFs display Gregorian dates as `DD/MM/YYYY`; the API keeps UTC date-only `YYYY-MM-DD` fields. Display the reporting period on employee details and include the year for historical clarity.

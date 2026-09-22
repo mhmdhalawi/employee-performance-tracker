@@ -242,14 +242,14 @@ function requestFilters(filters: DashboardFilters): void {
 
 <template>
   <main class="min-h-svh bg-muted/30">
-    <PerformanceHeader>
+    <PerformanceHeader wide>
         <Button :disabled="isFiltering || !filteredRows.length" @click="teamReportPreviewOpen = true">
           <FileTextIcon data-icon="inline-start" />
           Generate team report
         </Button>
     </PerformanceHeader>
 
-    <div class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
+    <div class="mx-auto flex max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6">
       <section class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div class="flex flex-col gap-2">
           <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Employee performance</h1><Badge variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
@@ -279,16 +279,29 @@ function requestFilters(filters: DashboardFilters): void {
 
       <Card>
         <CardHeader><div class="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Employee results</CardTitle><CardDescription>Component scores remain visible when overall scoring is withheld.</CardDescription></div><Badge variant="outline">{{ filteredRows.length }} employees</Badge></div></CardHeader>
-        <CardContent class="hidden overflow-x-auto lg:block">
-          <Table>
-            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead class="min-w-36">Data confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead><TableHead class="text-center">Data Issues</TableHead><TableHead class="text-center">Performance Alerts</TableHead><TableHead class="text-right">Actions</TableHead></TableRow></TableHeader>
+        <CardContent class="hidden 2xl:block">
+          <Table class="table-fixed">
+            <colgroup>
+              <col style="width: 9.5%">
+              <col style="width: 11%">
+              <col style="width: 7.25%">
+              <col style="width: 7.25%">
+              <col style="width: 6.25%">
+              <col style="width: 11.5%">
+              <col style="width: 7%">
+              <col style="width: 10%">
+              <col style="width: 8%">
+              <col style="width: 11%">
+              <col style="width: 11.25%">
+            </colgroup>
+            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" class="-ml-2.5" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead>Data confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead><TableHead class="text-center">Data Issues</TableHead><TableHead class="text-center">Performance Alerts</TableHead><TableHead class="text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
-              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell>{{ row.team ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id, 'data_issue') ? 'warning' : 'outline'">{{ alertCount(row.employee_id, 'data_issue') }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id, 'performance_alert') ? 'warning' : 'outline'">{{ alertCount(row.employee_id, 'performance_alert') }}</Badge></TableCell><TableCell class="text-right"><Button variant="outline" size="sm" @click="openEmployeeDetails(row)"><EyeIcon data-icon="inline-start" />View details</Button></TableCell></TableRow>
+              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell class="whitespace-normal break-words"><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell class="whitespace-normal break-words">{{ row.team ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id, 'data_issue') ? 'warning' : 'outline'">{{ alertCount(row.employee_id, 'data_issue') }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id, 'performance_alert') ? 'warning' : 'outline'">{{ alertCount(row.employee_id, 'performance_alert') }}</Badge></TableCell><TableCell class="text-right"><Button variant="outline" size="sm" @click="openEmployeeDetails(row)"><EyeIcon data-icon="inline-start" />View details</Button></TableCell></TableRow>
               <TableRow v-if="!filteredRows.length"><TableCell colspan="11" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
             </TableBody>
           </Table>
         </CardContent>
-        <CardContent class="flex flex-col gap-4 lg:hidden">
+        <CardContent class="flex flex-col gap-4 2xl:hidden">
           <div class="flex flex-wrap gap-2" aria-label="Sort employees">
             <Button variant="outline" size="sm" @click="toggleSort('name')">Name {{ sortKey === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '' }}</Button>
             <Button variant="outline" size="sm" @click="toggleSort('performance')">Overall {{ sortKey === 'performance' ? (sortDirection === 'asc' ? '↑' : '↓') : '' }}</Button>

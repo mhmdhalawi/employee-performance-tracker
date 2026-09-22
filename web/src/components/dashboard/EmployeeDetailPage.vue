@@ -235,7 +235,7 @@ function scoreChange(value: number | null): string {
 
 <template>
   <main class="min-h-svh bg-muted/30">
-    <PerformanceHeader back @back="emit('back')">
+    <PerformanceHeader back wide @back="emit('back')">
           <Button :disabled="reportLoading || isRefreshing" @click="generateReportPreview">
             <Spinner v-if="reportLoading" data-icon="inline-start" />
             <FileTextIcon v-else data-icon="inline-start" />
@@ -246,7 +246,7 @@ function scoreChange(value: number | null): string {
           </Badge>
     </PerformanceHeader>
 
-    <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+    <div class="mx-auto flex max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       <header class="flex flex-col gap-2">
         <p class="text-sm font-medium text-muted-foreground">Employee performance details</p>
         <h1 class="text-3xl font-semibold tracking-tight">
