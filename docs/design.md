@@ -8,11 +8,11 @@ Scope: Vue dashboard, sign-in screen, loading/error states, and browser-generate
 The frontend review and browser reassessment were approved for implementation. This section records the resulting UI decisions; the original brand proposal below remains background for unresolved artwork/font decisions.
 
 - Keep white headers and surfaces, Geist interface text, Cedar teal primary actions, and restrained gold attention treatment. A shared `PerformanceHeader.vue` repeats the existing Cedar artwork and back navigation across dashboard, employee, and interpretation routes. No new artwork or full teal header is introduced.
-- The dashboard uses two compact summary columns on phones and four on wide screens. Employee review precedes detailed source interpretation. Below the desktop breakpoint, employee cards preserve every KPI plus overall/status, confidence, findings, and the details action without horizontal scrolling.
+- The dashboard uses two compact summary columns on phones and four on wide screens. Detailed source interpretation remains on its separate route, without a card on the main dashboard. Below the desktop breakpoint, employee cards preserve every KPI plus overall/status, data confidence, findings, and the details action without horizontal scrolling.
 - Null chart scores appear as gaps. A visible legend and distinct dash patterns identify series; an expandable table exposes exact backend weekly values and explicit missing-data labels. Chart scope follows backend employee/team/period filters.
 - Report previews use `ReportPreviewContent.vue`: a bounded modal, fixed header/footer regions, and one scrolling content body with non-shrinking cards. The application page itself keeps natural document scrolling.
 - Runtime CSS variables in `web/src/style.css` remain the canonical web token source (runtime-owned mapping). The Tailwind `@theme inline` adapter exposes semantic utility colors. `--compliance-foreground: #80520b` supplies readable small compliance labels on pale gold surfaces; `--chart-2: #c18426` remains the line color. The dark label value is `#f1bd64`.
-- `Progress.vue` owns the warning tone used for withheld employee confidence. `style.css` owns global scrollbar colors and reduced-motion behavior. Explicit status text remains mandatory.
+- `Progress.vue` owns the warning tone used for withheld employee data confidence. `style.css` owns global scrollbar colors and reduced-motion behavior. Explicit status text remains mandatory.
 - Both PDF generators already use `#078181` and retain their existing rendering in this pass. Their constants still mirror web palette values manually; a shared browser/PDF token export is a future maintenance change requiring PDF visual verification.
 
 See [UX guidelines](ux-guidelines.md) for state and component ownership and [the test handover](handover.md#frontend-verification--2026-09-05) for completed browser checks and verification limits.
@@ -30,7 +30,7 @@ Remaining follow-ups include sign-in refinements, official compact/reversed logo
 
 ## Employee evidence tables — 2026-09-14
 
-Employee Details replaces its three standalone KPI score cards with three full-width evidence sections, ordered Productivity, Compliance, and Quality. Each header retains the backend score and overall weight with a short performance-record description. On Employee Details, a small help icon beside “evidence” in each KPI heading opens that KPI's calculation sentence in a floating panel; the report preview omits these icons. There is no separate calculation card. Overall result and evidence confidence retain their existing sections.
+Employee Details replaces its three standalone KPI score cards with three full-width evidence sections, ordered Productivity, Compliance, and Quality. Each header retains the backend score and overall weight with a short performance-record description. On Employee Details, a small help icon beside “evidence” in each KPI heading opens that KPI's calculation sentence in a floating panel; the report preview omits these icons. There is no separate calculation card. Overall result and data confidence retain their existing sections.
 
 Desktop uses semantic tables; phones use labeled record cards showing the same independently paginated records. Shared `EmployeeEvidenceTable.vue` and `EvidenceRecordDetails.vue` own both Employee Details and report preview presentation. IDs and text wrap, and shared Collapsible controls reveal full values, findings, scoring impacts, and safe evidence links.
 
@@ -81,7 +81,7 @@ The dashboard period control opens a compact dialog with quick ranges beside a t
 shadcn-vue RangeCalendar on desktop; phones show one month and stack the controls. Calendar
 range interiors use Cedar's pale teal secondary surface, endpoints use primary teal, and the
 quick-range selection uses the shared ToggleGroup's brand tone. Date text fields offer typed
-YYYY-MM-DD entry without a browser-native calendar popup. The existing white surfaces, Geist
+DD/MM/YYYY entry without a browser-native calendar popup. The existing white surfaces, Geist
 type, semantic borders, focus ring, and restrained gold attention treatment remain.
 
 The range highlighted in the dialog is a preview. The backend resolves rolling Last month,
@@ -90,6 +90,7 @@ committed filtered response. Explicit custom ranges use inclusive UTC dates; set
 dates equal selects one day. The selected label changes with the successful response, and
 short ranges keep the existing insufficient-data status when evidence
 confidence is low.
+Screens and browser-generated PDFs display dates as DD/MM/YYYY; API values remain ISO dates.
 
 When a preset extends before the first canonical evidence date, the calendar preview keeps
 the full selected range. The dialog names the chosen preset and explains the missing earlier

@@ -1,4 +1,5 @@
 import type { CanvasElement, Content, ContentColumns, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
+import { formatDate, formatDateTime } from '@/lib/date-format'
 import type { EmployeeReportData, ReportFinding } from '@/types/reports'
 import type { KpiTrendPoint } from '@/types/analysis'
 import type { EmployeeEvidenceRow, EvidenceKpi } from '@/types/employee-evidence'
@@ -76,7 +77,7 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
           widths: ['*', '*', '*'],
           body: [[
             metricCell('Overall result', overall, status),
-            metricCell('Evidence confidence', score(report.data_confidence), `Required: ${score(report.confidence_threshold)}`),
+            metricCell('Data confidence', score(report.data_confidence), `Required: ${score(report.confidence_threshold)}`),
             metricCell('Change vs prior period', change(report.overall_score_change), priorPeriodLabel(report)),
           ]],
         },
@@ -84,7 +85,7 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
       },
       report.overall_score === null
         ? {
-            text: 'Overall performance and tier are withheld because evidence confidence is below the required threshold. Component KPI values are shown for auditability only.',
+            text: 'Overall performance and tier are withheld because data confidence is below the required threshold. Data confidence measures required evidence completeness, not employee ability. Component KPI values are shown for auditability only.',
             style: 'notice',
             margin: [0, 14, 0, 14],
           }
@@ -222,7 +223,7 @@ function trendTable(report: EmployeeReportData): Content {
       headerRows: 1,
       widths: ['*', 'auto', 'auto', 'auto', 'auto'],
       body: [
-        ['Week ending', 'Productivity', 'Compliance', 'Quality', 'Confidence'],
+        ['Week ending', 'Productivity', 'Compliance', 'Quality', 'Data confidence'],
         ...report.trends.map(point => [
           formatDate(point.period_end),
           optionalScore(point.productivity_score),
@@ -367,16 +368,6 @@ function change(value: number | null): string {
 function priorPeriodLabel(report: EmployeeReportData): string {
   const { prior_start_date: start, prior_end_date: end } = report.period
   return start && end ? `${formatDate(start)} - ${formatDate(end)}` : 'No comparable period'
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })
-    .format(new Date(`${value}T00:00:00Z`))
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' })
-    .format(new Date(value))
 }
 
 function reportFilename(report: EmployeeReportData): string {

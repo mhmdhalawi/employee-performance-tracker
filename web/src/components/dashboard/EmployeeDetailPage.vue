@@ -22,6 +22,7 @@ import EmployeeEvidenceTable from '@/components/dashboard/EmployeeEvidenceTable.
 import EmployeeAttentionSummary from '@/components/dashboard/EmployeeAttentionSummary.vue'
 import WeeklyKpiTrend from '@/components/dashboard/WeeklyKpiTrend.vue'
 import { evidenceDescriptions } from '@/lib/employee-evidence'
+import { formatDate as formatReportDate } from '@/lib/date-format'
 import { attentionOutsideRecords } from '@/lib/employee-presentation'
 import { useEmployeeEvidence } from '@/composables/useEmployeeEvidence'
 import type { EvidenceKpi } from '@/types/employee-evidence'
@@ -225,11 +226,6 @@ async function downloadReport(): Promise<void> {
   }
 }
 
-function formatReportDate(value: string): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })
-    .format(new Date(`${value}T00:00:00Z`))
-}
-
 function scoreChange(value: number | null): string {
   if (value === null)
     return 'Earlier-period data is unavailable'
@@ -274,13 +270,14 @@ function scoreChange(value: number | null): string {
           </div>
           <div class="flex w-full max-w-md flex-col gap-2">
             <div class="flex items-center justify-between gap-3 text-sm">
-              <span class="text-muted-foreground">Evidence confidence</span>
+              <span class="text-muted-foreground">Data confidence</span>
               <span class="font-medium tabular-nums">{{ employee.data_confidence.toFixed(1) }}%</span>
             </div>
-            <Progress :model-value="employee.data_confidence" :tone="employee.overall_score === null ? 'warning' : 'default'" aria-label="Evidence confidence" />
+            <Progress :model-value="employee.data_confidence" :tone="employee.overall_score === null ? 'warning' : 'default'" aria-label="Data confidence" />
             <p class="text-xs text-muted-foreground">
               Required threshold: {{ employee.confidence_threshold.toFixed(1) }}%
             </p>
+            <p class="text-xs text-muted-foreground">Data confidence measures required evidence completeness, not employee ability.</p>
           </div>
         </CardHeader>
       </Card>
@@ -289,7 +286,7 @@ function scoreChange(value: number | null): string {
         <TriangleAlertIcon aria-hidden="true" />
         <AlertTitle>Insufficient evidence for an overall result</AlertTitle>
         <AlertDescription>
-          Overall performance and tier were withheld because evidence confidence is below the
+          Overall performance and tier were withheld because data confidence is below the
           required threshold. Component KPI values remain visible for auditability and should
           not be treated as a complete performance assessment.
         </AlertDescription>
@@ -367,7 +364,7 @@ function scoreChange(value: number | null): string {
               <TriangleAlertIcon aria-hidden="true" />
               <AlertTitle>Overall result withheld</AlertTitle>
               <AlertDescription>
-                Evidence confidence is below the required threshold. Component KPI values remain
+                Data confidence is below the required threshold. Component KPI values remain
                 visible for auditability only.
               </AlertDescription>
             </Alert>
@@ -420,12 +417,13 @@ function scoreChange(value: number | null): string {
                 <section class="flex flex-col justify-center gap-4">
                   <div class="flex items-end justify-between gap-4">
                     <div class="flex flex-col gap-1">
-                      <p class="text-sm text-muted-foreground">Evidence confidence</p>
+                      <p class="text-sm text-muted-foreground">Data confidence</p>
                       <p class="text-3xl font-semibold tabular-nums">{{ score(reportPreview.data_confidence) }}</p>
                     </div>
                     <Badge variant="secondary">Required {{ score(reportPreview.confidence_threshold) }}</Badge>
                   </div>
-                  <Progress :model-value="reportPreview.data_confidence" :tone="reportPreview.overall_score === null ? 'warning' : 'default'" aria-label="Report evidence confidence" />
+                  <Progress :model-value="reportPreview.data_confidence" :tone="reportPreview.overall_score === null ? 'warning' : 'default'" aria-label="Report data confidence" />
+                  <p class="text-xs text-muted-foreground">Required evidence completeness, not an employee performance score.</p>
 
                 </section>
               </CardContent>

@@ -11,6 +11,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegen
 import { Input } from '@/components/ui/input'
 import { RangeCalendar } from '@/components/ui/range-calendar'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { formatDate, parseDisplayDate } from '@/lib/date-format'
 import type { AnalysisFilters, DashboardFilters } from '@/types/analysis'
 
 type PeriodMode = 'full' | 'month' | 'six-months' | 'year' | 'range'
@@ -61,12 +62,14 @@ const triggerLabel = computed(() => {
 })
 
 const selectedSummary = computed(() => {
-  if (!validDate(startText.value) || !validDate(endText.value))
+  const start = parseDisplayDate(startText.value)
+  const end = parseDisplayDate(endText.value)
+  if (!start || !end)
     return 'Choose a start and end date'
   const label = quickRanges.find(item => item.value === choice.value)?.label
-  const dates = startText.value === endText.value
-    ? formatDate(startText.value)
-    : `${formatDate(startText.value)} – ${formatDate(endText.value)}`
+  const dates = start === end
+    ? formatDate(start)
+    : `${formatDate(start)} – ${formatDate(end)}`
   return choice.value === 'custom' ? dates : `${label}: ${dates}`
 })
 
@@ -85,27 +88,22 @@ watch(open, (isOpen) => {
   invalidField.value = null
 })
 
-function validDate(value: string): boolean {
+function validIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
     return false
   const parsed = new Date(`${value}T00:00:00Z`)
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
-    .format(new Date(`${value}T00:00:00Z`))
-}
-
 function previewRange(value: DraftChoice): DateRange {
   const end = props.coverageEnd
-  if (!end || !validDate(end))
+  if (!end || !validIsoDate(end))
     return { start: undefined, end: undefined }
   if (value === 'custom')
     return draftRange.value.start && draftRange.value.end
       ? draftRange.value : previewRange('month')
   if (value === 'full')
-    return { start: parseDate(props.coverageStart && validDate(props.coverageStart) ? props.coverageStart : end), end: parseDate(end) }
+    return { start: parseDate(props.coverageStart && validIsoDate(props.coverageStart) ? props.coverageStart : end), end: parseDate(end) }
 
   const months = value === 'month' ? 1 : value === 'six-months' ? 6 : 12
   const previewStart = parseDate(end).subtract({ months }).add({ days: 1 }).toString()
@@ -117,12 +115,12 @@ function previewRange(value: DraftChoice): DateRange {
 
 function setDraftRange(value: DateRange): void {
   draftRange.value = value
-  startText.value = value.start?.toString() ?? ''
-  endText.value = value.end?.toString() ?? ''
+  startText.value = value.start ? formatDate(value.start.toString()) : ''
+  endText.value = value.end ? formatDate(value.end.toString()) : ''
 }
 
 function showRangeEnd(value: DateRange): void {
-  const end = value.end ?? (props.coverageEnd && validDate(props.coverageEnd)
+  const end = value.end ?? (props.coverageEnd && validIsoDate(props.coverageEnd)
     ? parseDate(props.coverageEnd) : undefined)
   if (end)
     calendarPlaceholder.value = twoMonths.value ? end.subtract({ months: 1 }) : end
@@ -155,9 +153,11 @@ function handleTypedDateChange(field: 'start' | 'end', value: string | number): 
   else
     endText.value = String(value)
   choice.value = 'custom'
+  const start = parseDisplayDate(startText.value)
+  const end = parseDisplayDate(endText.value)
   draftRange.value = {
-    start: validDate(startText.value) ? parseDate(startText.value) : undefined,
-    end: validDate(endText.value) ? parseDate(endText.value) : undefined,
+    start: start ? parseDate(start) : undefined,
+    end: end ? parseDate(end) : undefined,
   }
   error.value = ''
   invalidField.value = null
@@ -182,19 +182,21 @@ function apply(): void {
     open.value = false
     return
   }
-  if (!validDate(startText.value)) {
-    showError('start', 'Enter a valid start date in YYYY-MM-DD format.')
+  const start = parseDisplayDate(startText.value)
+  const end = parseDisplayDate(endText.value)
+  if (!start) {
+    showError('start', 'Enter a valid start date in DD/MM/YYYY format.')
     return
   }
-  if (!validDate(endText.value)) {
-    showError('end', 'Enter a valid end date in YYYY-MM-DD format.')
+  if (!end) {
+    showError('end', 'Enter a valid end date in DD/MM/YYYY format.')
     return
   }
-  if (startText.value > endText.value) {
+  if (start > end) {
     showError('end', 'End on or after the start date.')
     return
   }
-  emit('change', { start_date: startText.value, end_date: endText.value })
+  emit('change', { start_date: start, end_date: end })
   open.value = false
 }
 </script>
@@ -254,8 +256,8 @@ function apply(): void {
                 :model-value="draftRange"
                 v-model:placeholder="calendarPlaceholder"
                 :number-of-months="twoMonths ? 2 : 1"
-                locale="en-US"
-                :week-starts-on="0"
+                locale="en-GB"
+                :week-starts-on="1"
                 weekday-format="short"
                 calendar-label="Reporting date range"
                 disable-days-outside-current-view
@@ -272,7 +274,7 @@ function apply(): void {
                   :model-value="startText"
                   type="text"
                   inputmode="numeric"
-                  placeholder="YYYY-MM-DD"
+                  placeholder="DD/MM/YYYY"
                   autocomplete="off"
                   :aria-invalid="invalidField === 'start'"
                   :aria-describedby="invalidField === 'start' ? 'range-date-help start-date-error' : 'range-date-help'"
@@ -287,7 +289,7 @@ function apply(): void {
                   :model-value="endText"
                   type="text"
                   inputmode="numeric"
-                  placeholder="YYYY-MM-DD"
+                  placeholder="DD/MM/YYYY"
                   autocomplete="off"
                   :aria-invalid="invalidField === 'end'"
                   :aria-describedby="invalidField === 'end' ? 'range-date-help end-date-error' : 'range-date-help'"
@@ -297,7 +299,7 @@ function apply(): void {
               </Field>
             </FieldGroup>
             <FieldDescription id="range-date-help">
-              Dates use YYYY-MM-DD and UTC. Set both dates to the same day for one day. Evidence on file: {{ coverageStart ? formatDate(coverageStart) : 'unknown' }} – {{ coverageEnd ? formatDate(coverageEnd) : 'unknown' }}. You can select dates without evidence.
+              Dates use DD/MM/YYYY. Set both dates to the same day for one day. Evidence on file: {{ coverageStart ? formatDate(coverageStart) : 'unknown' }} – {{ coverageEnd ? formatDate(coverageEnd) : 'unknown' }}. You can select dates without evidence.
             </FieldDescription>
           </div>
         </div>

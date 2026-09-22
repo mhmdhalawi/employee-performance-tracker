@@ -6,7 +6,7 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 
 - `App.vue` owns the current successful `DashboardResponse`, request cancellation, and request errors. Check the request sequence after reading the response body so an older request cannot replace newer results.
 - Dashboard employee/team controls derive their selected values from `analysis.applied_filters`. `App.vue` also retains the request filters paired with the last successful dashboard response, because resolved dates alone cannot distinguish Full period from an explicit range when coverage has the same dates. The period control uses that successful request state. A control requests a new scope; it does not claim that scope until the response succeeds. Changing team clears the employee selection in that request.
-- `ReportingPeriodPicker.vue` uses the shadcn-vue RangeCalendar in a Cedar-styled dialog. It offers Full period, rolling Last month / Last 6 months / Last year presets anchored to the latest evidence date, and Custom range. Start/end text inputs provide a typed path without launching a platform calendar. The calendar uses English Gregorian labels and UTC date-only values. Evidence coverage is shown for context, but does not bound the selectable calendar or typed custom dates. Custom dates are inclusive and sent as `start_date`/`end_date`; setting both equal selects one day. Presets send only `period_preset`, so the backend remains authoritative for their resolution. Apply commits only after a successful dashboard response; Cancel and errors preserve the current scope. A short range can lack required scoring evidence, and the backend keeps its confidence gate.
+- `ReportingPeriodPicker.vue` uses the shadcn-vue RangeCalendar in a Cedar-styled dialog. It offers Full period, rolling Last month / Last 6 months / Last year presets anchored to the latest evidence date, and Custom range. Start/end text inputs accept `DD/MM/YYYY` without launching a platform calendar. The calendar uses English Gregorian labels and UTC date-only values. Evidence coverage is shown for context, but does not bound the selectable calendar or typed custom dates. Custom dates are inclusive and sent as ISO `start_date`/`end_date`; setting both equal selects one day. Presets send only `period_preset`, so the backend remains authoritative for their resolution. Apply commits only after a successful dashboard response; Cancel and errors preserve the current scope. A short range can lack required scoring evidence, and the backend keeps its confidence gate.
 - When a preset reaches before available evidence, the preview names the chosen preset, keeps its full dates, and explains why earlier records are absent. The committed dashboard badge keeps the preset name alongside the full selected dates. A separate note shows the available date window used for scores; employee details and report previews preserve the same distinction. A wholly empty selected range returns withheld overall results.
 - Employee Details refresh reuses the last successful request's `period_preset`, legacy `period_weeks`, or explicit start/end dates. A full-scope refresh omits all three, preserving the backend's unbounded full-period calculation rules.
 - While a filter request runs, selectors and exports are disabled. Failure preserves both old controls and old results and offers Retry filters. Retry repeats the last attempted request. Clear filters requests the full dashboard.
@@ -36,8 +36,8 @@ There are no create/edit/delete controls, bulk selection, or toast-based mutatio
 - “Findings” counts grouped employee alerts consistently on list/detail pages. Each detail finding separately labels its occurrence count.
 - Overall averages show scored, withheld, and total counts from the response. Null scores remain a dash with a withheld-status explanation.
 - Weekly chart values and coverage populations follow the filtered backend response. Missing values are labeled per KPI in the data table, never shown as zero.
-- Dates are English, Gregorian, and UTC for date-only API fields. Display the reporting period on employee details and include the year for historical clarity.
-- Source interpretation stays available after primary employee review. Its compact disclosure does not hide an attention warning. Source names and rationale get full width above their badges on phones.
+- Screens and PDFs display Gregorian dates as `DD/MM/YYYY`; the API keeps UTC date-only `YYYY-MM-DD` fields. Display the reporting period on employee details and include the year for historical clarity.
+- Source interpretation remains available at `/data-interpretation`. The main dashboard has no interpretation card; the routed page preserves full-width source names and rationale above their badges on phones.
 
 ## Boundaries and validation
 
@@ -68,7 +68,7 @@ complete evidence snapshot. Supporting records retain safe HTTPS links and IDs.
 `EmployeeEvidenceTable.vue` owns a help icon beside “evidence” in each KPI heading on Employee Details; report preview omits it. Its floating, initially closed calculation panel opens by click, tap, or keyboard and shows only the matching Productivity, Compliance, or Quality sentence; Escape closes it. The separate Calculation details card has been removed. Main table descriptions still label work, attendance/report/leave, and quality data without formulas. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. Report payload values and download snapshot handling remain unchanged.
 
 Each table calculation panel uses one short sentence for its documented component
-weights. The Evidence confidence explanation, detailed arithmetic, and the
+weights. The Data confidence explanation, detailed arithmetic, and the
 required-evidence checklist are omitted from this disclosure;
 backend explanations, evidence, scores, and report payloads remain unchanged.
 
@@ -143,7 +143,7 @@ category, date range, outcome, and documentation completeness. Each type exposes
 and backend scoring impacts in the shared record disclosure.
 
 Source outcomes do not imply calculated compliance. Source confidence is distinct from
-employee evidence confidence. Missing values remain Not provided; real zero rework and
+employee data confidence. Missing values remain Not provided; real zero rework and
 false first-pass approval remain visible. Work names and extra employee profile fields are
 not invented. Quality records currently have no canonical evidence URL field.
 

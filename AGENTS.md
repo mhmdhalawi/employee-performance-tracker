@@ -279,6 +279,7 @@ FastAPI `/api/v1` contract and must not import Python modules. Keep uploads, fil
 state, and presentation logic in Vue; keep source validation, KPI formulas, evidence
 confidence, trend calculation, and all other business arithmetic in Python.
 Employee, team, and reporting-period selections request filtered results from the backend.
+Display dates and typed reporting dates use `DD/MM/YYYY`; API date values remain ISO `YYYY-MM-DD`.
 Vue Router owns browser navigation. The dashboard is served at `/`, employee details at
 `/employees/:employeeId`, and data interpretation at `/data-interpretation`; `/dashboard` and
 the previous root query-string detail URLs remain compatibility redirects.
@@ -401,11 +402,11 @@ and a responsive routed employee detail page containing traceable alerts.
 Employee Details also previews and downloads an employee PDF for the active period. The main
 dashboard previews a team report and downloads team or per-KPI PDF summaries from its current
 filtered response.
-The dashboard also exposes a compact data-interpretation summary and routed detail page for table
-classifications, confidence, approved calculator invocations, and field bindings grouped by
-contributing schema. The Vue app opens the aggregated persisted dashboard directly; the upload
-and sample-data entry cards have been removed from the frontend. Week presets are resolved by
-the backend against the latest business date in canonical evidence.
+The separate `/data-interpretation` route presents table classifications, confidence, approved
+calculator invocations, and field bindings grouped by contributing schema. The main dashboard
+does not show a data-interpretation card. The Vue app opens the aggregated persisted dashboard
+directly; the upload and sample-data entry cards have been removed from the frontend. Week
+presets are resolved by the backend against the latest business date in canonical evidence.
 The incremental multi-submission aggregation plan is implemented, with the documented
 EMP-027/EMP-029 benchmark exception described in `docs/benchmark.md`.
 

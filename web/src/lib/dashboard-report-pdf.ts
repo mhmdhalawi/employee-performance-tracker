@@ -1,4 +1,5 @@
 import type { Content, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
+import { formatDate, formatDateTime } from '@/lib/date-format'
 import type { DashboardResponse, EmployeeKpiResult, KpiTrendPoint } from '@/types/analysis'
 
 export type DashboardKpi = 'productivity' | 'compliance' | 'quality'
@@ -185,7 +186,7 @@ function employeeResultsTable(results: EmployeeKpiResult[]): Content {
     return emptyState('No employees match the current filters.')
 
   return dataTable(
-    ['Employee', 'Team', 'Productivity', 'Compliance', 'Quality', 'Confidence', 'Overall', 'Status'],
+    ['Employee', 'Team', 'Productivity', 'Compliance', 'Quality', 'Data confidence', 'Overall', 'Status'],
     results.map(row => [
       `${row.employee_name || row.employee_id}\n${row.employee_id}`,
       row.team || 'Not provided',
@@ -205,7 +206,7 @@ function kpiEmployeeTable(results: EmployeeKpiResult[], kpi: DashboardKpi): Cont
     return emptyState('No employees match the current filters.')
 
   return dataTable(
-    ['Employee', 'Team', `${kpiDetails[kpi].label} score`, 'Evidence confidence', 'Overall status'],
+    ['Employee', 'Team', `${kpiDetails[kpi].label} score`, 'Data confidence', 'Overall status'],
     results.map(row => [
       `${row.employee_name || row.employee_id}\n${row.employee_id}`,
       row.team || 'Not provided',
@@ -222,7 +223,7 @@ function teamTrendTable(trends: KpiTrendPoint[]): Content {
     return emptyState('No trend data is available for this period.')
 
   return dataTable(
-    ['Week ending', 'Employees', 'Productivity', 'Compliance', 'Quality', 'Overall', 'Confidence'],
+    ['Week ending', 'Employees', 'Productivity', 'Compliance', 'Quality', 'Overall', 'Data confidence'],
     trends.map(point => [
       formatDate(point.period_end),
       String(point.employee_count),
@@ -241,7 +242,7 @@ function kpiTrendTable(trends: KpiTrendPoint[], kpi: DashboardKpi): Content {
     return emptyState('No trend data is available for this period.')
 
   return dataTable(
-    ['Week ending', 'Employees with evidence', `${kpiDetails[kpi].label} score`, 'Evidence confidence'],
+    ['Week ending', 'Employees with evidence', `${kpiDetails[kpi].label} score`, 'Data confidence'],
     trends.map(point => [
       formatDate(point.period_end),
       String(point[`${kpi}_employee_count`]),
@@ -324,16 +325,6 @@ function optionalScore(value: number | null): string {
 function formatPeriod(analysis: DashboardResponse): string {
   const { start_date: start, end_date: end } = analysis.applied_filters
   return start && end ? `${formatDate(start)} - ${formatDate(end)}` : 'Full available period'
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })
-    .format(new Date(`${value}T00:00:00Z`))
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' })
-    .format(new Date(value))
 }
 
 function reportFilename(analysis: DashboardResponse, report: string): string {

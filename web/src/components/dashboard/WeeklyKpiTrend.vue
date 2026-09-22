@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatDate } from '@/lib/date-format'
 import type { KpiTrendPoint } from '@/types/analysis'
 
 const props = withDefaults(defineProps<{
@@ -41,11 +42,6 @@ const complianceY = (point: ChartPoint) => point.compliance ?? Number.NaN
 const qualityY = (point: ChartPoint) => point.quality ?? Number.NaN
 const weekTick = (index: number) => trendData.value[index]?.label ?? ''
 const percentTick = (value: number) => `${value}%`
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
-    .format(new Date(`${value}T00:00:00Z`))
-}
 
 function score(value: number): string {
   return `${value.toFixed(1)}%`

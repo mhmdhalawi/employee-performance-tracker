@@ -19,6 +19,7 @@ import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { downloadTeamReportPdf } from '@/lib/dashboard-report-pdf'
+import { formatDate } from '@/lib/date-format'
 import type { DashboardResponse } from '@/types/analysis'
 
 const props = defineProps<{
@@ -64,11 +65,6 @@ function score(value: number | null): string {
   return value === null ? '—' : `${value.toFixed(1)}%`
 }
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })
-    .format(new Date(`${value}T00:00:00Z`))
-}
-
 function employeeLabel(employeeName: string | null, employeeId: string): string {
   return employeeName || employeeId
 }
@@ -102,7 +98,7 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
           <TriangleAlertIcon aria-hidden="true" />
           <AlertTitle>{{ analysis.summary.insufficient_data_count }} result{{ analysis.summary.insufficient_data_count === 1 ? '' : 's' }} withheld</AlertTitle>
           <AlertDescription>
-            Employees below the evidence threshold keep their component KPIs, but no overall result or tier is shown.
+            Employees below the required data confidence threshold keep their component KPIs, but no overall result or tier is shown.
           </AlertDescription>
         </Alert>
 

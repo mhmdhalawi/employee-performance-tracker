@@ -23,10 +23,10 @@ import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import DataInterpretationCard from '@/components/dashboard/DataInterpretationCard.vue'
 import TeamReportPreviewDialog from '@/components/dashboard/TeamReportPreviewDialog.vue'
 import WeeklyKpiTrend from '@/components/dashboard/WeeklyKpiTrend.vue'
 import { downloadKpiReportPdf, type DashboardKpi } from '@/lib/dashboard-report-pdf'
+import { formatDate } from '@/lib/date-format'
 import type { DashboardFilters, DashboardResponse, EmployeeKpiResult } from '@/types/analysis'
 
 const props = defineProps<{
@@ -236,18 +236,6 @@ function requestFilters(filters: DashboardFilters): void {
   emit('filtersChange', filters)
 }
 
-function openDataInterpretation(): void {
-  void router.push({ name: 'data-interpretation' })
-}
-
-function parseDate(value: string): Date {
-  return new Date(`${value}T00:00:00Z`)
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(parseDate(value))
-}
-
 </script>
 
 <template>
@@ -263,7 +251,7 @@ function formatDate(value: string): string {
       <section class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div class="flex flex-col gap-2">
           <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Employee performance</h1><Badge variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
-          <p class="text-sm text-muted-foreground">Review KPI scores, evidence confidence, trends, and findings.</p>
+          <p class="text-sm text-muted-foreground">Review KPI scores, trends, and findings. Data confidence measures required evidence completeness, not employee performance.</p>
         </div>
         <FieldGroup class="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] lg:w-152 lg:shrink-0">
           <Field class="min-w-0 gap-1.5"><FieldLabel for="employee-filter">Employee</FieldLabel><Select :model-value="employee" :disabled="isFiltering" @update:model-value="applyFilter('employee_id', $event)"><SelectTrigger id="employee-filter" class="w-full bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All employees</SelectItem><SelectItem v-for="row in employeeOptions" :key="row.employee_id" :value="row.employee_id">{{ employeeLabel(row) }}</SelectItem></SelectGroup></SelectContent></Select></Field>
@@ -291,7 +279,7 @@ function formatDate(value: string): string {
         <CardHeader><div class="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Employee results</CardTitle><CardDescription>Component scores remain visible when overall scoring is withheld.</CardDescription></div><Badge variant="outline">{{ filteredRows.length }} employees</Badge></div></CardHeader>
         <CardContent class="hidden overflow-x-auto lg:block">
           <Table>
-            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead class="min-w-36">Confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead><TableHead class="text-center">Findings</TableHead><TableHead class="text-right">Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead class="min-w-36">Data confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead><TableHead class="text-center">Findings</TableHead><TableHead class="text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell>{{ row.team ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id) ? 'warning' : 'outline'">{{ alertCount(row.employee_id) }}</Badge></TableCell><TableCell class="text-right"><Button variant="outline" size="sm" @click="openEmployeeDetails(row)"><EyeIcon data-icon="inline-start" />View details</Button></TableCell></TableRow>
               <TableRow v-if="!filteredRows.length"><TableCell colspan="10" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
@@ -308,7 +296,7 @@ function formatDate(value: string): string {
               <div class="min-w-0"><h3 class="wrap-break-word font-medium">{{ employeeLabel(row) }}</h3><p class="text-xs text-muted-foreground">{{ row.employee_id }} · {{ row.team ?? 'Team not provided' }}</p></div>
               <div class="shrink-0 text-right"><p class="text-xs text-muted-foreground">Overall</p><p class="font-semibold tabular-nums">{{ score(row.overall_score) }}</p></div>
             </div>
-            <div class="flex flex-wrap items-center gap-2"><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge><span class="text-xs">{{ row.data_confidence.toFixed(0) }}% confidence · {{ alertCount(row.employee_id) }} findings</span></div>
+            <div class="flex flex-wrap items-center gap-2"><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge><span class="text-xs">{{ row.data_confidence.toFixed(0) }}% data confidence · {{ alertCount(row.employee_id) }} findings</span></div>
             <dl class="grid grid-cols-3 gap-2 text-xs"><div><dt class="text-muted-foreground">Productivity</dt><dd class="mt-1 tabular-nums">{{ score(row.productivity_score) }}</dd></div><div><dt class="text-muted-foreground">Compliance</dt><dd class="mt-1 tabular-nums">{{ score(row.compliance_score) }}</dd></div><div><dt class="text-muted-foreground">Quality</dt><dd class="mt-1 tabular-nums">{{ score(row.quality_score) }}</dd></div></dl>
             <Button variant="outline" size="sm" class="w-fit" :aria-label="`View details for ${employeeLabel(row)}`" @click="openEmployeeDetails(row)"><EyeIcon data-icon="inline-start" />View details</Button>
           </article>
@@ -339,9 +327,6 @@ function formatDate(value: string): string {
       </Card>
 
       <WeeklyKpiTrend :trends="analysis.trends" description="Current employee, team, and period filters apply. Gaps mean no score is available." />
-
-      <DataInterpretationCard :mapping-summaries="analysis.mapping_summaries" @view-details="openDataInterpretation" />
-
     </div>
 
     <TeamReportPreviewDialog

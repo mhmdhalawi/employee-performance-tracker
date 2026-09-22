@@ -1,4 +1,5 @@
 import type { EmployeeEvidenceRow, EvidenceKpi } from '@/types/employee-evidence'
+import { formatDate } from '@/lib/date-format'
 
 export const evidenceLabels: Record<EvidenceKpi, string> = {
   productivity: 'Productivity', compliance: 'Compliance', quality: 'Quality',
@@ -17,9 +18,7 @@ export const evidenceCalculations: Record<EvidenceKpi, string> = {
   quality: '60% accuracy, 25% first-pass approval, 15% rework.',
 }
 export function evidenceDate(value: string | null): string {
-  return value === null ? 'Not provided' : new Intl.DateTimeFormat('en', {
-    dateStyle: 'medium', timeZone: 'UTC',
-  }).format(new Date(`${value}T00:00:00Z`))
+  return value === null ? 'Not provided' : formatDate(value)
 }
 export function evidencePercent(value: number): string {
   return `${Number((value * 100).toFixed(2))}%`
@@ -107,7 +106,7 @@ export function evidenceLink(row: EmployeeEvidenceRow): string | null {
 }
 export function evidenceImpact(value: string): string {
   const labels: Record<string, string> = {
-    none: 'No scoring impact', lowers_confidence: 'Lowers confidence', affects_score: 'Affects score',
+    none: 'No scoring impact', lowers_confidence: 'Lowers data confidence', affects_score: 'Affects score',
     excluded_from_scoring: 'Excluded from scoring', blocks_score: 'Blocks score',
   }
   return labels[value] ?? value.replaceAll('_', ' ')
