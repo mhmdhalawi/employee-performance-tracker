@@ -67,7 +67,7 @@ function familyStyle(family: string): CSSProperties | undefined {
         <Badge variant="outline">{{ classifications.length }} table{{ classifications.length === 1 ? '' : 's' }}</Badge>
     </PerformanceHeader>
 
-    <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+    <div class="mx-auto flex max-w-[var(--app-content-max-width)] flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       <header class="flex flex-col gap-2">
         <p class="text-sm font-medium text-muted-foreground">Calculation inputs</p>
         <h1 class="flex items-center gap-2 text-3xl font-semibold tracking-tight">

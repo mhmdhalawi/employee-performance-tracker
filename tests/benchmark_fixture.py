@@ -28,7 +28,22 @@ def benchmark_tables() -> dict[str, list[dict[str, object]]]:
     }
     for index, item in enumerate(employees, start=1):
         employee_id = item["employee_id"]
-        tables["Employees"].append({"employee_id": employee_id, "employee_name": f"Sanitized Employee {index:02d}", "team": item["team"], "role": "Analyst"})
+        campaign = {
+            "Automation": "Retention",
+            "Operations": "Sales",
+            "Quality": "Support",
+        }[item["team"]]
+        tables["Employees"].append({
+            "employee_id": employee_id,
+            "employee_name": f"Sanitized Employee {index:02d}",
+            "team": item["team"],
+            "role": "Agent",
+            "campaign": campaign,
+            "queue": f"Queue {'A' if index % 2 else 'B'}",
+            "shift": ("Morning", "Afternoon", "Evening")[(index - 1) % 3],
+            "supervisor": f"Supervisor {(index - 1) // 10 + 1}",
+            "location": "Berlin" if index <= 15 else "Remote",
+        })
         tables["Targets"].append({"employee_id": employee_id, "target_outputs_90d": 1, "target_avg_effort_hours": 8, "minimum_confidence": 0.7})
         tables["Projects"].append({"record_id": f"OUT-{index:03d}", "employee_id": employee_id, "assigned_date": "2026-06-01", "due_date": "2026-06-02", "completed_date": "2026-06-02", "completion_status": "completed on time", "actual_effort_hours": 8, "verification_status": "verified", "evidence_link": f"https://example.invalid/evidence/{index:03d}"})
         for day in range(1, 6):

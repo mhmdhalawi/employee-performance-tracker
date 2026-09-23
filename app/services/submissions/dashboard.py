@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from app.core.errors import DashboardNotFoundError
+from app.core.errors import DashboardNotFoundError, InvalidAnalysisFilterError
 from app.database import StoredAggregationState, load_aggregation_state
+from app.schemas.performance import PerformanceEvidenceDataset
 from app.schemas.uploads import (
     CalculationPlan,
     DashboardResponse,
@@ -35,6 +36,11 @@ def load_dashboard_context() -> DashboardContext:
 async def get_aggregated_dashboard(
     employee_id: str | None = None,
     team: str | None = None,
+    campaign: str | None = None,
+    queue: str | None = None,
+    shift: str | None = None,
+    supervisor: str | None = None,
+    location: str | None = None,
     period_weeks: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
@@ -43,7 +49,7 @@ async def get_aggregated_dashboard(
     """Recalculate one filtered dashboard from canonical cross-submission evidence."""
     return build_dashboard(
         load_dashboard_context(), employee_id, team, period_weeks, start_date, end_date,
-        period_preset
+        period_preset, campaign, queue, shift, supervisor, location
     )
 
 
@@ -81,12 +87,30 @@ def build_dashboard(
     start_date: date | None = None,
     end_date: date | None = None,
     period_preset: str | None = None,
+    campaign: str | None = None,
+    queue: str | None = None,
+    shift: str | None = None,
+    supervisor: str | None = None,
+    location: str | None = None,
 ) -> DashboardResponse:
     """Calculate a filtered dashboard without reloading its canonical state."""
     state = context.state
     materialized = context.materialized
     dataset = materialized.dataset
     overview = inspect_dataset(dataset)
+    call_center_filters = {
+        "campaign": campaign,
+        "queue": queue,
+        "shift": shift,
+        "supervisor": supervisor,
+        "location": location,
+    }
+    call_center_options = {
+        name: _available_employee_values(dataset, name)
+        for name in call_center_filters
+    }
+    _validate_call_center_filters(call_center_filters, call_center_options)
+    scoped_dataset = _filter_call_center_population(dataset, call_center_filters)
     effective_start, effective_end = resolve_dashboard_period(
         context, start_date, end_date, period_weeks, period_preset
     )
@@ -114,11 +138,16 @@ def build_dashboard(
         for classification in summary.table_classifications
     ]
     response = build_analysis_response(
-        dataset,
+        scoped_dataset,
         first_plan,
         import_issues=[],
         employee_id=employee_id,
         team=team,
+        campaign=campaign,
+        queue=queue,
+        shift=shift,
+        supervisor=supervisor,
+        location=location,
         start_date=effective_start,
         end_date=effective_end,
         selected_start_date=selected_start,
@@ -138,6 +167,11 @@ def build_dashboard(
                 employee_id=employee.employee_id,
                 employee_name=employee.employee_name,
                 team=employee.team,
+                campaign=employee.campaign,
+                queue=employee.queue,
+                shift=employee.shift,
+                supervisor=employee.supervisor,
+                location=employee.location,
             )
             for employee in dataset.employees
         ),
@@ -153,6 +187,11 @@ def build_dashboard(
         applied_filters=response.applied_filters,
         available_employees=available_employees,
         available_teams=overview.teams,
+        available_campaigns=call_center_options["campaign"],
+        available_queues=call_center_options["queue"],
+        available_shifts=call_center_options["shift"],
+        available_supervisors=call_center_options["supervisor"],
+        available_locations=call_center_options["location"],
         trends=response.trends,
         alerts=response.alerts,
         import_issues=response.import_issues,
@@ -164,4 +203,86 @@ def build_dashboard(
         included_submission_count=state.included_submission_count,
         latest_submission_at=datetime.fromisoformat(state.latest_submission_at),
         mapping_summaries=materialized.mapping_summaries,
+    )
+
+
+def _available_employee_values(
+    dataset: PerformanceEvidenceDataset,
+    field_name: str,
+) -> list[str]:
+    return sorted(
+        {
+            value
+            for employee in dataset.employees
+            if (value := getattr(employee, field_name))
+        },
+        key=str.casefold,
+    )
+
+
+def _validate_call_center_filters(
+    filters: dict[str, str | None],
+    options: dict[str, list[str]],
+) -> None:
+    for name, selected in filters.items():
+        if selected is None:
+            continue
+        if selected.casefold() not in {value.casefold() for value in options[name]}:
+            label = name.replace("_", " ")
+            raise InvalidAnalysisFilterError(f"Unknown {label} '{selected}'.")
+
+
+def _filter_call_center_population(
+    dataset: PerformanceEvidenceDataset,
+    filters: dict[str, str | None],
+) -> PerformanceEvidenceDataset:
+    selected_employee_ids = {
+        employee.employee_id
+        for employee in dataset.employees
+        if all(
+            selected is None
+            or (getattr(employee, name) or "").casefold() == selected.casefold()
+            for name, selected in filters.items()
+        )
+    }
+    if all(selected is None for selected in filters.values()):
+        return dataset
+    return dataset.model_copy(
+        update={
+            "employees": [
+                employee
+                for employee in dataset.employees
+                if employee.employee_id in selected_employee_ids
+            ],
+            "performance_targets": [
+                target
+                for target in dataset.performance_targets
+                if target.employee_id in selected_employee_ids
+            ],
+            "work_outputs": [
+                record
+                for record in dataset.work_outputs
+                if record.employee_id in selected_employee_ids
+            ],
+            "attendance_events": [
+                record
+                for record in dataset.attendance_events
+                if record.employee_id in selected_employee_ids
+            ],
+            "submission_events": [
+                record
+                for record in dataset.submission_events
+                if record.employee_id in selected_employee_ids
+            ],
+            "leave_events": [
+                record
+                for record in dataset.leave_events
+                if record.employee_id in selected_employee_ids
+            ],
+            "quality_events": [
+                record
+                for record in dataset.quality_events
+                if record.employee_id in selected_employee_ids
+            ],
+        }
     )

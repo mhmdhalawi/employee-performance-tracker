@@ -7,10 +7,10 @@ Scope: Vue dashboard, sign-in screen, loading/error states, and browser-generate
 
 The frontend review and browser reassessment were approved for implementation. This section records the resulting UI decisions; the original brand proposal below remains background for unresolved artwork/font decisions.
 
-- Keep white headers and surfaces, Geist interface text, Cedar teal primary actions, and restrained gold attention treatment. A shared `PerformanceHeader.vue` repeats the existing Cedar artwork and back navigation across dashboard, employee, and interpretation routes. The dashboard header aligns with its 1600px content container; other routes retain the 1280px header width. Header actions use their own row on phones. No new artwork or full teal header is introduced.
-- The dashboard uses two compact summary columns on phones and four on wide screens. Detailed source interpretation remains on its separate route, without a card on the main dashboard. Below the `2xl` table breakpoint, employee cards preserve every KPI plus overall/status, data confidence, separate Data Issues and Performance Alerts counts, and the details action without horizontal scrolling. On wider screens, the dashboard expands to 1600px and the fixed-width table keeps both finding columns visible without horizontal scrolling. Multiword table headers stay on one line, and the Employee sort label aligns with the employee values.
-- Null chart scores appear as gaps. A visible legend and distinct dash patterns identify series; an expandable table exposes exact backend weekly values and explicit missing-data labels. Chart scope follows backend employee/team/period filters.
-- Employee Details and its shared header align with the dashboard's 1600px content width. Report previews use `ReportPreviewContent.vue`: a viewport-bounded modal up to 1400px wide, fixed header/footer regions, and one scrolling content body with non-shrinking cards. The application page itself keeps natural document scrolling.
+- Keep white headers and surfaces, Geist interface text, Cedar teal primary actions, and restrained gold attention treatment. A shared `PerformanceHeader.vue` repeats the existing Cedar artwork and back navigation across dashboard, employee, and interpretation routes. All product routes and their headers share the 1920px maximum content width in `web/src/style.css`. Header actions use their own row on phones. No new artwork or full teal header is introduced.
+- The dashboard uses two compact summary columns on phones and four on wide screens. Detailed source interpretation remains on its separate route, without a card on the main dashboard. Below the `2xl` table breakpoint, employee cards preserve every KPI plus overall/status, data confidence, separate Data Issues and Performance Alerts counts, and the details action without horizontal scrolling. On wider screens, the dashboard expands to the shared 1920px maximum and the fixed-width table keeps both finding columns visible without horizontal scrolling. Multiword table headers stay on one line, and the Employee sort label aligns with the employee values. The reporting-period filter reserves enough width for its date picker and quick-range buttons before the five operational filters.
+- Null chart scores appear as gaps. A visible legend and distinct dash patterns identify series; an expandable table exposes exact backend weekly values and explicit missing-data labels. Chart scope follows backend operational and period filters.
+- Employee Details and its shared header align with the dashboard's content width. Report previews use `ReportPreviewContent.vue`: a viewport-bounded modal up to 1400px wide, fixed header/footer regions, and one scrolling content body with non-shrinking cards. The application page itself keeps natural document scrolling.
 - Runtime CSS variables in `web/src/style.css` remain the canonical web token source (runtime-owned mapping). The Tailwind `@theme inline` adapter exposes semantic utility colors. `--compliance-foreground: #80520b` supplies readable small compliance labels on pale gold surfaces; `--chart-2: #c18426` remains the line color. The dark label value is `#f1bd64`.
 - `Progress.vue` owns the warning tone used for withheld employee data confidence. `style.css` owns global scrollbar colors and reduced-motion behavior. Explicit status text remains mandatory.
 - Both PDF generators already use `#078181` and retain their existing rendering in this pass. Their constants still mirror web palette values manually; a shared browser/PDF token export is a future maintenance change requiring PDF visual verification.
@@ -77,6 +77,9 @@ trends.
 
 ## Reporting date range — 2026-09-15
 
+The shared `ReportingPeriodPicker.vue` is used inside the call-center filter console
+described below. The console adds visible Today, This week, and This month shortcuts.
+
 The dashboard period control opens a compact dialog with quick ranges beside a two-month
 shadcn-vue RangeCalendar on desktop; phones show one month and stack the controls. Calendar
 range interiors use Cedar's pale teal secondary surface, endpoints use primary teal, and the
@@ -98,6 +101,28 @@ records. The calendar and typed custom dates also allow dates outside evidence c
 After Apply, the dashboard badge retains the full selected dates; a separate note shows the
 available date window used for scores. Employee details and report previews preserve that
 same distinction.
+
+## Call-center dashboard filters — 2026-09-23
+
+The main dashboard is now framed as a call-center performance overview. Its operational
+filter console follows the supplied dashboard reference while preserving Cedar's white,
+teal, black, and restrained-gold system. `CallCenterFilterBar.vue` owns the dashboard's
+Reporting period, Campaign, Queue, Shift, Supervisor, and Location controls. The console
+uses the shared authored Select primitive, compact labeled fields, and a single bordered
+surface rather than adding a new visual language.
+
+Reporting period opens the shared Cedar date-range picker with a two-month calendar on
+desktop, a one-month calendar on phones, and typed `DD/MM/YYYY` dates. Today, This week,
+and This month remain visible beside it. The quick ranges anchor to the latest canonical
+evidence date and send explicit inclusive ISO start/end dates. On phones, controls reflow
+without losing labels or actions.
+
+The five operational dimensions are optional canonical employee-profile fields. When a
+source does not provide a dimension, its selector contains only the corresponding All
+option; the interface never invents a campaign, queue, shift, supervisor, or location.
+Filter changes continue to retain the last successful response during loading and failure.
+Employee Results now presents Campaign / Queue in place of Team on the main dashboard;
+the existing team and employee API filters remain available for compatibility and reports.
 
 ## Original brand proposal and unresolved assets
 

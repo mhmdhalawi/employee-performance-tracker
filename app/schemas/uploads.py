@@ -165,6 +165,11 @@ class AnalysisSummary(BaseModel):
 class AnalysisFilters(BaseModel):
     employee_id: str | None = None
     team: str | None = None
+    campaign: str | None = None
+    queue: str | None = None
+    shift: str | None = None
+    supervisor: str | None = None
+    location: str | None = None
     start_date: date | None = None
     end_date: date | None = None
     period_weeks: Literal[4, 8, 12] | None = None
@@ -185,6 +190,11 @@ class EmployeeFilterOption(BaseModel):
     employee_id: str
     employee_name: str | None = None
     team: str | None = None
+    campaign: str | None = None
+    queue: str | None = None
+    shift: str | None = None
+    supervisor: str | None = None
+    location: str | None = None
 
 
 class SchemaMappingSummary(BaseModel):
@@ -227,6 +237,11 @@ class DashboardResponse(BaseModel):
     applied_filters: AnalysisFilters
     available_employees: list[EmployeeFilterOption]
     available_teams: list[str]
+    available_campaigns: list[str]
+    available_queues: list[str]
+    available_shifts: list[str]
+    available_supervisors: list[str]
+    available_locations: list[str]
     trends: list[KpiTrendPoint]
     alerts: list[PerformanceAlert]
     import_issues: list[ImportIssue]

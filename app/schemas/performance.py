@@ -18,6 +18,11 @@ class Employee(BaseModel):
     employee_name: str | None = None
     team: str | None = None
     role: str | None = None
+    campaign: str | None = None
+    queue: str | None = None
+    shift: str | None = None
+    supervisor: str | None = None
+    location: str | None = None
     source_version: int | None = Field(default=None, ge=0)
     source_updated_at: datetime | None = None
 
@@ -162,6 +167,11 @@ class EmployeeKpiScores(BaseModel):
     employee_name: str | None
     team: str | None
     role: str | None
+    campaign: str | None
+    queue: str | None
+    shift: str | None
+    supervisor: str | None
+    location: str | None
     productivity_score: float
     productivity_reason: str
     compliance_score: float

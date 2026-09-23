@@ -7,6 +7,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --app-content-max-width: 1920px;
   --background: #ffffff;
   --foreground: #0d0d0d;
   --card: #ffffff;

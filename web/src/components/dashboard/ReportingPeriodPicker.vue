@@ -64,7 +64,7 @@ const triggerLabel = computed(() => {
 const selectedSummary = computed(() => {
   const start = parseDisplayDate(startText.value)
   const end = parseDisplayDate(endText.value)
-  if (!start || !end)
+  if (!start || !end || start > end)
     return 'Choose a start and end date'
   const label = quickRanges.find(item => item.value === choice.value)?.label
   const dates = start === end
@@ -159,6 +159,8 @@ function handleTypedDateChange(field: 'start' | 'end', value: string | number): 
     start: start ? parseDate(start) : undefined,
     end: end ? parseDate(end) : undefined,
   }
+  if (end)
+    showRangeEnd(draftRange.value)
   error.value = ''
   invalidField.value = null
 }
@@ -260,7 +262,6 @@ function apply(): void {
                 :week-starts-on="1"
                 weekday-format="short"
                 calendar-label="Reporting date range"
-                disable-days-outside-current-view
                 class="w-fit rounded-lg border border-border bg-background"
                 @update:model-value="handleCalendarChange"
               />

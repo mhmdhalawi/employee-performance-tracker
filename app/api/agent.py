@@ -67,6 +67,11 @@ async def preview_table_data(
 async def latest_dashboard(
     employee_id: str | None = None,
     team: str | None = None,
+    campaign: str | None = None,
+    queue: str | None = None,
+    shift: str | None = None,
+    supervisor: str | None = None,
+    location: str | None = None,
     period_weeks: int | None = None,
     period_preset: str | None = None,
     start_date: date | None = None,
@@ -75,6 +80,11 @@ async def latest_dashboard(
     return await get_aggregated_dashboard(
         employee_id=employee_id,
         team=team,
+        campaign=campaign,
+        queue=queue,
+        shift=shift,
+        supervisor=supervisor,
+        location=location,
         period_weeks=period_weeks,
         period_preset=period_preset,
         start_date=start_date,

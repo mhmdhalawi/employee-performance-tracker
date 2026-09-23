@@ -12,6 +12,11 @@ export interface AnalysisSummary {
 export interface AnalysisFilters {
   employee_id: string | null
   team: string | null
+  campaign: string | null
+  queue: string | null
+  shift: string | null
+  supervisor: string | null
+  location: string | null
   start_date: string | null
   end_date: string | null
   period_weeks: 4 | 8 | 12 | null
@@ -47,6 +52,11 @@ export interface EmployeeKpiResult {
   employee_name: string | null
   team: string | null
   role: string | null
+  campaign: string | null
+  queue: string | null
+  shift: string | null
+  supervisor: string | null
+  location: string | null
   productivity_score: number | null
   productivity_reason: string
   compliance_score: number | null
@@ -98,6 +108,11 @@ export interface PerformanceAlert {
 export interface DashboardFilters {
   employee_id?: string
   team?: string
+  campaign?: string
+  queue?: string
+  shift?: string
+  supervisor?: string
+  location?: string
   start_date?: string
   end_date?: string
   period_weeks?: 4 | 8 | 12
@@ -108,6 +123,11 @@ export interface EmployeeFilterOption {
   employee_id: string
   employee_name: string | null
   team: string | null
+  campaign: string | null
+  queue: string | null
+  shift: string | null
+  supervisor: string | null
+  location: string | null
 }
 
 export interface SchemaMappingSummary {
@@ -124,6 +144,11 @@ export interface DashboardResponse {
   applied_filters: AnalysisFilters
   available_employees: EmployeeFilterOption[]
   available_teams: string[]
+  available_campaigns: string[]
+  available_queues: string[]
+  available_shifts: string[]
+  available_supervisors: string[]
+  available_locations: string[]
   trends: KpiTrendPoint[]
   alerts: PerformanceAlert[]
   limitations: string[]

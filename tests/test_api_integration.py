@@ -1056,6 +1056,39 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertEqual(period["applied_filters"]["start_date"], "2026-06-01")
         self.assertEqual(period["applied_filters"]["end_date"], "2026-06-05")
 
+    def test_call_center_filters_and_options(self) -> None:
+        self.assertEqual(self._post_benchmark_tables().status_code, 201)
+        response = self.client.get(
+            "/api/v1/dashboard",
+            params={
+                "campaign": "Retention",
+                "queue": "Queue A",
+                "shift": "Morning",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["applied_filters"]["campaign"], "Retention")
+        self.assertEqual(payload["applied_filters"]["queue"], "Queue A")
+        self.assertEqual(payload["applied_filters"]["shift"], "Morning")
+        self.assertTrue(payload["results"])
+        self.assertTrue(
+            all(
+                item["campaign"] == "Retention"
+                and item["queue"] == "Queue A"
+                and item["shift"] == "Morning"
+                for item in payload["results"]
+            )
+        )
+        self.assertEqual(payload["available_campaigns"], ["Retention", "Sales", "Support"])
+        self.assertEqual(payload["available_locations"], ["Berlin", "Remote"])
+
+        unknown = self.client.get(
+            "/api/v1/dashboard",
+            params={"supervisor": "Unknown"},
+        )
+        self.assertEqual(unknown.status_code, 400)
+
     def test_csv_upload_is_supported(self) -> None:
         rows = benchmark_tables()["Employees"][:2]
         for row in rows:

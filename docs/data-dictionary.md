@@ -34,6 +34,14 @@ Every employee and evidence record must have a non-empty identifier. Duplicate e
 or duplicate record IDs block the affected overall result; orphan evidence is reported and is
 not silently joined to another employee.
 
+## Call-center employee dimensions
+
+The employee foundation may provide optional `campaign`, `queue`, `shift`, `supervisor`, and
+`location` fields. They scope the complete dashboard population before deterministic KPI
+calculation; they do not change formulas or contribute to a score. Filter options come only
+from canonical employee values. Missing dimensions remain `Not provided` and are never
+inferred from team, role, or evidence text.
+
 ## Compliance evidence
 
 | Normalized field | Type | Required behavior |

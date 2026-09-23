@@ -5,13 +5,26 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 ## State and navigation
 
 - `App.vue` owns the current successful `DashboardResponse`, request cancellation, and request errors. Check the request sequence after reading the response body so an older request cannot replace newer results.
-- Dashboard employee/team controls derive their selected values from `analysis.applied_filters`. `App.vue` also retains the request filters paired with the last successful dashboard response, because resolved dates alone cannot distinguish Full period from an explicit range when coverage has the same dates. The period control uses that successful request state. A control requests a new scope; it does not claim that scope until the response succeeds. Changing team clears the employee selection in that request.
-- `ReportingPeriodPicker.vue` uses the shadcn-vue RangeCalendar in a Cedar-styled dialog. It offers Full period, rolling Last month / Last 6 months / Last year presets anchored to the latest evidence date, and Custom range. Start/end text inputs accept `DD/MM/YYYY` without launching a platform calendar. The calendar uses English Gregorian labels and UTC date-only values. Evidence coverage is shown for context, but does not bound the selectable calendar or typed custom dates. Custom dates are inclusive and sent as ISO `start_date`/`end_date`; setting both equal selects one day. Presets send only `period_preset`, so the backend remains authoritative for their resolution. Apply commits only after a successful dashboard response; Cancel and errors preserve the current scope. A short range can lack required scoring evidence, and the backend keeps its confidence gate.
-- When a preset reaches before available evidence, the preview names the chosen preset, keeps its full dates, and explains why earlier records are absent. The committed dashboard badge keeps the preset name alongside the full selected dates. A separate note shows the available date window used for scores; employee details and report previews preserve the same distinction. A wholly empty selected range returns withheld overall results.
+- Dashboard controls derive their selected values from `analysis.applied_filters`.
+  `App.vue` retains the request filters paired with the last successful response. A
+  control requests a new scope; it does not claim that scope until the response succeeds.
+- The main dashboard now exposes call-center Campaign, Queue, Shift, Supervisor, and
+  Location selectors instead of employee/team selectors. The API retains employee/team
+  filtering for employee detail, reports, and compatibility. Each operational selector is
+  populated from unfiltered canonical employee profiles, and selecting one scopes scores,
+  alerts, trends, and results through the same backend response. Unknown option values are
+  rejected; valid combinations with no employees return the normal empty dashboard state.
+- `CallCenterFilterBar.vue` owns the dashboard filter layout and composes
+  `ReportingPeriodPicker.vue` for calendar and typed date ranges. Today / This week /
+  This month remain visible shortcuts anchored to the latest evidence date and sent as
+  explicit inclusive ISO dates. The picker also allows a full period or custom range.
+  Employee details and report previews reuse the same committed range.
+  Dates outside evidence coverage stay selected while a separate note identifies the
+  evidence window used for scores. A wholly empty range returns withheld overall results.
 - Employee Details refresh reuses the last successful request's `period_preset`, legacy `period_weeks`, or explicit start/end dates. A full-scope refresh omits all three, preserving the backend's unbounded full-period calculation rules.
 - While a filter request runs, selectors and exports are disabled. Failure preserves both old controls and old results and offers Retry filters. Retry repeats the last attempted request. Clear filters requests the full dashboard.
 - `KeepAlive` in `App.vue` preserves the dashboard's page, page size, sort, and local disclosure state while visiting employee and interpretation routes. A new successful dataset or page-size change resets the page. Name and overall sorting reset the page and keep missing overall scores last.
-- Filter and view state intentionally remain in application memory for this employee-data dashboard; they are not copied into URLs or persistent browser storage. Reload starts with the full scope. This follows the existing response-in-memory architecture and avoids adding employee/team selections to shareable URLs in this pass.
+- Filter and view state intentionally remain in application memory for this employee-data dashboard; they are not copied into URLs or persistent browser storage. Reload starts with the full scope. This follows the existing response-in-memory architecture and avoids adding operational employee dimensions to shareable URLs in this pass.
 - `useDashboardBack.ts` owns back navigation. Dashboard data is still supplied by the backend; frontend cards, counts, and weekly values do not recalculate KPI values.
 
 ## Canonical UI map
@@ -20,7 +33,7 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 | --- | --- | --- |
 | Product header | `components/dashboard/PerformanceHeader.vue` | Same Cedar identity on each route; employee/interpretation headers expose Back to dashboard |
 | Select/Listbox | `components/ui/select` and `FieldLabel` | Authored Reka select, associated visible labels, keyboard selection, Escape/focus restoration; verify open popup at narrow widths |
-| Reporting dates | `ReportingPeriodPicker.vue`, shared RangeCalendar/Dialog/ToggleGroup/Input | Two-month desktop and one-month phone calendar; inclusive bounded dates; typed validation, keyboard range selection, stable footer, Apply/Cancel and failed-request retention |
+| Dashboard filters | `CallCenterFilterBar.vue`, `ReportingPeriodPicker.vue`, shared Select/Button/Field | Calendar and typed date range plus Today / This week / This month; Campaign, Queue, Shift, Supervisor, and Location; committed-response state and failed-request retention |
 | Results navigation | `PerformanceDashboard.vue`, shared Table/Pagination | Desktop table and mobile employee cards use the same paginated/sorted rows; preserve all score/status fields |
 | Report overlay | `ReportPreviewContent.vue`, shared Dialog | Accessible dialog title/description, viewport-bounded width up to 1400px, contained body scroll, complete cards, reachable footer, Escape; verify desktop, phone, and short height |
 | Employee evidence | `EmployeeEvidenceTable.vue`, `EvidenceRecordDetails.vue`, shared Table/Collapsible | Three independently paginated tables; identical mobile records; keyboard disclosures; full source values and backend exclusion labels |
@@ -43,7 +56,7 @@ There are no create/edit/delete controls, bulk selection, or toast-based mutatio
 
 Reports remain transient browser downloads with existing manager-review notices. This UI work does not implement authentication or change permission policy, raw-data ingestion, KPI formulas, API evidence, or PDF rendering.
 
-Build with `pnpm build` in `web/`. Browser regression coverage must include trailing/interior null chart points versus real zero, team filter/back, page/sort return, failed filter/retry, employee preview failure/retry, dialog scrolling/focus at phone and short heights, long labels, and no-results display. Completed checks and verification limits are recorded in [the test handover](handover.md#frontend-verification--2026-09-05).
+Build with `pnpm build` in `web/`. Browser regression coverage must include trailing/interior null chart points versus real zero, call-center facet combinations, page/sort return, failed filter/retry, employee preview failure/retry, open Select popups at phone widths, long labels, and no-results display. Completed checks and verification limits are recorded in [the test handover](handover.md#frontend-verification--2026-09-05).
 
 ## Employee evidence and report snapshots — 2026-09-14
 

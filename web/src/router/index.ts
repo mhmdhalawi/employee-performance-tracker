@@ -28,7 +28,7 @@ const router = createRouter({
       path: '/',
       name: 'dashboard',
       component: PerformanceDashboard,
-      meta: { title: 'Employee performance | Cedar' },
+      meta: { title: 'Call-center performance | Cedar' },
       beforeEnter: legacyRootRedirect,
     },
     {

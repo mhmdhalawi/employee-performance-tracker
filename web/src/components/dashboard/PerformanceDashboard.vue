@@ -2,13 +2,12 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, DownloadIcon, EyeIcon, FileTextIcon, TriangleAlertIcon } from '@lucide/vue'
+import CallCenterFilterBar from '@/components/dashboard/CallCenterFilterBar.vue'
 import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
-import ReportingPeriodPicker from '@/components/dashboard/ReportingPeriodPicker.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
   Pagination,
   PaginationContent,
@@ -39,18 +38,6 @@ const emit = defineEmits<{
   filtersChange: [filters: DashboardFilters]
 }>()
 const router = useRouter()
-type PeriodChoice = 'full' | 'month' | 'six-months' | 'year' | 'range'
-
-const employee = computed(() => props.analysis.applied_filters.employee_id ?? 'all')
-const team = computed(() => props.analysis.applied_filters.team ?? 'all')
-const period = computed<PeriodChoice>(() => {
-  const filters = props.requestedFilters
-  if (filters.period_preset)
-    return filters.period_preset
-  if (filters.start_date && filters.end_date)
-    return 'range'
-  return 'full'
-})
 const lastAttempt = ref<DashboardFilters>({})
 const currentPage = ref(1)
 const pageSize = ref('10')
@@ -60,9 +47,6 @@ const teamReportPreviewOpen = ref(false)
 const reportLoading = ref<DashboardKpi | null>(null)
 const reportError = ref('')
 
-const employeeOptions = computed(() => props.analysis.available_employees.filter(row =>
-  team.value === 'all' || row.team === team.value,
-))
 const filteredRows = computed(() => props.analysis.results)
 const sortedRows = computed(() => {
   if (!sortKey.value)
@@ -83,7 +67,6 @@ const sortedRows = computed(() => {
     return sortDirection.value === 'asc' ? comparison : -comparison
   })
 })
-const teams = computed(() => props.analysis.available_teams)
 const numericPageSize = computed(() => Number(pageSize.value))
 const paginatedRows = computed(() => {
   const start = (currentPage.value - 1) * numericPageSize.value
@@ -119,9 +102,9 @@ const alertCountsByEmployee = computed(() => props.analysis.alerts.reduce<Record
 ))
 const appliedPeriod = computed(() => {
   const filters = props.analysis.applied_filters
-  const presetLabel = period.value === 'month' ? 'Last month'
-    : period.value === 'six-months' ? 'Last 6 months'
-      : period.value === 'year' ? 'Last year' : ''
+  const presetLabel = props.requestedFilters.period_preset === 'month' ? 'Last month'
+    : props.requestedFilters.period_preset === 'six-months' ? 'Last 6 months'
+      : props.requestedFilters.period_preset === 'year' ? 'Last year' : ''
   if (filters.start_date && filters.start_date === filters.end_date)
     return `${presetLabel ? `${presetLabel} · ` : ''}${formatDate(filters.start_date)}`
   const dates = filters.start_date && filters.end_date
@@ -134,13 +117,27 @@ const scoreScopeNotice = computed(() => {
   const filters = props.analysis.applied_filters
   const scoreStart = filters.score_period_start_date
   const scoreEnd = filters.score_period_end_date
-  if (period.value === 'full') return ''
+  if (!hasPeriodFilter.value) return ''
   if (!scoreStart || !scoreEnd)
     return 'No evidence is on file in the selected range. Overall scores are withheld.'
   if (scoreStart !== filters.start_date || scoreEnd !== filters.end_date)
     return `Dates without evidence remain in the selected range. Scores use available evidence from ${formatDate(scoreStart)} to ${formatDate(scoreEnd)}.`
   return ''
 })
+
+const hasPeriodFilter = computed(() => Boolean(
+  props.requestedFilters.period_preset
+  || props.requestedFilters.period_weeks
+  || (props.requestedFilters.start_date && props.requestedFilters.end_date),
+))
+const hasActiveFilters = computed(() => Boolean(
+  hasPeriodFilter.value
+  || props.analysis.applied_filters.campaign
+  || props.analysis.applied_filters.queue
+  || props.analysis.applied_filters.shift
+  || props.analysis.applied_filters.supervisor
+  || props.analysis.applied_filters.location,
+))
 
 
 watch([filteredRows, pageSize], () => {
@@ -149,16 +146,21 @@ watch([filteredRows, pageSize], () => {
 
 function buildFilters(): DashboardFilters {
   const filters: DashboardFilters = {}
-  if (employee.value !== 'all')
-    filters.employee_id = employee.value
-  if (team.value !== 'all')
-    filters.team = team.value
-  if (period.value === 'range') {
+  for (const key of ['campaign', 'queue', 'shift', 'supervisor', 'location'] as const) {
+    const value = props.analysis.applied_filters[key]
+    if (value)
+      filters[key] = value
+  }
+  if (props.requestedFilters.start_date && props.requestedFilters.end_date) {
     filters.start_date = props.requestedFilters.start_date
     filters.end_date = props.requestedFilters.end_date
   }
-  else if (period.value !== 'full')
-    filters.period_preset = period.value
+  else if (props.requestedFilters.period_preset) {
+    filters.period_preset = props.requestedFilters.period_preset
+  }
+  else if (props.requestedFilters.period_weeks) {
+    filters.period_weeks = props.requestedFilters.period_weeks
+  }
   return filters
 }
 
@@ -209,18 +211,10 @@ function openEmployeeDetails(row: EmployeeKpiResult): void {
   void router.push({ name: 'employee-detail', params: { employeeId: row.employee_id } })
 }
 
-function applyFilter(key: 'employee_id' | 'team', value: unknown): void {
+function applyFacet(key: 'campaign' | 'queue' | 'shift' | 'supervisor' | 'location', value: string): void {
   const filters = buildFilters()
-  const selected = String(value)
-  if (key === 'team') {
-    delete filters.employee_id
-    if (selected === 'all') delete filters.team
-    else filters.team = selected
-  }
-  else if (key === 'employee_id') {
-    if (selected === 'all') delete filters.employee_id
-    else filters.employee_id = selected
-  }
+  if (value === 'all') delete filters[key]
+  else filters[key] = value
   requestFilters(filters)
 }
 
@@ -242,32 +236,42 @@ function requestFilters(filters: DashboardFilters): void {
 
 <template>
   <main class="min-h-svh bg-muted/30">
-    <PerformanceHeader wide>
+    <PerformanceHeader>
         <Button :disabled="isFiltering || !filteredRows.length" @click="teamReportPreviewOpen = true">
           <FileTextIcon data-icon="inline-start" />
           Generate team report
         </Button>
     </PerformanceHeader>
 
-    <div class="mx-auto flex max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6">
-      <section class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div class="mx-auto flex max-w-[var(--app-content-max-width)] flex-col gap-6 px-4 py-6 sm:px-6">
+      <section class="flex flex-col gap-2">
         <div class="flex flex-col gap-2">
-          <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Employee performance</h1><Badge variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
-          <p class="text-sm text-muted-foreground">Review KPI scores, trends, and findings. Data confidence measures required evidence completeness, not employee performance.</p>
+          <div class="flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">Call-center performance</h1><Badge variant="outline">{{ appliedPeriod }}</Badge><Badge v-if="isFiltering" variant="secondary"><Spinner data-icon="inline-start" />Updating</Badge></div>
+          <p class="text-sm text-muted-foreground">Monitor agent performance across campaigns, queues, shifts, supervisors, and locations. Data confidence measures required evidence completeness, not employee performance.</p>
         </div>
-        <FieldGroup class="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] lg:w-152 lg:shrink-0">
-          <Field class="min-w-0 gap-1.5"><FieldLabel for="employee-filter">Employee</FieldLabel><Select :model-value="employee" :disabled="isFiltering" @update:model-value="applyFilter('employee_id', $event)"><SelectTrigger id="employee-filter" class="w-full bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All employees</SelectItem><SelectItem v-for="row in employeeOptions" :key="row.employee_id" :value="row.employee_id">{{ employeeLabel(row) }}</SelectItem></SelectGroup></SelectContent></Select></Field>
-          <Field class="min-w-0 gap-1.5"><FieldLabel for="team-filter">Team</FieldLabel><Select :model-value="team" :disabled="isFiltering" @update:model-value="applyFilter('team', $event)"><SelectTrigger id="team-filter" class="w-full bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">All teams</SelectItem><SelectItem v-for="item in teams" :key="item" :value="item">{{ item }}</SelectItem></SelectGroup></SelectContent></Select></Field>
-          <Field class="min-w-0 gap-1.5"><FieldLabel for="period-filter">Reporting period</FieldLabel><ReportingPeriodPicker :mode="period" :filters="analysis.applied_filters" :coverage-start="analysis.coverage_start" :coverage-end="analysis.coverage_end" :disabled="isFiltering" @change="applyPeriodFilter" /></Field>
-        </FieldGroup>
       </section>
+
+      <CallCenterFilterBar
+        :filters="analysis.applied_filters"
+        :requested-filters="requestedFilters"
+        :coverage-start="analysis.coverage_start"
+        :coverage-end="analysis.coverage_end"
+        :campaigns="analysis.available_campaigns"
+        :queues="analysis.available_queues"
+        :shifts="analysis.available_shifts"
+        :supervisors="analysis.available_supervisors"
+        :locations="analysis.available_locations"
+        :disabled="isFiltering"
+        @facet-change="applyFacet"
+        @period-change="applyPeriodFilter"
+      />
 
       <div class="flex flex-wrap items-center justify-between gap-2 text-sm" aria-live="polite">
         <div class="flex flex-col gap-1">
           <p>{{ analysis.summary.scored_employee_count }} scored · {{ analysis.summary.insufficient_data_count }} withheld · {{ analysis.summary.total_employee_count }} employees</p>
           <p v-if="scoreScopeNotice" class="text-muted-foreground">{{ scoreScopeNotice }}</p>
         </div>
-        <Button v-if="employee !== 'all' || team !== 'all' || period !== 'full'" variant="ghost" size="sm" :disabled="isFiltering" @click="requestFilters({})">Clear filters</Button>
+        <Button v-if="hasActiveFilters" variant="ghost" size="sm" :disabled="isFiltering" @click="requestFilters({})">Clear filters</Button>
       </div>
 
       <Alert v-if="filterError" variant="destructive"><TriangleAlertIcon aria-hidden="true" /><AlertTitle>Dashboard could not update</AlertTitle><AlertDescription class="flex flex-col gap-2"><p>{{ filterError }} Showing the last successfully applied filters.</p><Button variant="outline" size="sm" class="w-fit" :disabled="isFiltering" @click="requestFilters(lastAttempt)">Retry filters</Button></AlertDescription></Alert>
@@ -294,9 +298,9 @@ function requestFilters(filters: DashboardFilters): void {
               <col style="width: 11%">
               <col style="width: 11.25%">
             </colgroup>
-            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" class="-ml-2.5" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Team</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead>Data confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead><TableHead class="text-center">Data Issues</TableHead><TableHead class="text-center">Performance Alerts</TableHead><TableHead class="text-right">Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead :aria-sort="ariaSort('name')"><Button variant="ghost" size="sm" class="-ml-2.5" @click="toggleSort('name')">Employee<ArrowUpIcon v-if="sortKey === 'name' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'name'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Campaign / Queue</TableHead><TableHead class="text-right">Productivity</TableHead><TableHead class="text-right">Compliance</TableHead><TableHead class="text-right">Quality</TableHead><TableHead>Data confidence</TableHead><TableHead :aria-sort="ariaSort('performance')" class="text-right"><Button variant="ghost" size="sm" @click="toggleSort('performance')">Overall<ArrowUpIcon v-if="sortKey === 'performance' && sortDirection === 'asc'" data-icon="inline-end" /><ArrowDownIcon v-else-if="sortKey === 'performance'" data-icon="inline-end" /><ArrowUpDownIcon v-else data-icon="inline-end" /></Button></TableHead><TableHead>Status</TableHead><TableHead class="text-center">Data Issues</TableHead><TableHead class="text-center">Performance Alerts</TableHead><TableHead class="text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
-              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell class="whitespace-normal break-words"><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell class="whitespace-normal break-words">{{ row.team ?? 'Not provided' }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id, 'data_issue') ? 'warning' : 'outline'">{{ alertCount(row.employee_id, 'data_issue') }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id, 'performance_alert') ? 'warning' : 'outline'">{{ alertCount(row.employee_id, 'performance_alert') }}</Badge></TableCell><TableCell class="text-right"><Button variant="outline" size="sm" @click="openEmployeeDetails(row)"><EyeIcon data-icon="inline-start" />View details</Button></TableCell></TableRow>
+              <TableRow v-for="row in paginatedRows" :key="row.employee_id"><TableCell class="whitespace-normal break-words"><div class="font-medium">{{ employeeLabel(row) }}</div><div class="text-xs text-muted-foreground">{{ row.employee_id }}</div></TableCell><TableCell class="whitespace-normal break-words"><div>{{ row.campaign ?? 'Campaign not provided' }}</div><div class="text-xs text-muted-foreground">{{ row.queue ?? 'Queue not provided' }}</div></TableCell><TableCell class="text-right tabular-nums">{{ score(row.productivity_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.compliance_score) }}</TableCell><TableCell class="text-right tabular-nums">{{ score(row.quality_score) }}</TableCell><TableCell><div class="flex items-center gap-2"><Progress :model-value="row.data_confidence" class="w-20" /><span class="text-xs tabular-nums">{{ row.data_confidence.toFixed(0) }}%</span></div></TableCell><TableCell class="text-right font-medium tabular-nums">{{ score(row.overall_score) }}</TableCell><TableCell><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id, 'data_issue') ? 'warning' : 'outline'">{{ alertCount(row.employee_id, 'data_issue') }}</Badge></TableCell><TableCell class="text-center"><Badge :variant="alertCount(row.employee_id, 'performance_alert') ? 'warning' : 'outline'">{{ alertCount(row.employee_id, 'performance_alert') }}</Badge></TableCell><TableCell class="text-right"><Button variant="outline" size="sm" @click="openEmployeeDetails(row)"><EyeIcon data-icon="inline-start" />View details</Button></TableCell></TableRow>
               <TableRow v-if="!filteredRows.length"><TableCell colspan="11" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
             </TableBody>
           </Table>
@@ -308,7 +312,7 @@ function requestFilters(filters: DashboardFilters): void {
           </div>
           <article v-for="row in paginatedRows" :key="row.employee_id" class="flex flex-col gap-3 border-b pb-4 last:border-0 last:pb-0">
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0"><h3 class="wrap-break-word font-medium">{{ employeeLabel(row) }}</h3><p class="text-xs text-muted-foreground">{{ row.employee_id }} · {{ row.team ?? 'Team not provided' }}</p></div>
+              <div class="min-w-0"><h3 class="wrap-break-word font-medium">{{ employeeLabel(row) }}</h3><p class="text-xs text-muted-foreground">{{ row.employee_id }} · {{ row.campaign ?? 'Campaign not provided' }} · {{ row.queue ?? 'Queue not provided' }}</p></div>
               <div class="shrink-0 text-right"><p class="text-xs text-muted-foreground">Overall</p><p class="font-semibold tabular-nums">{{ score(row.overall_score) }}</p></div>
             </div>
             <div class="flex flex-wrap items-center gap-2"><Badge :variant="row.overall_score === null ? 'warning' : 'success'">{{ row.performance_tier ?? row.result_status }}</Badge><span class="text-xs">{{ row.data_confidence.toFixed(0) }}% data confidence · {{ alertCount(row.employee_id, 'data_issue') }} data issues · {{ alertCount(row.employee_id, 'performance_alert') }} performance alerts</span></div>
