@@ -138,6 +138,24 @@ Geist text, Cedar marker colors, and semantic table treatment as the dashboard. 
 scores appear as dashes. The UI does not imply a universal KPI target, prior-period delta,
 or benchmark when none is defined by the backend.
 
+## Dashboard trend and Action Center — 2026-09-23
+
+The weekly KPI chart and Action Center share an equal-height row above Employee Results on wide screens;
+the chart comes first and the two cards keep their natural heights when stacked on phones. The Action Center summarizes
+backend findings for the committed filter scope as evidence gaps, performance alerts,
+excluded records, and other data issues when present. Counts use the backend's occurrence
+count and distinct affected employees. The label is “findings” because the API does not
+track whether an action has been opened or resolved.
+
+Review and View all findings open the same accessible sheet. It preserves backend review
+actions, record IDs, and safe HTTPS evidence links, with a route to the affected employee.
+The sheet scrolls within the viewport and fills the phone width. A scope with no alerts
+shows a clear empty state.
+
+The dashboard trend omits its explanatory subtitle and weekly-values disclosure to keep
+this row compact. Employee Details and report preview retain the shared chart's exact-values
+disclosure.
+
 ## Original brand proposal and unresolved assets
 
 ## Goal

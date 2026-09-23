@@ -40,6 +40,7 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 | Select/Listbox | `components/ui/select` and `FieldLabel` | Authored Reka select, associated visible labels, keyboard selection, Escape/focus restoration; verify open popup at narrow widths |
 | Dashboard filters | `CallCenterFilterBar.vue`, `ReportingPeriodPicker.vue`, shared Select/Button/Field | Calendar and typed date range plus Today / This week / This month; Campaign, Queue, Shift, Supervisor, and Location; committed-response state and failed-request retention |
 | KPI breakdown | `PerformanceDashboard.vue`, `KpiBreakdownPanel.vue`, shared Card/Tabs/Table | One disclosure under the four cards; server-calculated component averages, same scored population and filter scope; missing scores remain dashes |
+| Dashboard Action Center | `DashboardActionCenter.vue`, shared Card/Badge/Button/Sheet | Group current backend alerts by category and scoring impact; Review and View all show source action, records, links, and employee navigation in a bounded sheet |
 | Results navigation | `PerformanceDashboard.vue`, shared Table/Pagination | Desktop table and mobile employee cards use the same paginated/sorted rows; preserve all score/status fields |
 | Report overlay | `ReportPreviewContent.vue`, shared Dialog | Accessible dialog title/description, viewport-bounded width up to 1400px, contained body scroll, complete cards, reachable footer, Escape; verify desktop, phone, and short height |
 | Employee evidence | `EmployeeEvidenceTable.vue`, `EvidenceRecordDetails.vue`, shared Table/Collapsible | Three independently paginated tables; identical mobile records; keyboard disclosures; full source values and backend exclusion labels |
@@ -55,6 +56,7 @@ There are no create/edit/delete controls, bulk selection, or toast-based mutatio
 - Employee results show separate Data Issues and Performance Alerts columns in the table and both counts on employee cards below `2xl`. The backend assigns one category and review action to each finding; record details, report previews, and PDFs preserve that classification.
 - Overall averages show scored, withheld, and total counts from the response. Null scores remain a dash with a withheld-status explanation.
 - Weekly chart values and coverage populations follow the filtered backend response. Missing values are labeled per KPI in the data table, never shown as zero.
+- The weekly chart and Action Center sit above Employee Results. On phones the chart precedes the Action Center. The Action Center reports findings rather than open actions because resolution status is not available in the API; its counts sum backend occurrences and identify distinct affected employees.
 - Screens and PDFs display Gregorian dates as `DD/MM/YYYY`; the API keeps UTC date-only `YYYY-MM-DD` fields. Display the reporting period on employee details and include the year for historical clarity.
 - Source interpretation remains available at `/data-interpretation`. The main dashboard has no interpretation card; the routed page preserves full-width source names and rationale above their badges on phones.
 

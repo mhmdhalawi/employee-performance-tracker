@@ -11,8 +11,10 @@ import type { KpiTrendPoint } from '@/types/analysis'
 const props = withDefaults(defineProps<{
   trends: KpiTrendPoint[]
   description?: string
+  showWeeklyValues?: boolean
 }>(), {
   description: 'Gaps mean no score is available.',
+  showWeeklyValues: true,
 })
 
 interface ChartPoint {
@@ -54,7 +56,7 @@ function score(value: number): string {
       <div class="flex items-start justify-between gap-3">
         <div>
           <CardTitle>Weekly KPI trend</CardTitle>
-          <CardDescription>{{ description }}</CardDescription>
+          <CardDescription v-if="description">{{ description }}</CardDescription>
         </div>
         <Badge variant="outline">{{ trendData.length }} periods</Badge>
       </div>
@@ -69,7 +71,7 @@ function score(value: number): string {
         </span>
       </div>
       <ChartContainer v-if="trendData.length" :config="chartConfig" class="h-72 w-full"
-        aria-label="Weekly KPI chart; exact values in the table below">
+        :aria-label="showWeeklyValues ? 'Weekly KPI chart; exact values in the table below' : 'Weekly KPI chart'">
         <VisXYContainer :data="trendData" :duration="0" :y-domain="[0, 100]">
           <VisAxis type="x" :x="trendX" :tick-format="weekTick" />
           <VisAxis type="y" :tick-format="percentTick" />
@@ -79,7 +81,7 @@ function score(value: number): string {
         </VisXYContainer>
       </ChartContainer>
       <p v-else class="py-16 text-center text-sm text-muted-foreground">No trend data is available for this filter.</p>
-      <details v-if="trendData.length" class="mt-4">
+      <details v-if="showWeeklyValues && trendData.length" class="mt-4">
         <summary class="cursor-pointer text-sm font-medium">View weekly values</summary>
         <div class="mt-3 overflow-x-auto">
           <Table>

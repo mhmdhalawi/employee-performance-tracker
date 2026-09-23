@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronDownIcon, ChevronUpIcon, DownloadIcon, EyeIcon, FileTextIcon, TriangleAlertIcon } from '@lucide/vue'
 import CallCenterFilterBar from '@/components/dashboard/CallCenterFilterBar.vue'
+import DashboardActionCenter from '@/components/dashboard/DashboardActionCenter.vue'
 import KpiBreakdownPanel from '@/components/dashboard/KpiBreakdownPanel.vue'
 import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -302,6 +303,11 @@ function requestFilters(filters: DashboardFilters): void {
       </section>
       <KpiBreakdownPanel v-if="activeBreakdown" :selected="activeBreakdown" :breakdowns="analysis.kpi_breakdowns" :disabled="isFiltering" @select="activeBreakdown = $event" />
 
+      <section aria-label="Trends and actions" class="grid items-start gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] xl:items-stretch">
+        <WeeklyKpiTrend :trends="analysis.trends" description="" :show-weekly-values="false" />
+        <DashboardActionCenter :alerts="analysis.alerts" :disabled="isFiltering" />
+      </section>
+
       <Card>
         <CardHeader><div class="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Employee results</CardTitle><CardDescription>Component scores remain visible when overall scoring is withheld.</CardDescription></div><Badge variant="outline">{{ filteredRows.length }} employees</Badge></div></CardHeader>
         <CardContent class="hidden 2xl:block">
@@ -365,8 +371,6 @@ function requestFilters(filters: DashboardFilters): void {
           </Pagination>
         </CardFooter>
       </Card>
-
-      <WeeklyKpiTrend :trends="analysis.trends" description="Current employee, team, and period filters apply. Gaps mean no score is available." />
     </div>
 
     <TeamReportPreviewDialog

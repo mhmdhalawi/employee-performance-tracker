@@ -1,6 +1,6 @@
 # Main dashboard component plan
 
-Status: approved direction; filters and KPI summary breakdown implemented
+Status: filters, KPI summary breakdown, trend placement, and Action Center implemented
 Reference: user-supplied `Main Dashboard.jpeg`  
 Scope: dashboard structure above and around the existing trend chart and Employee Results table
 
@@ -17,7 +17,7 @@ The app now supports Campaign, Queue, Shift, Supervisor, and Location as optiona
 - Four basic summary cards: Overall, Productivity, Compliance, and Quality.
 - Employee Results table and responsive employee cards.
 - Shared weekly KPI trend chart.
-- Backend-provided alerts, although there is no dashboard Action Center presentation yet.
+- Action Center groups backend-provided alerts and opens a review sheet.
 
 ## Page structure at a glance
 
@@ -25,13 +25,13 @@ The app now supports Campaign, Queue, Shift, Supervisor, and Location as optiona
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Cedar / Employee performance                         Generate team report    │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ 1. FILTERS: reporting period · employee · team · future source dimensions   │
+│ 1. FILTERS: reporting period · campaign · queue · shift · supervisor · location│
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ 2. SUMMARY: Overall │ Productivity │ Compliance │ Quality                   │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ 3. KPI BREAKDOWN: one expandable, tabbed component-detail table             │
 ├───────────────────────────────────────────────────┬──────────────────────────┤
-│ 4. Weekly KPI trend — already implemented         │ 5. Action Center         │
+│ 4. Weekly KPI trend                            │ 5. Action Center             │
 ├───────────────────────────────────────────────────┴──────────────────────────┤
 │ 6. Employee Results — already implemented                                    │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -269,7 +269,7 @@ The Python/Pydantic schema and TypeScript contract use this shape.
 
 Status: already implemented through `WeeklyKpiTrend.vue`; no redesign is requested here.
 
-Placement recommendation: on wide screens, allow the chart to occupy roughly two-thirds of the row with Action Center beside it. On narrow screens, stack the chart above Action Center. Preserve missing-value gaps, distinct series patterns, the exact-values disclosure, and backend filter scope.
+Implemented placement: on wide screens the chart occupies roughly two-thirds of the row with Action Center beside it. On narrow screens, the chart stacks above Action Center. Missing-value gaps, distinct series patterns, exact-values disclosure, and backend filter scope remain intact.
 
 ## Section 5 — Action Center
 
@@ -279,47 +279,39 @@ The Action Center shows a total open-action count, three summarized issues, a Re
 
 ### Current implementation
 
-The API already returns typed `alerts` with severity, category, action, employee, occurrence count, record IDs, evidence links, and scoring impact. The dashboard currently uses these alerts only to count Data Issues and Performance Alerts per employee.
+The API returns typed `alerts` with severity, category, action, employee, occurrence count, record IDs, evidence links, and scoring impact. The dashboard groups these into evidence gaps, performance alerts, excluded records, and other data issues when present. It sums occurrence counts and shows distinct affected-employee counts. Review and View all findings open a scrollable sheet with source actions, record IDs, safe HTTPS links, and employee-detail navigation. There is an empty state for a scope without findings.
 
-### Missing
+The API has no action-resolution status, so the UI says “findings” instead of implying that every finding is open. Filter failure retains the last successful dashboard through the existing shared behavior.
 
-- Dashboard Action Center card.
-- Grouped top actions with severity icon and affected-employee count.
-- Direct Review action.
-- View-all experience.
-- Empty and error states for the action list.
+### Implemented behavior
 
-### Recommended behavior
-
-- Use backend alert ordering or add an explicit backend priority; do not invent employment-impact priority in the browser.
-- Show up to three groups in the dashboard card.
-- Keep Data Issues and Performance Alerts visibly distinct with text and icon, not color alone.
-- For a single-employee alert, Review can open that employee's detail route.
-- For a multi-employee group, Review should open an accessible Action Center sheet listing affected employees and supporting records.
-- `View all actions` opens the same sheet without preselecting a group.
-- An empty state reads `No open actions for the selected filters.`
+- Preserve backend alert ordering within each group; the browser does not infer employment-impact priority.
+- Show only populated groups in the dashboard card.
+- Keep Data Issues and Performance Alerts visibly distinct with text and icon.
+- Review opens an accessible Action Center sheet for that group; View all findings opens it without a group filter.
+- The empty state reads `No findings for the selected filters.`
 - Preserve safe HTTPS evidence links and backend-provided review actions.
 
 ### Visual
 
 ```text
 ┌──────────────────────────────────────┐
-│ Action Center          [7 open]      │
+│ Action Center        [N findings]    │
 ├──────────────────────────────────────┤
-│ ! Quality below target               │
-│   4 employees               [Review] │
+│ ! Evidence gaps                      │
+│   N employees               [Review] │
 ├──────────────────────────────────────┤
-│ ! Missing evidence                   │
-│   3 employees               [Review] │
+│ ! Performance alerts                 │
+│   N employees               [Review] │
 ├──────────────────────────────────────┤
-│ i Repeated lateness                  │
-│   2 employees               [Review] │
+│ i Excluded records                   │
+│   N employees               [Review] │
 ├──────────────────────────────────────┤
-│                         View all →   │
+│                View all findings →   │
 └──────────────────────────────────────┘
 ```
 
-Suggested owner: `DashboardActionCenter.vue`, composed from existing Card, Badge, Button, and Sheet primitives. The sheet must have an accessible title and description, Escape/focus restoration, a bounded scrolling body, and reachable actions.
+Owner: `DashboardActionCenter.vue`, composed from existing Card, Badge, Button, and Sheet primitives. The sheet has an accessible title and description, Escape/focus restoration, a bounded scrolling body, and reachable actions.
 
 ## Section 6 — Employee Results
 
@@ -336,7 +328,7 @@ The reference image shows only three performers, but the current paginated full 
 | Four cards | Basic version implemented | Add status, targets, comparisons, benchmark, and explicit breakdown actions through typed backend data. |
 | KPI breakdown | Missing | Add one shared expandable panel with three KPI tabs and deterministic component rows. |
 | Trend chart | Implemented | No detailed work in this plan. |
-| Action Center | Data exists, UI missing | Add summarized card and accessible view-all sheet. |
+| Action Center | Implemented | Grouped findings and accessible review sheet use filtered backend alerts. |
 | Employee Results | Implemented | No detailed work in this plan. |
 
 ## Suggested implementation order

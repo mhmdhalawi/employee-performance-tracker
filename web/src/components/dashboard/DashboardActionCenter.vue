@@ -1,0 +1,153 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ArrowRightIcon, CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon } from '@lucide/vue'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import type { PerformanceAlert } from '@/types/analysis'
+
+type GroupKey = 'evidence' | 'performance' | 'excluded' | 'other'
+
+interface ActionGroup {
+  key: GroupKey
+  label: string
+  description: string
+  icon: typeof TriangleAlertIcon
+  iconClass: string
+  alerts: PerformanceAlert[]
+  findingCount: number
+  employeeCount: number
+}
+
+const props = defineProps<{
+  alerts: PerformanceAlert[]
+  disabled?: boolean
+}>()
+
+const router = useRouter()
+const sheetOpen = ref(false)
+const selectedGroup = ref<GroupKey | null>(null)
+
+const definitions = [
+  { key: 'evidence', label: 'Evidence gaps', description: 'Records lowering data confidence', icon: TriangleAlertIcon, iconClass: 'bg-warning/15 text-warning-foreground' },
+  { key: 'performance', label: 'Performance alerts', description: 'Findings affecting KPI scores', icon: CircleAlertIcon, iconClass: 'bg-secondary text-primary' },
+  { key: 'excluded', label: 'Excluded records', description: 'Records left out of scoring', icon: InfoIcon, iconClass: 'bg-muted text-muted-foreground' },
+  { key: 'other', label: 'Other data issues', description: 'Findings requiring source review', icon: InfoIcon, iconClass: 'bg-muted text-muted-foreground' },
+] as const
+
+function groupKey(alert: PerformanceAlert): GroupKey {
+  if (alert.category === 'performance_alert') return 'performance'
+  if (alert.scoring_impact === 'lowers_confidence') return 'evidence'
+  if (alert.scoring_impact === 'excluded_from_scoring') return 'excluded'
+  return 'other'
+}
+
+function findingCount(alerts: PerformanceAlert[]): number {
+  return alerts.reduce((total, alert) => total + alert.occurrence_count, 0)
+}
+
+function employeeCount(alerts: PerformanceAlert[]): number {
+  return new Set(alerts.map(alert => alert.employee_id).filter(Boolean)).size
+}
+
+function employeeLabel(count: number): string {
+  return count === 1 ? '1 employee' : `${count} employees`
+}
+
+const groups = computed<ActionGroup[]>(() => definitions.map(definition => {
+  const alerts = props.alerts.filter(alert => groupKey(alert) === definition.key)
+  return {
+    ...definition,
+    alerts,
+    findingCount: findingCount(alerts),
+    employeeCount: employeeCount(alerts),
+  }
+}).filter(group => group.alerts.length))
+
+const totalFindings = computed(() => findingCount(props.alerts))
+const activeGroup = computed(() => groups.value.find(group => group.key === selectedGroup.value))
+const visibleAlerts = computed(() => selectedGroup.value ? activeGroup.value?.alerts ?? [] : props.alerts)
+const sheetTitle = computed(() => activeGroup.value?.label ?? 'All findings')
+
+function openSheet(group: GroupKey | null): void {
+  selectedGroup.value = group
+  sheetOpen.value = true
+}
+
+function safeEvidenceLinks(alert: PerformanceAlert): string[] {
+  return alert.evidence_links.filter((value) => {
+    try {
+      return new URL(value).protocol === 'https:'
+    }
+    catch {
+      return false
+    }
+  })
+}
+
+function viewEmployee(employeeId: string): void {
+  sheetOpen.value = false
+  void router.push({ name: 'employee-detail', params: { employeeId } })
+}
+</script>
+
+<template>
+  <Card aria-label="Action Center" class="xl:h-full">
+    <CardHeader class="gap-1">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <CardTitle>Action Center</CardTitle>
+          <CardDescription>Findings for the selected filters</CardDescription>
+        </div>
+        <Badge variant="outline">{{ totalFindings }} findings</Badge>
+      </div>
+    </CardHeader>
+    <CardContent class="flex flex-col xl:flex-1">
+      <p v-if="!groups.length" class="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+        <CircleCheckIcon aria-hidden="true" /> No findings for the selected filters.
+      </p>
+      <div v-for="group in groups" :key="group.key" class="flex items-center gap-3 border-b border-border py-3 first:pt-0 last:border-0 last:pb-0 xl:flex-1 xl:first:pt-3 xl:last:pb-3">
+        <span class="flex size-9 shrink-0 items-center justify-center rounded-full" :class="group.iconClass"><component :is="group.icon" class="size-4" aria-hidden="true" /></span>
+        <div class="min-w-0 flex-1">
+          <p class="font-medium">{{ group.label }}</p>
+          <p class="text-xs text-muted-foreground">{{ group.findingCount }} findings · {{ employeeLabel(group.employeeCount) }}</p>
+          <p class="text-xs text-muted-foreground">{{ group.description }}</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" :disabled="disabled" :aria-label="`Review ${group.label.toLowerCase()}`" @click="openSheet(group.key)">Review</Button>
+      </div>
+      <Button v-if="groups.length" type="button" variant="ghost" size="sm" class="mt-4 self-end text-primary" :disabled="disabled" @click="openSheet(null)">
+        View all findings <ArrowRightIcon data-icon="inline-end" />
+      </Button>
+    </CardContent>
+  </Card>
+
+  <Sheet v-model:open="sheetOpen">
+    <SheetContent class="data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+      <SheetHeader class="pr-12">
+        <SheetTitle>Action Center · {{ sheetTitle }}</SheetTitle>
+        <SheetDescription>{{ findingCount(visibleAlerts) }} findings affecting {{ employeeLabel(employeeCount(visibleAlerts)) }}. Review the supporting records and source action for each finding.</SheetDescription>
+      </SheetHeader>
+      <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        <p v-if="!visibleAlerts.length" class="py-8 text-center text-muted-foreground">No findings for the selected filters.</p>
+        <div v-else class="flex flex-col gap-3">
+          <article v-for="(alert, index) in visibleAlerts" :key="`${alert.employee_id ?? 'global'}:${alert.code}:${index}`" class="flex flex-col gap-2 rounded-lg border border-border p-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <Badge :variant="alert.category === 'data_issue' ? 'warning' : 'secondary'">{{ alert.category === 'data_issue' ? 'Data issue' : 'Performance alert' }}</Badge>
+              <span class="text-xs text-muted-foreground">{{ alert.occurrence_count }} {{ alert.occurrence_count === 1 ? 'finding' : 'findings' }}</span>
+            </div>
+            <p class="font-medium">{{ alert.employee_name || alert.employee_id || 'Unmatched source record' }}</p>
+            <p>{{ alert.message }}</p>
+            <p class="text-xs text-muted-foreground"><span class="font-medium text-foreground">Review action:</span> {{ alert.action }}</p>
+            <p v-if="alert.record_ids.length" class="break-all text-xs text-muted-foreground"><span class="font-medium text-foreground">Records:</span> {{ alert.record_ids.join(', ') }}</p>
+            <div v-if="safeEvidenceLinks(alert).length" class="flex flex-wrap gap-2 text-xs">
+              <a v-for="(link, linkIndex) in safeEvidenceLinks(alert)" :key="link" :href="link" target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2">Open source evidence {{ linkIndex + 1 }}</a>
+            </div>
+            <Button v-if="alert.employee_id" type="button" variant="outline" size="sm" class="self-start" :disabled="disabled" @click="viewEmployee(alert.employee_id)">View employee details</Button>
+          </article>
+        </div>
+      </div>
+    </SheetContent>
+  </Sheet>
+</template>
