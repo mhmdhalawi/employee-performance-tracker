@@ -160,6 +160,7 @@ def build_analysis_response(
             result_status=kpi.result_status,
             performance_tier=kpi.performance_tier,
             supporting_record_ids=kpi.supporting_record_ids,
+            components=kpi.components,
             evidence_links=sorted(
                 {
                     project_links[record_id]

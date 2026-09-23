@@ -3,6 +3,7 @@ from datetime import date
 
 from app.schemas.performance import (
     AttendanceComplianceEvidence,
+    KpiComponentScore,
     KpiResult,
     PerformanceEvidenceDataset,
     PerformanceTarget,
@@ -28,6 +29,7 @@ from app.services.performance.validation import validate_dataset
 class ScoredKpi:
     score: float
     reason: str
+    components: tuple[KpiComponentScore, ...]
 
 
 def calculate_kpis(
@@ -125,6 +127,11 @@ def calculate_kpis(
                 result_status=performance_tier or "Insufficient data",
                 performance_tier=performance_tier,
                 supporting_record_ids=_supporting_record_ids(evidence),
+                components={
+                    "productivity": list(productivity.components),
+                    "compliance": list(compliance.components),
+                    "quality": list(quality.components),
+                },
             )
         )
     return results
@@ -164,6 +171,15 @@ def _score_productivity(
         score=metrics.weighted_available(
             [(completion_score, 0.60), (time_score, 0.40)]
         ),
+        components=(
+            KpiComponentScore(
+                key="completion", label="Work completion",
+                score=completion_score if projects else None, weight=60,
+            ),
+            KpiComponentScore(
+                key="time_efficiency", label="Time efficiency", score=time_score, weight=40,
+            ),
+        ),
         reason=(
             f"Weighted 60% completion ({completion_score:.2f}) and 40% "
             f"time efficiency ({metrics.format_optional_score(time_score)}); {len(completed)} completed "
@@ -202,6 +218,17 @@ def _score_compliance(
                 (leave_score, 0.15),
             ]
         ),
+        components=(
+            KpiComponentScore(
+                key="attendance", label="Attendance", score=breakdown.score, weight=50,
+            ),
+            KpiComponentScore(
+                key="reports", label="Report submission", score=report_score, weight=35,
+            ),
+            KpiComponentScore(
+                key="leave", label="Leave compliance", score=leave_score, weight=15,
+            ),
+        ),
         reason=(
             f"Weighted 50% attendance ({metrics.format_optional_score(breakdown.score)}: "
             f"arrival {metrics.format_optional_score(breakdown.arrival_score)}, "
@@ -230,6 +257,20 @@ def _score_quality(reviews: list[QualityEvidence]) -> ScoredKpi:
         rework = 0.0
     return ScoredKpi(
         score=accuracy * 0.60 + first_pass * 0.25 + rework * 0.15,
+        components=(
+            KpiComponentScore(
+                key="accuracy", label="Accuracy", score=accuracy if reviews else None,
+                weight=60,
+            ),
+            KpiComponentScore(
+                key="first_pass", label="First-pass approval",
+                score=first_pass if reviews else None, weight=25,
+            ),
+            KpiComponentScore(
+                key="rework", label="Rework", score=rework if reviews else None,
+                weight=15,
+            ),
+        ),
         reason=(
             f"Weighted 60% accuracy ({accuracy:.2f}), 25% first-pass approval "
             f"({first_pass:.2f}), and 15% rework ({rework:.2f}) across "

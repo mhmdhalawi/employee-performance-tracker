@@ -144,6 +144,13 @@ class DatasetOverview(BaseModel):
     teams: list[str]
 
 
+class KpiComponentScore(BaseModel):
+    key: str
+    label: str
+    score: float | None
+    weight: float = Field(ge=0, le=100)
+
+
 class KpiResult(BaseModel):
     employee_id: str
     employee_name: str | None
@@ -160,6 +167,7 @@ class KpiResult(BaseModel):
     result_status: str
     performance_tier: str | None
     supporting_record_ids: list[str]
+    components: dict[str, list[KpiComponentScore]] = Field(default_factory=dict)
 
 
 class EmployeeKpiScores(BaseModel):
@@ -185,6 +193,7 @@ class EmployeeKpiScores(BaseModel):
     result_status: str
     performance_tier: str | None
     supporting_record_ids: list[str]
+    components: dict[str, list[KpiComponentScore]] = Field(default_factory=dict)
     evidence_links: list[str] = Field(default_factory=list)
     validation_findings: list[ValidationFinding] = Field(default_factory=list)
 

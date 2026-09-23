@@ -21,6 +21,11 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
   Employee details and report previews reuse the same committed range.
   Dates outside evidence coverage stay selected while a separate note identifies the
   evidence window used for scores. A wholly empty range returns withheld overall results.
+- The four summary cards use backend averages over employees with reportable overall scores.
+  `KpiBreakdownPanel.vue` presents backend-provided component averages and weights for that
+  same population. View breakdown opens one panel below the cards; another KPI button or
+  the panel tabs switches it, and the selected card button closes it. Filter refresh keeps
+  the prior panel visible with controls disabled until the new response succeeds.
 - Employee Details refresh reuses the last successful request's `period_preset`, legacy `period_weeks`, or explicit start/end dates. A full-scope refresh omits all three, preserving the backend's unbounded full-period calculation rules.
 - While a filter request runs, selectors and exports are disabled. Failure preserves both old controls and old results and offers Retry filters. Retry repeats the last attempted request. Clear filters requests the full dashboard.
 - `KeepAlive` in `App.vue` preserves the dashboard's page, page size, sort, and local disclosure state while visiting employee and interpretation routes. A new successful dataset or page-size change resets the page. Name and overall sorting reset the page and keep missing overall scores last.
@@ -34,6 +39,7 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 | Product header | `components/dashboard/PerformanceHeader.vue` | Same Cedar identity on each route; employee/interpretation headers expose Back to dashboard |
 | Select/Listbox | `components/ui/select` and `FieldLabel` | Authored Reka select, associated visible labels, keyboard selection, Escape/focus restoration; verify open popup at narrow widths |
 | Dashboard filters | `CallCenterFilterBar.vue`, `ReportingPeriodPicker.vue`, shared Select/Button/Field | Calendar and typed date range plus Today / This week / This month; Campaign, Queue, Shift, Supervisor, and Location; committed-response state and failed-request retention |
+| KPI breakdown | `PerformanceDashboard.vue`, `KpiBreakdownPanel.vue`, shared Card/Tabs/Table | One disclosure under the four cards; server-calculated component averages, same scored population and filter scope; missing scores remain dashes |
 | Results navigation | `PerformanceDashboard.vue`, shared Table/Pagination | Desktop table and mobile employee cards use the same paginated/sorted rows; preserve all score/status fields |
 | Report overlay | `ReportPreviewContent.vue`, shared Dialog | Accessible dialog title/description, viewport-bounded width up to 1400px, contained body scroll, complete cards, reachable footer, Escape; verify desktop, phone, and short height |
 | Employee evidence | `EmployeeEvidenceTable.vue`, `EvidenceRecordDetails.vue`, shared Table/Collapsible | Three independently paginated tables; identical mobile records; keyboard disclosures; full source values and backend exclusion labels |

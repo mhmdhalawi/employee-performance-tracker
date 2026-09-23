@@ -7,6 +7,7 @@ from app.schemas.calculators import CalculatorName, TableRole
 from app.schemas.performance import (
     DatasetOverview,
     EmployeeKpiScores,
+    KpiComponentScore,
     KpiTrendPoint,
     PerformanceAlert,
     ValidationFinding,
@@ -204,6 +205,12 @@ class SchemaMappingSummary(BaseModel):
     table_classifications: list[TableClassification]
 
 
+class DashboardKpiBreakdown(BaseModel):
+    score: float | None
+    scored_employee_count: int = Field(ge=0)
+    components: list[KpiComponentScore]
+
+
 class AnalysisResponse(BaseModel):
     results: list[EmployeeKpiScores]
     summary: AnalysisSummary
@@ -233,6 +240,7 @@ class AnalyzeTablesPreviewResponse(AnalysisResponse):
 class DashboardResponse(BaseModel):
     results: list[EmployeeKpiScores]
     summary: AnalysisSummary
+    kpi_breakdowns: dict[str, DashboardKpiBreakdown]
     dataset_overview: DatasetOverview
     applied_filters: AnalysisFilters
     available_employees: list[EmployeeFilterOption]

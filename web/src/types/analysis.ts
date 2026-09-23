@@ -9,6 +9,19 @@ export interface AnalysisSummary {
   narrative: string
 }
 
+export interface KpiComponentScore {
+  key: string
+  label: string
+  score: number | null
+  weight: number
+}
+
+export interface DashboardKpiBreakdown {
+  score: number | null
+  scored_employee_count: number
+  components: KpiComponentScore[]
+}
+
 export interface AnalysisFilters {
   employee_id: string | null
   team: string | null
@@ -140,6 +153,7 @@ export interface SchemaMappingSummary {
 export interface DashboardResponse {
   results: EmployeeKpiResult[]
   summary: AnalysisSummary
+  kpi_breakdowns: Record<'productivity' | 'compliance' | 'quality', DashboardKpiBreakdown>
   dataset_overview: DatasetOverview
   applied_filters: AnalysisFilters
   available_employees: EmployeeFilterOption[]

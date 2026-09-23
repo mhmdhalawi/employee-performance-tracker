@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, DownloadIcon, EyeIcon, FileTextIcon, TriangleAlertIcon } from '@lucide/vue'
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronDownIcon, ChevronUpIcon, DownloadIcon, EyeIcon, FileTextIcon, TriangleAlertIcon } from '@lucide/vue'
 import CallCenterFilterBar from '@/components/dashboard/CallCenterFilterBar.vue'
+import KpiBreakdownPanel from '@/components/dashboard/KpiBreakdownPanel.vue'
 import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -46,6 +47,7 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 const teamReportPreviewOpen = ref(false)
 const reportLoading = ref<DashboardKpi | null>(null)
 const reportError = ref('')
+const activeBreakdown = ref<DashboardKpi | null>(null)
 
 const filteredRows = computed(() => props.analysis.results)
 const sortedRows = computed(() => {
@@ -81,12 +83,13 @@ const lastVisibleRow = computed(() => Math.min(
 ))
 const summaryCards = computed(() => {
   const count = props.analysis.summary.scored_employee_count
-  const population = `${count} scored employee${count === 1 ? '' : 's'}`
+  const withheld = props.analysis.summary.insufficient_data_count
+  const population = `${count} scored · ${withheld} withheld`
   return [
-    { label: 'Overall score', value: props.analysis.summary.average_overall_score, detail: population, color: 'var(--primary)', kpi: null },
-    { label: 'Productivity', value: props.analysis.summary.average_productivity_score, detail: `${population} · 35% of overall`, color: 'var(--chart-1)', kpi: 'productivity' as const },
-    { label: 'Compliance', value: props.analysis.summary.average_compliance_score, detail: `${population} · 30% of overall`, color: 'var(--chart-2)', kpi: 'compliance' as const },
-    { label: 'Quality', value: props.analysis.summary.average_quality_score, detail: `${population} · 35% of overall`, color: 'var(--chart-3)', kpi: 'quality' as const },
+    { label: 'Overall score', value: props.analysis.summary.average_overall_score, detail: population, weight: null, color: 'var(--primary)', kpi: null },
+    { label: 'Productivity', value: props.analysis.summary.average_productivity_score, detail: population, weight: 35, color: 'var(--chart-1)', kpi: 'productivity' as const },
+    { label: 'Compliance', value: props.analysis.summary.average_compliance_score, detail: population, weight: 30, color: 'var(--chart-2)', kpi: 'compliance' as const },
+    { label: 'Quality', value: props.analysis.summary.average_quality_score, detail: population, weight: 35, color: 'var(--chart-3)', kpi: 'quality' as const },
   ]
 })
 
@@ -277,9 +280,27 @@ function requestFilters(filters: DashboardFilters): void {
       <Alert v-if="filterError" variant="destructive"><TriangleAlertIcon aria-hidden="true" /><AlertTitle>Dashboard could not update</AlertTitle><AlertDescription class="flex flex-col gap-2"><p>{{ filterError }} Showing the last successfully applied filters.</p><Button variant="outline" size="sm" class="w-fit" :disabled="isFiltering" @click="requestFilters(lastAttempt)">Retry filters</Button></AlertDescription></Alert>
       <Alert v-if="reportError" variant="destructive"><TriangleAlertIcon aria-hidden="true" /><AlertTitle>Report could not be created</AlertTitle><AlertDescription>{{ reportError }}</AlertDescription></Alert>
 
-      <section class="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Card v-for="item in summaryCards" :key="item.label"><CardHeader class="pb-2"><CardDescription class="flex items-center gap-2"><span class="size-2 rounded-full" :style="{ backgroundColor: item.color }" />{{ item.label }}</CardDescription><CardAction v-if="item.kpi"><Button variant="ghost" size="icon-sm" :disabled="isFiltering || reportLoading !== null || !filteredRows.length" :aria-label="`Download ${item.label} report`" :title="`Download ${item.label} report`" @click="generateKpiReport(item.kpi)"><Spinner v-if="reportLoading === item.kpi" /><DownloadIcon v-else /><span class="sr-only">Download {{ item.label }} report</span></Button></CardAction><CardTitle class="text-2xl tabular-nums sm:text-3xl">{{ score(item.value) }}</CardTitle></CardHeader><CardContent class="text-xs text-muted-foreground">{{ item.detail }}</CardContent></Card>
+      <section aria-label="Performance summary" class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Card v-for="item in summaryCards" :key="item.label" class="justify-between">
+          <CardHeader class="gap-2">
+            <CardDescription class="flex items-center gap-2"><span class="size-2 rounded-full" :style="{ backgroundColor: item.color }" />{{ item.label }}</CardDescription>
+            <CardAction v-if="item.kpi"><Button variant="ghost" size="icon-sm" :disabled="isFiltering || reportLoading !== null || !filteredRows.length" :aria-label="`Download ${item.label} report`" :title="`Download ${item.label} report`" @click="generateKpiReport(item.kpi)"><Spinner v-if="reportLoading === item.kpi" /><DownloadIcon v-else /><span class="sr-only">Download {{ item.label }} report</span></Button></CardAction>
+            <CardTitle class="text-2xl tabular-nums sm:text-3xl">{{ score(item.value) }}</CardTitle>
+          </CardHeader>
+          <CardContent class="flex flex-col gap-1 text-xs text-muted-foreground">
+            <span>{{ item.detail }}</span>
+            <span v-if="item.weight">{{ item.weight }}% of overall</span>
+            <span v-else>100% evidence required for an overall score</span>
+          </CardContent>
+          <CardFooter v-if="item.kpi" class="border-0 bg-transparent p-3 pt-0 sm:p-4 sm:pt-0">
+            <Button type="button" :variant="activeBreakdown === item.kpi ? 'default' : 'outline'" size="sm" class="w-full justify-between" :aria-expanded="activeBreakdown === item.kpi" aria-controls="kpi-breakdown" :disabled="isFiltering" @click="activeBreakdown = activeBreakdown === item.kpi ? null : item.kpi">
+              {{ activeBreakdown === item.kpi ? 'Hide breakdown' : 'View breakdown' }}
+              <ChevronUpIcon v-if="activeBreakdown === item.kpi" data-icon="inline-end" /><ChevronDownIcon v-else data-icon="inline-end" />
+            </Button>
+          </CardFooter>
+        </Card>
       </section>
+      <KpiBreakdownPanel v-if="activeBreakdown" :selected="activeBreakdown" :breakdowns="analysis.kpi_breakdowns" :disabled="isFiltering" @select="activeBreakdown = $event" />
 
       <Card>
         <CardHeader><div class="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Employee results</CardTitle><CardDescription>Component scores remain visible when overall scoring is withheld.</CardDescription></div><Badge variant="outline">{{ filteredRows.length }} employees</Badge></div></CardHeader>

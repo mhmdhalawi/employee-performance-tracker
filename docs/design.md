@@ -124,6 +124,20 @@ Filter changes continue to retain the last successful response during loading an
 Employee Results now presents Campaign / Queue in place of Team on the main dashboard;
 the existing team and employee API filters remain available for compatibility and reports.
 
+## KPI summary and breakdown — 2026-09-23
+
+The four summary cards retain the compact two-column phone and four-column desktop layout.
+Each shows the backend average for employees eligible for an overall result, along with the
+scored and withheld populations. The three KPI cards show their overall weights and separate
+download and View breakdown actions. The overall card states the 100% evidence requirement.
+
+One panel below the cards shows the selected KPI's backend-calculated average component
+scores and documented weights. Tabs switch between Productivity, Compliance, and Quality;
+selecting the open card again collapses the panel. The panel uses the same white surfaces,
+Geist text, Cedar marker colors, and semantic table treatment as the dashboard. Missing
+scores appear as dashes. The UI does not imply a universal KPI target, prior-period delta,
+or benchmark when none is defined by the backend.
+
 ## Original brand proposal and unresolved assets
 
 ## Goal

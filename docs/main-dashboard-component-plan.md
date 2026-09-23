@@ -1,6 +1,6 @@
 # Main dashboard component plan
 
-Status: approved direction; call-center filter section implemented  
+Status: approved direction; filters and KPI summary breakdown implemented
 Reference: user-supplied `Main Dashboard.jpeg`  
 Scope: dashboard structure above and around the existing trend chart and Employee Results table
 
@@ -110,11 +110,12 @@ The current cards contain:
 
 - KPI name and colored marker.
 - Average score.
-- Scored-employee population.
+- Scored and withheld populations.
 - Overall weight for the three KPIs.
 - A KPI PDF download icon on the three KPI cards.
+- View breakdown on the three KPI cards, opening one shared panel.
 
-### Missing
+### Not yet supplied by the backend
 
 - Overall performance status badge such as Excellent or Insufficient data.
 - KPI attention badge when a KPI misses its target.
@@ -122,16 +123,21 @@ The current cards contain:
 - Point difference versus target.
 - Point difference versus a comparable prior period.
 - Team or organizational benchmark.
-- Visible `View breakdown` button for Productivity, Compliance, and Quality.
-- Clear separation between the breakdown action and the existing download action.
+
+The KPI cards now show scored and withheld populations, overall weights, and distinct
+breakdown and download actions. The backend supplies typed component averages and weights
+for a shared tabbed breakdown below the cards. No reference-only operational metrics or
+unconfigured targets are displayed.
 
 ### Important data rule
 
 Targets, previous-period deltas, benchmark values, component scores, and contributions must be returned by Python. The Vue client may format backend values but must not reproduce KPI arithmetic.
 
-The current `DashboardResponse` has average scores and population counts, but it does not expose structured dashboard targets, prior-period comparisons, team benchmarks, or component breakdown rows. The richer card design therefore needs an API-contract change before it can be complete.
+`DashboardResponse.kpi_breakdowns` now carries typed component averages and weights for the
+same scored population as the cards. Universal targets, prior-period comparisons, and external
+benchmarks still require explicit backend definitions before their card fields can be added.
 
-### Recommended card anatomy
+### Reference-only card anatomy for future comparison fields
 
 ```text
 ┌──────────────────────────────────────┐
@@ -147,16 +153,16 @@ The current `DashboardResponse` has average scores and population counts, but it
 
 If a value is unavailable, show `Not available`; do not display a zero or hide the label in a way that implies success. If an overall score is withheld, show `—`, `Insufficient data`, and the scored/withheld population rather than assigning a low-score status.
 
-### Recommended component boundary
+### Implemented component boundary
 
-- `KpiSummaryGrid.vue` owns layout.
-- `KpiSummaryCard.vue` owns the shared visual anatomy.
-- Business-named variants handle Overall versus a component KPI.
-- Existing Card, Badge, Button, and Spinner primitives remain the canonical controls.
+- `PerformanceDashboard.vue` owns the four cards and active KPI selection.
+- `KpiBreakdownPanel.vue` owns the one shared table and tab switcher.
+- Existing Card, Tabs, Table, Button, and Spinner primitives remain the canonical controls.
 
 ## Section 3 — KPI breakdown panel
 
-This is the most important missing section. It is a compact KPI-component table opened from the summary cards; it is not the main Employee Results table.
+This is a compact KPI-component table opened from the summary cards; it is separate from the
+main Employee Results table.
 
 ### Interaction model
 
@@ -181,7 +187,7 @@ Do not copy the reference's call-center rows unless the actual customer data sup
 
 Approved annual leave and approved sick leave remain neutral in attendance; sick-leave documentation still controls whether the leave-compliance requirement is satisfied. Unavailable required evidence lowers confidence and must not become zero performance.
 
-### Suggested columns
+### Future columns if backend contracts become available
 
 | Column | Purpose |
 | --- | --- |
@@ -195,7 +201,7 @@ Approved annual leave and approved sick leave remain neutral in attendance; sick
 
 `Team average` from the reference can be included only if the backend defines and returns the comparison population. It should not be inferred from whichever employee rows happen to be loaded in the browser.
 
-### Desktop visual
+### Expanded desktop concept for future data fields
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -212,7 +218,7 @@ Approved annual leave and approved sick leave remain neutral in attendance; sick
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Phone visual
+### Expanded phone concept for future data fields
 
 Avoid a horizontally compressed seven-column table. Each component becomes a labeled record card while preserving every field.
 
@@ -236,9 +242,13 @@ Avoid a horizontally compressed seven-column table. Each component becomes a lab
 └──────────────────────────────┘
 ```
 
-### Required backend addition
+### Implemented backend addition
 
-Prefer a typed breakdown on `DashboardResponse`, keyed by KPI, rather than parsing the existing human-readable `*_reason` strings. A row needs stable identifiers and nullable typed values so missing evidence remains distinct from real zero.
+`DashboardResponse.kpi_breakdowns` is keyed by KPI and supplies the selected KPI score,
+scored population, and rows with stable key, label, nullable average component score, and
+weight. Python computes every score; Vue formats the returned values and never parses reason
+strings. Observed counts, target comparisons, contributions, and evidence counts are not yet
+part of this contract.
 
 Conceptual shape:
 
@@ -246,15 +256,14 @@ Conceptual shape:
 kpi_breakdowns
   productivity
     score
-    rows[]: key, label, observed, target, component_score, weight, contribution,
-            evidence_count, evidence_status
+    components[]: key, label, score, weight
   compliance
     ...
   quality
     ...
 ```
 
-The exact schema should be defined in the Python/Pydantic contract first and mirrored in TypeScript.
+The Python/Pydantic schema and TypeScript contract use this shape.
 
 ## Section 4 — Weekly performance trend
 

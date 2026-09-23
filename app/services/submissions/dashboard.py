@@ -3,9 +3,11 @@ from datetime import date, datetime, timedelta
 
 from app.core.errors import DashboardNotFoundError, InvalidAnalysisFilterError
 from app.database import StoredAggregationState, load_aggregation_state
-from app.schemas.performance import PerformanceEvidenceDataset
+from app.schemas.performance import EmployeeKpiScores, KpiComponentScore, PerformanceEvidenceDataset
 from app.schemas.uploads import (
+    AnalysisSummary,
     CalculationPlan,
+    DashboardKpiBreakdown,
     DashboardResponse,
     EmployeeFilterOption,
 )
@@ -17,6 +19,7 @@ from app.services.filters import (
     validate_analysis_period,
 )
 from app.services.performance import inspect_dataset
+from app.utils.numbers import average
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +186,7 @@ def build_dashboard(
     return DashboardResponse(
         results=response.results,
         summary=response.summary,
+        kpi_breakdowns=_build_kpi_breakdowns(response.results, response.summary),
         dataset_overview=response.dataset_overview,
         applied_filters=response.applied_filters,
         available_employees=available_employees,
@@ -204,6 +208,35 @@ def build_dashboard(
         latest_submission_at=datetime.fromisoformat(state.latest_submission_at),
         mapping_summaries=materialized.mapping_summaries,
     )
+
+
+def _build_kpi_breakdowns(
+    results: list[EmployeeKpiScores], summary: AnalysisSummary
+) -> dict[str, DashboardKpiBreakdown]:
+    scored = [result for result in results if result.overall_score is not None]
+    breakdowns: dict[str, DashboardKpiBreakdown] = {}
+    for kpi in ("productivity", "compliance", "quality"):
+        first = next((result.components[kpi] for result in results if kpi in result.components), [])
+        components = [
+            KpiComponentScore(
+                key=component.key,
+                label=component.label,
+                weight=component.weight,
+                score=average(
+                    value.score
+                    for result in scored
+                    for value in result.components.get(kpi, [])
+                    if value.key == component.key and value.score is not None
+                ),
+            )
+            for component in first
+        ]
+        breakdowns[kpi] = DashboardKpiBreakdown(
+            score=getattr(summary, f"average_{kpi}_score"),
+            scored_employee_count=len(scored),
+            components=components,
+        )
+    return breakdowns
 
 
 def _available_employee_values(

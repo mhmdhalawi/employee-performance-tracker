@@ -506,6 +506,40 @@ class AnalyzeApiIntegrationTests(TestCase):
         self.assertEqual(dashboard.json()["summary"]["total_employee_count"], 30)
         self.assertEqual(dashboard.json()["included_submission_count"], 1)
 
+    def test_dashboard_kpi_breakdowns_match_scored_population(self) -> None:
+        self._post_benchmark_tables()
+        dashboard = self.client.get("/api/v1/dashboard").json()
+        scored = [
+            result for result in dashboard["results"]
+            if result["overall_score"] is not None
+        ]
+        expected_weights = {
+            "productivity": [60, 40],
+            "compliance": [50, 35, 15],
+            "quality": [60, 25, 15],
+        }
+        for kpi, weights in expected_weights.items():
+            breakdown = dashboard["kpi_breakdowns"][kpi]
+            self.assertEqual(breakdown["scored_employee_count"], len(scored))
+            self.assertEqual(breakdown["score"], dashboard["summary"][f"average_{kpi}_score"])
+            self.assertEqual([row["weight"] for row in breakdown["components"]], weights)
+            for row in breakdown["components"]:
+                values = [
+                    component["score"]
+                    for result in scored
+                    for component in result["components"][kpi]
+                    if component["key"] == row["key"] and component["score"] is not None
+                ]
+                self.assertEqual(row["score"], round(sum(values) / len(values), 2))
+
+        one_day = self.client.get(
+            "/api/v1/dashboard?start_date=2026-08-21&end_date=2026-08-21"
+        ).json()
+        self.assertEqual(one_day["summary"]["scored_employee_count"], 0)
+        for breakdown in one_day["kpi_breakdowns"].values():
+            self.assertIsNone(breakdown["score"])
+            self.assertTrue(all(row["score"] is None for row in breakdown["components"]))
+
     def test_json_preview_returns_analysis_and_usage_without_creating_database(self) -> None:
         payload = {
             "tables": [
