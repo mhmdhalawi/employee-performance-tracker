@@ -1,6 +1,7 @@
-import type { Content, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
+import type { CanvasElement, Content, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
 import { formatDate, formatDateTime } from '@/lib/date-format'
-import type { DashboardResponse, EmployeeKpiResult, KpiTrendPoint } from '@/types/analysis'
+import { summarizeActionCenter } from '@/lib/action-center-summary'
+import type { DashboardResponse, EmployeeKpiResult, KpiTrendPoint, PerformanceAlert } from '@/types/analysis'
 
 export type DashboardKpi = 'productivity' | 'compliance' | 'quality'
 
@@ -9,6 +10,7 @@ const cedarLight = '#E7F3F3'
 const ink = '#0D0D0D'
 const muted = '#555B59'
 const line = '#D8DDDC'
+const compliance = '#C18426'
 
 function scoredPopulation(count: number): string {
   return `${count} scored employee${count === 1 ? '' : 's'}`
@@ -98,10 +100,11 @@ function teamDocumentDefinition(analysis: DashboardResponse): TDocumentDefinitio
       color: muted,
       margin: [0, 4, 0, 14],
     },
-    { text: 'Employee results', style: 'sectionTitle' },
+    actionCenterSummaryBlock(analysis.alerts),
+    teamTrendChart(analysis.trends),
+    { text: 'Employee results', style: 'sectionTitle', ...(analysis.trends.length ? { pageBreak: 'before' as const } : {}) },
     employeeResultsTable(analysis.results),
-    teamTrendTable(analysis.trends),
-    managerNotice(),
+    ...(analysis.trends.length ? [teamTrendTable(analysis.trends)] : []),
   ]
   return baseDocument('CALL-CENTER PERFORMANCE REPORT', content)
 }
@@ -130,7 +133,6 @@ function kpiDocumentDefinition(analysis: DashboardResponse, kpi: DashboardKpi): 
     kpiEmployeeTable(analysis.results, kpi),
     { text: `${details.label} trend`, style: 'sectionTitle', margin: [0, 16, 0, 4] },
     kpiTrendTable(analysis.trends, kpi),
-    managerNotice(),
   ]
   return baseDocument(`${details.label.toUpperCase()} REPORT`, content)
 }
@@ -159,7 +161,6 @@ function baseDocument(reportLabel: string, content: Content[]): TDocumentDefinit
     styles: {
       title: { fontSize: 20, bold: true, color: cedar, margin: [0, 0, 0, 3] },
       sectionTitle: { fontSize: 11, bold: true, color: cedar },
-      notice: { fillColor: cedarLight, color: ink, margin: [8, 7, 8, 7] },
     },
   }
 }
@@ -226,12 +227,6 @@ function kpiEmployeeTable(results: EmployeeKpiResult[], kpi: DashboardKpi): Cont
 }
 
 function teamTrendTable(trends: KpiTrendPoint[]): Content {
-  if (!trends.length)
-    return { stack: [
-      { text: 'Weekly KPI trend', style: 'sectionTitle' },
-      emptyState('No trend data is available for this period.'),
-    ], margin: [0, 16, 0, 0] }
-
   return dataTable(
     ['Week ending', 'Employees', 'Productivity', 'Compliance', 'Quality', 'Overall', 'Data confidence'],
     trends.map(point => [
@@ -244,8 +239,145 @@ function teamTrendTable(trends: KpiTrendPoint[]): Content {
       optionalScore(point.data_confidence),
     ]),
     ['*', 55, 65, 65, 65, 60, 65],
-    'Weekly KPI trend',
+    'Weekly values',
+    trends.length >= 8,
   )
+}
+
+function actionCenterSummaryBlock(alerts: PerformanceAlert[]): Content {
+  const summary = summarizeActionCenter(alerts)
+  if (!summary.groups.length) {
+    return {
+      stack: [
+        { text: 'Action Center', style: 'sectionTitle' },
+        { text: 'No findings for the selected filters.', color: muted, margin: [0, 4, 0, 0] },
+      ],
+    }
+  }
+  return {
+    stack: [
+      {
+        columns: [
+          { text: 'Action Center', style: 'sectionTitle' },
+          { text: `${summary.totalFindings} findings · ${summary.affectedEmployees} affected employees`, alignment: 'right', color: muted, fontSize: 8 },
+        ],
+        margin: [0, 0, 0, 6],
+      },
+      {
+        table: {
+          widths: summary.groups.map(() => '*'),
+          body: [summary.groups.map<TableCell>(group => ({
+            fillColor: group.key === 'evidence' ? '#FFF8EB' : group.key === 'performance' ? cedarLight : '#F3F5F5',
+            stack: [
+              { text: group.label, bold: true, color: group.key === 'evidence' ? '#80520B' : cedar, fontSize: 8 },
+              { text: `${group.findingCount} ${group.findingCount === 1 ? 'finding' : 'findings'}`, bold: true, margin: [0, 4, 0, 2] },
+              { text: `${group.employeeCount} affected ${group.employeeCount === 1 ? 'employee' : 'employees'}`, color: muted, fontSize: 7 },
+            ],
+          }))],
+        },
+        layout: {
+          hLineWidth: () => 0,
+          vLineWidth: (index: number) => index > 0 && index < summary.groups.length ? 5 : 0,
+          vLineColor: () => '#FFFFFF',
+          paddingLeft: () => 8,
+          paddingRight: () => 8,
+          paddingTop: () => 7,
+          paddingBottom: () => 7,
+        },
+      },
+    ],
+  }
+}
+
+function teamTrendChart(trends: KpiTrendPoint[]): Content {
+  if (!trends.length)
+    return { stack: [
+      { text: 'Weekly KPI trend', style: 'sectionTitle' },
+      emptyState('No trend data is available for this period.'),
+    ], margin: [0, 16, 0, 0] }
+
+  const left = 6
+  const right = 720
+  const top = 8
+  const bottom = 180
+  const x = (index: number) => trends.length === 1 ? (left + right) / 2
+    : left + (right - left) * index / (trends.length - 1)
+  const y = (value: number) => bottom - Math.max(0, Math.min(100, value)) * (bottom - top) / 100
+  const canvas: CanvasElement[] = [
+    ...[0, 25, 50, 75, 100].map(value => ({
+      type: 'line' as const, x1: left, y1: y(value), x2: right, y2: y(value),
+      lineColor: line, lineWidth: 0.5,
+    })),
+  ]
+  const series: {
+    field: 'productivity_score' | 'compliance_score' | 'quality_score'
+    color: string
+    dash?: { length: number, space: number }
+  }[] = [
+    { field: 'productivity_score', color: cedar },
+    { field: 'compliance_score', color: compliance, dash: { length: 6, space: 3 } },
+    { field: 'quality_score', color: ink, dash: { length: 2, space: 3 } },
+  ]
+  for (const item of series) {
+    for (let index = 0; index < trends.length; index++) {
+      const value = trends[index]![item.field]
+      if (value === null) continue
+      if (index > 0) {
+        const previous = trends[index - 1]![item.field]
+        if (previous !== null) {
+          canvas.push({
+            type: 'line', x1: x(index - 1), y1: y(previous), x2: x(index), y2: y(value),
+            lineColor: item.color, lineWidth: 1.8, dash: item.dash,
+          })
+        }
+      }
+      canvas.push({ type: 'ellipse', x: x(index), y: y(value), r1: 3.2, color: '#FFFFFF' })
+      canvas.push({ type: 'ellipse', x: x(index), y: y(value), r1: 2.4, color: item.color })
+    }
+  }
+  const dateIndexes = [...new Set([0, Math.round((trends.length - 1) / 5), Math.round(2 * (trends.length - 1) / 5), Math.round(3 * (trends.length - 1) / 5), Math.round(4 * (trends.length - 1) / 5), trends.length - 1])]
+
+  return {
+    unbreakable: true,
+    stack: [
+      { text: 'Weekly KPI trend', style: 'sectionTitle', margin: [0, 0, 0, 5] },
+      { text: 'Scores across the selected employees. Gaps mean no score is available.', color: muted, fontSize: 8, margin: [0, 0, 0, 7] },
+      {
+        columns: [
+          { text: 'Productivity · solid', color: cedar },
+          { text: 'Compliance · dashed', color: compliance },
+          { text: 'Quality · dotted', color: ink },
+        ],
+        fontSize: 8,
+        margin: [0, 0, 0, 5],
+      },
+      {
+        columns: [
+          { width: 29, stack: [
+            { text: '100%', margin: [0, 3, 0, 76] },
+            { text: '50%', margin: [0, 0, 0, 76] },
+            { text: '0%' },
+          ], fontSize: 7, color: muted },
+          { width: '*', canvas },
+        ],
+        columnGap: 4,
+      },
+      {
+        columns: [
+          { width: 33, text: '' },
+          { width: '*', columns: dateIndexes.map((index, position) => ({
+            width: '*', text: formatDate(trends[index]!.period_end),
+            alignment: position === 0 ? 'left' : position === dateIndexes.length - 1 ? 'right' : 'center',
+          })), columnGap: 0 },
+        ],
+        columnGap: 0,
+        color: muted,
+        fontSize: 7,
+        margin: [0, 2, 0, 0],
+      },
+    ],
+    margin: [0, 16, 0, 0],
+  }
 }
 
 function kpiTrendTable(trends: KpiTrendPoint[], kpi: DashboardKpi): Content {
@@ -264,7 +396,7 @@ function kpiTrendTable(trends: KpiTrendPoint[], kpi: DashboardKpi): Content {
   )
 }
 
-function dataTable(headers: string[], rows: string[][], widths: (string | number)[], sectionTitle?: string): Content {
+function dataTable(headers: string[], rows: string[][], widths: (string | number)[], sectionTitle?: string, startOnNewPage = false): Content {
   const titleRow: TableCell[] = sectionTitle
     ? [{ text: sectionTitle, style: 'sectionTitle', colSpan: headers.length }, ...Array.from({ length: headers.length - 1 }, () => ({}))]
     : []
@@ -282,6 +414,7 @@ function dataTable(headers: string[], rows: string[][], widths: (string | number
     layout: tableLayout(sectionTitle ? 1 : 0),
     fontSize: 7,
     margin: [0, sectionTitle ? 16 : 5, 0, 0],
+    ...(startOnNewPage ? { pageBreak: 'before' as const } : {}),
   }
 }
 
@@ -293,14 +426,6 @@ function metricCell(label: string, value: string, detail: string): Content {
       { text: detail, color: muted, fontSize: 7 },
     ],
     margin: [9, 7, 9, 7],
-  }
-}
-
-function managerNotice(): Content {
-  return {
-    text: 'This report supports coaching and manager review. It must not be used alone for hiring, termination, promotion, compensation, or disciplinary decisions.',
-    style: 'notice',
-    margin: [0, 16, 0, 0],
   }
 }
 

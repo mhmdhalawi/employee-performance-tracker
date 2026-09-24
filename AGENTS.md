@@ -326,7 +326,7 @@ Team and KPI summary exports do not have separate backend endpoints. The dashboa
 current filtered `DashboardResponse` directly to `web/src/lib/dashboard-report-pdf.ts`. The team
 preview and all downloaded reports must preserve backend-provided scores, trends, confidence,
 withheld overall results, resolved dates, and employee scope without browser-side KPI arithmetic.
-Team and KPI summary PDFs include a manager-review notice; employee reports omit it. Report
+Employee, team, and KPI summary PDFs omit the manager-review notice. Report
 filenames are sanitized, PDF dependencies are loaded only when an export is requested, object URLs are revoked after download, and generated
 files are not retained by the application.
 

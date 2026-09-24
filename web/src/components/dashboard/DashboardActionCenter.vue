@@ -6,19 +6,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { countAffectedEmployees, countFindings, summarizeActionCenter, type ActionGroupKey, type ActionGroupSummary } from '@/lib/action-center-summary'
 import type { PerformanceAlert } from '@/types/analysis'
 
-type GroupKey = 'evidence' | 'performance' | 'excluded' | 'other'
-
-interface ActionGroup {
-  key: GroupKey
-  label: string
-  description: string
+interface ActionGroup extends ActionGroupSummary {
   icon: typeof TriangleAlertIcon
   iconClass: string
-  alerts: PerformanceAlert[]
-  findingCount: number
-  employeeCount: number
 }
 
 const props = defineProps<{
@@ -28,50 +21,27 @@ const props = defineProps<{
 
 const router = useRouter()
 const sheetOpen = ref(false)
-const selectedGroup = ref<GroupKey | null>(null)
+const selectedGroup = ref<ActionGroupKey | null>(null)
 
-const definitions = [
-  { key: 'evidence', label: 'Evidence gaps', description: 'Records lowering data confidence', icon: TriangleAlertIcon, iconClass: 'bg-warning/15 text-warning-foreground' },
-  { key: 'performance', label: 'Performance alerts', description: 'Findings affecting KPI scores', icon: CircleAlertIcon, iconClass: 'bg-secondary text-primary' },
-  { key: 'excluded', label: 'Excluded records', description: 'Records left out of scoring', icon: InfoIcon, iconClass: 'bg-muted text-muted-foreground' },
-  { key: 'other', label: 'Other data issues', description: 'Findings requiring source review', icon: InfoIcon, iconClass: 'bg-muted text-muted-foreground' },
-] as const
-
-function groupKey(alert: PerformanceAlert): GroupKey {
-  if (alert.category === 'performance_alert') return 'performance'
-  if (alert.scoring_impact === 'lowers_confidence') return 'evidence'
-  if (alert.scoring_impact === 'excluded_from_scoring') return 'excluded'
-  return 'other'
-}
-
-function findingCount(alerts: PerformanceAlert[]): number {
-  return alerts.reduce((total, alert) => total + alert.occurrence_count, 0)
-}
-
-function employeeCount(alerts: PerformanceAlert[]): number {
-  return new Set(alerts.map(alert => alert.employee_id).filter(Boolean)).size
+const groupPresentation: Record<ActionGroupKey, Pick<ActionGroup, 'icon' | 'iconClass'>> = {
+  evidence: { icon: TriangleAlertIcon, iconClass: 'bg-warning/15 text-warning-foreground' },
+  performance: { icon: CircleAlertIcon, iconClass: 'bg-secondary text-primary' },
+  excluded: { icon: InfoIcon, iconClass: 'bg-muted text-muted-foreground' },
+  other: { icon: InfoIcon, iconClass: 'bg-muted text-muted-foreground' },
 }
 
 function employeeLabel(count: number): string {
   return count === 1 ? '1 employee' : `${count} employees`
 }
 
-const groups = computed<ActionGroup[]>(() => definitions.map(definition => {
-  const alerts = props.alerts.filter(alert => groupKey(alert) === definition.key)
-  return {
-    ...definition,
-    alerts,
-    findingCount: findingCount(alerts),
-    employeeCount: employeeCount(alerts),
-  }
-}).filter(group => group.alerts.length))
-
-const totalFindings = computed(() => findingCount(props.alerts))
+const summary = computed(() => summarizeActionCenter(props.alerts))
+const groups = computed<ActionGroup[]>(() => summary.value.groups.map(group => ({ ...group, ...groupPresentation[group.key] })))
+const totalFindings = computed(() => summary.value.totalFindings)
 const activeGroup = computed(() => groups.value.find(group => group.key === selectedGroup.value))
 const visibleAlerts = computed(() => selectedGroup.value ? activeGroup.value?.alerts ?? [] : props.alerts)
 const sheetTitle = computed(() => activeGroup.value?.label ?? 'All findings')
 
-function openSheet(group: GroupKey | null): void {
+function openSheet(group: ActionGroupKey | null): void {
   selectedGroup.value = group
   sheetOpen.value = true
 }
@@ -127,7 +97,7 @@ function viewEmployee(employeeId: string): void {
     <SheetContent class="data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
       <SheetHeader class="pr-12">
         <SheetTitle>Action Center · {{ sheetTitle }}</SheetTitle>
-        <SheetDescription>{{ findingCount(visibleAlerts) }} findings affecting {{ employeeLabel(employeeCount(visibleAlerts)) }}. Review the supporting records and source action for each finding.</SheetDescription>
+        <SheetDescription>{{ countFindings(visibleAlerts) }} findings affecting {{ employeeLabel(countAffectedEmployees(visibleAlerts)) }}. Review the supporting records and source action for each finding.</SheetDescription>
       </SheetHeader>
       <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         <p v-if="!visibleAlerts.length" class="py-8 text-center text-muted-foreground">No findings for the selected filters.</p>

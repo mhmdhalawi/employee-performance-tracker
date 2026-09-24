@@ -5,20 +5,30 @@ import {
   CircleAlertIcon,
   DownloadIcon,
   FileTextIcon,
-  ShieldCheckIcon,
   TriangleAlertIcon,
   UsersIcon,
 } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationFirst,
+  PaginationItem,
+  PaginationLast,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
 import ReportPreviewContent from '@/components/dashboard/ReportPreviewContent.vue'
 import WeeklyKpiTrend from '@/components/dashboard/WeeklyKpiTrend.vue'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { downloadTeamReportPdf } from '@/lib/dashboard-report-pdf'
+import { summarizeActionCenter } from '@/lib/action-center-summary'
 import { formatDate } from '@/lib/date-format'
 import type { DashboardResponse } from '@/types/analysis'
 
@@ -32,6 +42,8 @@ const emit = defineEmits<{
 
 const downloading = ref(false)
 const error = ref('')
+const currentPage = ref(1)
+const pageSize = 10
 
 const kpis = [
   { key: 'average_productivity_score', label: 'Productivity', weight: '35% of overall', tone: 'bg-chart-1' },
@@ -48,11 +60,18 @@ const activeScope = computed(() => (
     ['Location', props.analysis.applied_filters.location],
   ] as const
 ).filter(([, value]) => Boolean(value)))
+const actionSummary = computed(() => summarizeActionCenter(props.analysis.alerts))
+const previewRows = computed(() => props.analysis.results.slice((currentPage.value - 1) * pageSize, currentPage.value * pageSize))
+const firstVisibleRow = computed(() => props.analysis.results.length ? (currentPage.value - 1) * pageSize + 1 : 0)
+const lastVisibleRow = computed(() => Math.min(currentPage.value * pageSize, props.analysis.results.length))
 
 watch(() => props.open, (open) => {
-  if (open)
+  if (open) {
     error.value = ''
+    currentPage.value = 1
+  }
 })
+watch(() => props.analysis, () => { currentPage.value = 1 })
 
 async function downloadReport(): Promise<void> {
   if (downloading.value)
@@ -151,12 +170,32 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
           </Card>
         </section>
 
-        <WeeklyKpiTrend :trends="analysis.trends" description="Scores across the selected employees and reporting period. Gaps mean no score is available." />
+        <section aria-label="Trends and Action Center summary" class="grid items-start gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] xl:items-stretch">
+          <WeeklyKpiTrend :trends="analysis.trends" description="Scores across the selected employees and reporting period. Gaps mean no score is available." compact-on-desktop />
+          <Card aria-label="Action Center summary" class="min-w-0 xl:h-full">
+            <CardHeader class="gap-1">
+              <div class="flex items-start justify-between gap-3">
+                <div><CardTitle>Action Center</CardTitle><CardDescription>Findings for this report scope</CardDescription></div>
+                <Badge variant="outline">{{ actionSummary.totalFindings }} findings</Badge>
+              </div>
+            </CardHeader>
+            <CardContent class="flex flex-col gap-2 xl:grow">
+              <p v-if="!actionSummary.groups.length" class="py-5 text-sm text-muted-foreground">No findings for the selected filters.</p>
+              <div v-for="group in actionSummary.groups" :key="group.key"
+                class="rounded-lg border p-3"
+                :class="group.key === 'evidence' ? 'border-warning/25 bg-warning/10' : group.key === 'performance' ? 'border-primary/20 bg-primary/5' : 'border-border bg-muted/40'">
+                <p class="font-medium">{{ group.label }}</p>
+                <p class="mt-1 text-xs text-muted-foreground">{{ group.findingCount }} {{ group.findingCount === 1 ? 'finding' : 'findings' }} · {{ group.employeeCount }} affected {{ group.employeeCount === 1 ? 'employee' : 'employees' }}</p>
+              </div>
+              <p v-if="actionSummary.groups.length" class="text-xs text-muted-foreground">Review record-level findings in the dashboard Action Center.</p>
+            </CardContent>
+          </Card>
+        </section>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Employee results</CardTitle>
-            <CardDescription>All employees in the current dashboard filters are included in the download.</CardDescription>
+          <CardHeader class="flex flex-wrap items-start justify-between gap-3">
+            <div><CardTitle>Employee results</CardTitle><CardDescription>Previewing 10 at a time. The PDF includes all employees in the current filters.</CardDescription></div>
+            <Badge variant="outline">{{ analysis.results.length }} employees</Badge>
           </CardHeader>
           <CardContent class="overflow-x-auto">
             <Table class="min-w-220">
@@ -173,7 +212,7 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow v-for="employee in analysis.results" :key="employee.employee_id">
+                <TableRow v-for="employee in previewRows" :key="employee.employee_id">
                   <TableCell><p class="font-medium">{{ employeeLabel(employee.employee_name, employee.employee_id) }}</p><p class="text-xs text-muted-foreground">{{ employee.employee_id }}</p></TableCell>
                   <TableCell class="whitespace-normal wrap-break-word"><span>{{ employee.campaign || 'Campaign not provided' }}</span><span class="block text-xs text-muted-foreground">{{ employee.queue || 'Queue not provided' }}</span></TableCell>
                   <TableCell class="text-right tabular-nums">{{ score(employee.productivity_score) }}</TableCell>
@@ -183,9 +222,25 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
                   <TableCell class="text-right font-medium tabular-nums">{{ score(employee.overall_score) }}</TableCell>
                   <TableCell><Badge :variant="employee.overall_score === null ? 'warning' : 'success'">{{ employee.performance_tier || employee.result_status }}</Badge></TableCell>
                 </TableRow>
+                <TableRow v-if="!analysis.results.length"><TableCell colspan="8" class="h-24 text-center text-muted-foreground">No employees match these filters.</TableCell></TableRow>
               </TableBody>
             </Table>
           </CardContent>
+          <CardFooter class="flex-col gap-4 border-t sm:flex-row sm:justify-between">
+            <span class="text-sm text-muted-foreground">{{ firstVisibleRow }}–{{ lastVisibleRow }} of {{ analysis.results.length }}</span>
+            <Pagination v-model:page="currentPage" :items-per-page="pageSize" :total="analysis.results.length" :sibling-count="1" show-edges class="mx-0 w-auto">
+              <PaginationContent v-slot="{ items }">
+                <PaginationFirst />
+                <PaginationPrevious />
+                <template v-for="(item, index) in items" :key="index">
+                  <PaginationItem v-if="item.type === 'page'" :value="item.value" :is-active="item.value === currentPage">{{ item.value }}</PaginationItem>
+                  <PaginationEllipsis v-else :index="index" />
+                </template>
+                <PaginationNext />
+                <PaginationLast />
+              </PaginationContent>
+            </Pagination>
+          </CardFooter>
         </Card>
 
       <template #footer>

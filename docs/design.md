@@ -207,9 +207,14 @@ chart omits the weekly-values disclosure in the dashboard, Employee Details, and
 
 The dashboard report preview follows the current call-center dashboard hierarchy: applied
 period and operational filters, four compact score cards, the scoped weekly trend, then the
-complete employee result table. Its Campaign / Queue and data-confidence columns match the
-dashboard. The landscape PDF uses the same filtered employee set, scope labels, and Campaign /
-Queue values; its weekly trend remains a complete data table.
+employee result table with 10 rows per preview page. Its Campaign / Queue and data-confidence
+columns match the dashboard. Preview pagination does not limit the landscape PDF, which uses
+the complete filtered employee set, scope labels, and Campaign /
+Queue values. Its first page charts the three KPI trends with visible gaps, and a later Weekly
+values table retains exact backend numbers, coverage, overall results, and confidence. The
+preview and PDF also show the Action Center's grouped finding counts and distinct affected
+employees for the same filtered snapshot, while record details stay in the dashboard. The
+dashboard preview and team/KPI PDFs omit the manager-review notice.
 
 ## Original brand proposal and unresolved assets
 

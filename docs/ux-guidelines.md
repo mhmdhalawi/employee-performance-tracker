@@ -42,7 +42,7 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 | KPI breakdown | `PerformanceDashboard.vue`, `KpiBreakdownPanel.vue`, shared Card/Tabs/Table | One disclosure under the four cards; server-calculated component averages, same scored population and filter scope; missing scores remain dashes |
 | Dashboard Action Center | `DashboardActionCenter.vue`, shared Card/Badge/Button/Sheet | Group current backend alerts by category and scoring impact; Review and View all show source action, records, links, and employee navigation in a bounded sheet |
 | Results navigation | `PerformanceDashboard.vue`, shared Table/Pagination | Desktop table and mobile employee cards use the same paginated/sorted rows; preserve all score/status fields |
-| Report overlay | `ReportPreviewContent.vue`, shared Dialog | Accessible dialog title/description, viewport-bounded width up to 1400px, contained body scroll, complete cards, reachable footer, Escape; dashboard preview shows applied filters, scoped trend, and complete Campaign / Queue results; verify desktop, phone, and short height |
+| Report overlay | `ReportPreviewContent.vue`, shared Dialog | Accessible dialog title/description, viewport-bounded width up to 1400px, contained body scroll, complete cards, reachable footer, Escape; dashboard preview shows applied filters, scoped trend, grouped Action Center counts, and Campaign / Queue results in 10-row pages; download retains all filtered employees; verify desktop, phone, and short height |
 | Employee evidence | `EmployeeEvidenceTable.vue`, `EvidenceRecordDetails.vue`, shared Table/Collapsible | Three independently paginated tables; identical mobile records; keyboard disclosures; full source values and backend exclusion labels |
 | Confidence | `components/ui/progress/Progress.vue` | Warning tone for withheld employee results plus percentage and explicit status; no tier inference |
 | Charts | Shared Unovis chart | Map null to a non-numeric line gap, preserve real zero, no interpolated missing data; distinct series patterns and legend labels |
@@ -62,8 +62,8 @@ There are no create/edit/delete controls, bulk selection, or toast-based mutatio
 
 ## Boundaries and validation
 
-Reports remain transient browser downloads. Team and KPI exports retain manager-review notices;
-the employee preview and PDF omit that notice. This UI work does not implement authentication
+Reports remain transient browser downloads. Employee, team, and KPI previews and PDFs omit the
+manager-review notice. This UI work does not implement authentication
 or change permission policy, raw-data ingestion, KPI formulas, or API evidence.
 
 Build with `pnpm build` in `web/`. Browser regression coverage must include trailing/interior null chart points versus real zero, call-center facet combinations, page/sort return, failed filter/retry, employee preview failure/retry, open Select popups at phone widths, long labels, and no-results display. Completed checks and verification limits are recorded in [the test handover](handover.md#frontend-verification--2026-09-05).
