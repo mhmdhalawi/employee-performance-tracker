@@ -125,6 +125,7 @@ async def build_employee_report_preview(
                 explanation=employee.quality_reason,
             ),
         ],
+        components=employee.components,
         trends=dashboard.trends,
         prior_overall_score=prior_score,
         overall_score_change=score_change,
@@ -135,10 +136,6 @@ async def build_employee_report_preview(
             "Compliance: attendance, reports, and leave compliance (30% of overall).",
             "Quality: accuracy, first-pass approval, and rework (35% of overall).",
         ],
-        manager_review_notice=(
-            "This report supports coaching and manager review. It must not be used alone "
-            "to make hiring, termination, promotion, compensation, or disciplinary decisions."
-        ),
     )
     return EmployeeReportPreviewResponse(report=report)
 

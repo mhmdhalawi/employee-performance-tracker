@@ -3,7 +3,7 @@ import { computed, onScopeDispose, ref, watch } from 'vue'
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Spinner } from '@/components/ui/spinner'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -17,9 +17,6 @@ import type { EmployeeEvidenceRow, EvidenceKpi, EvidencePageSize } from '@/types
 
 const props = withDefaults(defineProps<{
   kpi: EvidenceKpi
-  score: number | null
-  weight: number
-  explanation: string
   rows: EmployeeEvidenceRow[]
   total: number
   allRecordsCount?: number
@@ -46,12 +43,13 @@ watch(() => props.loading, loading => {
 }, { immediate: true })
 onScopeDispose(() => clearTimeout(indicatorTimer))
 const columns = computed(() => evidenceSummaryColumns(props.kpi))
-const sectionTones: Record<EvidenceKpi, { header: string, marker: string, score: string }> = {
-  productivity: { header: 'bg-primary/5', marker: 'bg-primary', score: 'text-primary' },
-  compliance: { header: 'bg-warning/8', marker: 'bg-chart-2', score: 'text-warning-foreground' },
-  quality: { header: 'bg-muted/40', marker: 'bg-foreground', score: 'text-foreground' },
+const sectionTones: Record<EvidenceKpi, { header: string, marker: string }> = {
+  productivity: { header: 'bg-primary/5', marker: 'bg-primary' },
+  compliance: { header: 'bg-warning/8', marker: 'bg-chart-2' },
+  quality: { header: 'bg-muted/40', marker: 'bg-foreground' },
 }
 const sectionTone = computed(() => sectionTones[props.kpi])
+const selectedFilterClass = 'h-9 rounded-none border-b-2 border-transparent bg-transparent! px-1.5 text-muted-foreground hover:text-foreground data-[state=on]:border-foreground data-[state=on]:text-foreground'
 const issuesLabel = computed(() => props.kpi === 'compliance' ? 'Issues / scoring note' : 'Issues')
 const activePage = computed(() => props.report ? previewPage.value : props.page)
 const activePageSize = computed(() => props.report ? previewPageSize.value : props.pageSize)
@@ -98,30 +96,24 @@ watch(() => props.rows, rows => {
   <Card class="min-w-0 gap-0 py-0" :aria-label="`${evidenceLabels[kpi]} evidence`">
     <CardHeader :class="cn('gap-2 border-b py-3', sectionTone.header)">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div :class="report ? 'grid min-w-0 grow grid-cols-[minmax(0,1fr)_auto] items-start gap-3' : 'min-w-0'">
-          <div class="flex min-w-0 flex-col gap-1">
-            <CardTitle>
-              <h2 :aria-label="`${evidenceLabels[kpi]} evidence`" class="flex flex-wrap items-center gap-2">
-                <span class="size-2.5 shrink-0 rounded-full" :class="sectionTone.marker" aria-hidden="true" />
-                {{ evidenceLabels[kpi] }} evidence
-              </h2>
-            </CardTitle>
-            <CardDescription v-if="report">{{ weight }}% of overall</CardDescription>
-          </div>
-          <strong v-if="report" class="text-3xl tabular-nums" :class="sectionTone.score" :aria-label="`${evidenceLabels[kpi]} score`">{{ score === null ? '—' : `${score.toFixed(1)}%` }}</strong>
+        <div class="min-w-0">
+          <CardTitle>
+            <h2 :aria-label="`${evidenceLabels[kpi]} evidence`" class="flex flex-wrap items-center gap-2">
+              <span class="size-2.5 shrink-0 rounded-full" :class="sectionTone.marker" aria-hidden="true" />
+              {{ evidenceLabels[kpi] }} evidence
+            </h2>
+          </CardTitle>
         </div>
         <div class="flex flex-wrap items-center gap-3">
-          <ToggleGroup type="single" variant="outline" tone="brand" class="order-1 sm:order-2" :model-value="activeReviewOnly ? 'review' : 'all'" :data-busy="loading && !disabled && reviewCount !== undefined" :disabled="loading || disabled || reviewCount === undefined" :aria-label="`${evidenceLabels[kpi]} record filter`" @update:model-value="changeFilter">
-            <ToggleGroupItem value="all">All records ({{ reviewCount === undefined ? '…' : allCount }})</ToggleGroupItem>
-            <ToggleGroupItem value="review"><TriangleAlertIcon v-if="reviewCount" data-icon="inline-start" />Needs review ({{ reviewCount ?? '…' }})</ToggleGroupItem>
+          <ToggleGroup type="single" variant="default" :spacing="2" class="order-1 sm:order-2" :model-value="activeReviewOnly ? 'review' : 'all'" :data-busy="loading && !disabled && reviewCount !== undefined" :disabled="loading || disabled || reviewCount === undefined" :aria-label="`${evidenceLabels[kpi]} record filter`" @update:model-value="changeFilter">
+            <ToggleGroupItem value="all" :class="selectedFilterClass">All records ({{ reviewCount === undefined ? '…' : allCount }})</ToggleGroupItem>
+            <ToggleGroupItem value="review" :class="selectedFilterClass"><TriangleAlertIcon v-if="reviewCount" data-icon="inline-start" />Needs review ({{ reviewCount ?? '…' }})</ToggleGroupItem>
           </ToggleGroup>
           <div class="order-2 flex min-h-4 w-4 items-center gap-2 text-xs text-muted-foreground sm:order-1 sm:w-36" role="status" aria-live="polite">
             <template v-if="showUpdating && reviewCount !== undefined"><Spinner /><span class="sr-only sm:not-sr-only">Updating records…</span></template>
           </div>
         </div>
       </div>
-      <CardDescription v-if="report" class="whitespace-normal wrap-break-word">{{ explanation }}</CardDescription>
-      <p v-if="report" class="text-xs text-muted-foreground">All {{ total }} records are included in the PDF. Choose how many to show in this preview.</p>
     </CardHeader>
     <CardContent class="min-w-0 px-0" :aria-busy="loading">
       <Alert v-if="error" variant="destructive" class="m-4">

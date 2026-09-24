@@ -30,7 +30,7 @@ Remaining follow-ups include sign-in refinements, official compact/reversed logo
 
 ## Employee evidence tables — 2026-09-14
 
-Employee Details places three full-width evidence sections below the compact KPI score cards, ordered Productivity, Compliance, and Quality. Each page section header identifies the evidence table; score, overall weight, and the calculation help icon live in the corresponding compact KPI card above. The help icon opens that KPI's calculation sentence in a floating panel. Report preview keeps its score, weight, and record description in each evidence heading because it does not have the same compact KPI cards. There is no separate calculation card.
+Employee Details places three full-width evidence sections below the compact KPI score cards, ordered Productivity, Compliance, and Quality. Each section header identifies the evidence table; score and overall weight live in the corresponding compact KPI card above. The page's help icon opens that KPI's calculation sentence in a floating panel. The report preview has the same compact score cards and concise evidence headings. There is no separate calculation card.
 
 Desktop uses semantic tables; phones use labeled record cards showing the same independently paginated records. Shared `EmployeeEvidenceTable.vue` and `EvidenceRecordDetails.vue` own both Employee Details and report preview presentation. IDs and text wrap, and shared Collapsible controls reveal full values, findings, scoring impacts, and safe evidence links.
 
@@ -43,6 +43,8 @@ controls sit beside its title on wide screens and wrap beneath it on phones. Des
 subtle alternating rows and a distinct review-row edge, without a second nested border or
 unused status row. Short captions
 remain available to screen readers without repeating explanatory text beneath the records.
+The record filters sit directly on the tinted header as plain text tabs, with a neutral
+underline for the selected option across all three KPI sections.
 The Needs review toggle retains the affected count, so the duplicate header link
 is omitted. Mobile record-card headers use the same muted and warning treatment.
 
@@ -50,13 +52,13 @@ The approved table simplification combines related dates/IDs and first-pass/rewo
 moves secondary source values into View record, and gives backend findings and exclusions
 a dedicated Issues column. `EvidenceRecordIssues.vue` shares issue presentation between
 desktop tables and mobile cards. Existing Cedar tokens, Geist typography, natural page
-scrolling, pagination, complete record disclosures, and the downloaded PDF layout remain.
+scrolling, pagination, complete record disclosures, and the downloaded PDF evidence remain.
 
 Record-specific Needs attention cards are replaced by table-local affected-record counts,
 All records / Needs review controls, plain finding labels, and restrained gold row
 emphasis. Attendance disclosures expose scheduled/actual times individually and mark
 missing fields identified by backend findings. Shared table and record components own
-the same behavior on page, mobile cards, and report preview; PDF layout stays unchanged.
+the same behavior on page, mobile cards, and report preview; PDF evidence remains complete.
 
 Background evidence requests preserve the existing record surface. A reserved space in the
 filter toolbar and delayed spinner communicate longer updates without moving table rows.
@@ -152,11 +154,25 @@ highest measured component scores, a backend finding or honest no-finding state,
 corresponding review step. It keeps exact values and source record IDs visible without
 inventing employment judgments or assignment status. Links in Performance explained and the
 manager summary lead to the unchanged, independently paginated evidence sections. The PDF preview and download flow
-retain their own snapshot and layout.
+retain their own immutable snapshot.
 On wide screens the Employee Details chart uses a compact 240px height, reduced to 192px at
 larger widths. The trend card can stretch if the manager summary is taller; the summary's
 three panels share extra height when the left column is taller. Both columns finish together.
 Stacked layouts and the report preview keep the regular chart height.
+
+The employee report preview follows the page's identity, five score cards, Performance
+explained, manager summary, trend, and evidence order. Its snapshot includes backend-calculated
+component scores so the manager summary stays consistent with the downloaded PDF. The preview
+omits a scope average because the report request is scoped to one employee. The PDF first page
+adapts the same hierarchy for A4; the complete evidence appendix remains. The employee preview
+and PDF omit the manager-review notice. The preview's manager summary omits the Review evidence
+button because the evidence tables are already in the preview below. Its chart uses the page's conditional detail scale,
+without a separate weekly-values table. In print, the manager summary aligns component scores,
+sets the watch point beside them, and gives the next step its own callout. The trend uses three
+short labeled tracks with measured-week counts, shared scale, and visible gaps; it precedes
+detailed findings so it stays with the summary. Findings, when present, start on a new page.
+Compliance record details and findings share
+a wide print column so long audit notes wrap legibly.
 
 ## KPI summary and breakdown — 2026-09-23
 

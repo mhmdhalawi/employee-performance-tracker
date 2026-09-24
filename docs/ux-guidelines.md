@@ -62,7 +62,9 @@ There are no create/edit/delete controls, bulk selection, or toast-based mutatio
 
 ## Boundaries and validation
 
-Reports remain transient browser downloads with existing manager-review notices. This UI work does not implement authentication or change permission policy, raw-data ingestion, KPI formulas, API evidence, or PDF rendering.
+Reports remain transient browser downloads. Team and KPI exports retain manager-review notices;
+the employee preview and PDF omit that notice. This UI work does not implement authentication
+or change permission policy, raw-data ingestion, KPI formulas, or API evidence.
 
 Build with `pnpm build` in `web/`. Browser regression coverage must include trailing/interior null chart points versus real zero, call-center facet combinations, page/sort return, failed filter/retry, employee preview failure/retry, open Select popups at phone widths, long labels, and no-results display. Completed checks and verification limits are recorded in [the test handover](handover.md#frontend-verification--2026-09-05).
 
@@ -101,7 +103,7 @@ overdue work, late submissions, and low accuracy. Each finding retains its reaso
 record IDs, and scoring impact. Employee list counts, record labels, summary cards, and PDF
 sections use the backend category. Unverified outcomes do not create performance alerts.
 
-`EmployeeDetailPage.vue` owns a help icon in each compact Productivity, Compliance, and Quality score card. Its floating, initially closed calculation panel opens by click, tap, or keyboard and shows only the matching sentence; Escape closes it. On-page evidence headers show only the table name; report preview retains score, weight, and record description in its evidence headings because it has no compact KPI cards. The separate Calculation details card remains removed. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. Report payload values and download snapshot handling remain unchanged.
+`EmployeeDetailPage.vue` owns a help icon in each compact Productivity, Compliance, and Quality score card. Its floating, initially closed calculation panel opens by click, tap, or keyboard and shows only the matching sentence; Escape closes it. Page and report-preview evidence headers show only the table name; both place score and weight in compact KPI cards above. The separate Calculation details card remains removed. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. The report snapshot also carries backend component scores for its manager summary; preview and download use the same snapshot.
 
 Each KPI-card calculation panel uses one short sentence for its documented component
 weights. The Data confidence explanation, detailed arithmetic, and the

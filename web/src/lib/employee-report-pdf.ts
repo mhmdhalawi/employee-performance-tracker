@@ -1,4 +1,4 @@
-import type { CanvasElement, Content, ContentColumns, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
+import type { CanvasElement, Content, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
 import { formatDate, formatDateTime } from '@/lib/date-format'
 import type { EmployeeReportData, ReportFinding } from '@/types/reports'
 import type { KpiTrendPoint } from '@/types/analysis'
@@ -12,6 +12,7 @@ const ink = '#0D0D0D'
 const muted = '#555B59'
 const line = '#D8DDDC'
 const compliance = '#C18426'
+const warningLight = '#FFF8EB'
 
 export async function downloadEmployeeReportPdf(report: EmployeeReportData): Promise<void> {
   const bytes = await createEmployeeReportPdfBytes(report)
@@ -42,15 +43,58 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
     && (report.period.score_period_start_date !== report.period.start_date || report.period.score_period_end_date !== report.period.end_date)
     ? `Scores use available evidence: ${formatDate(report.period.score_period_start_date)} - ${formatDate(report.period.score_period_end_date)}.`
     : ''
-  const overall = report.overall_score === null ? 'Withheld' : score(report.overall_score)
+  const overall = report.overall_score === null ? '-' : score(report.overall_score)
   const status = report.performance_tier || report.result_status
   const attention = needsAttention(report.findings)
+  const highlights = Object.entries(report.components)
+    .flatMap(([kpi, components]) => components.map(component => ({ ...component, kpi })))
+    .filter(component => component.score !== null)
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
+    .slice(0, 2)
+  const featuredFinding = attention.find(finding => finding.scoring_impact === 'lowers_confidence')
+    ?? attention.find(finding => finding.category === 'performance_alert')
+    ?? attention[0]
+  const findingCount = attention.reduce((total, finding) => total + finding.occurrence_count, 0)
+  let firstFindingSection = true
   const attentionBlocks: Content[] = (['data_issue', 'performance_alert'] as const).flatMap(category => {
     const findings = attention.filter(finding => finding.category === category)
-    return findings.length
-      ? [{ text: category === 'data_issue' ? 'Data Issues' : 'Performance Alerts', style: 'sectionTitle', margin: [0, 12, 0, 5] } as Content, ...findings.map(findingBlock)]
-      : []
+    if (!findings.length) return []
+    const heading: Content = {
+      text: category === 'data_issue' ? 'Data Issues' : 'Performance Alerts',
+      style: 'sectionTitle',
+      margin: [0, firstFindingSection ? 0 : 12, 0, 5],
+      ...(firstFindingSection ? { pageBreak: 'before' as const } : {}),
+    }
+    firstFindingSection = false
+    return [heading, ...findings.map(findingBlock)]
   })
+  const highlightCell: TableCell = {
+    fillColor: cedarLight,
+    stack: [
+      { text: 'HIGHEST COMPONENT SCORES', bold: true, color: cedar, fontSize: 8, characterSpacing: 0.4, margin: [0, 0, 0, 6] },
+      ...(highlights.length
+        ? highlights.map<Content>(component => ({
+            columns: [
+              { width: '*', text: [
+                { text: component.label, bold: true },
+                { text: ` · ${component.kpi}`, color: muted, fontSize: 7 },
+              ] },
+              { width: 52, text: score(component.score!), bold: true, color: cedar, alignment: 'right' },
+            ],
+            margin: [0, 0, 0, 4],
+          }))
+        : [{ text: 'No component scores are available.', color: muted } as Content]),
+      ...(report.overall_score === null ? [{ text: 'Overall scoring is withheld; these values are partial evidence.', color: muted, fontSize: 8, margin: [0, 4, 0, 0] } as Content] : []),
+    ],
+  }
+  const watchCell: TableCell = {
+    fillColor: featuredFinding ? warningLight : cedarLight,
+    stack: [
+      { text: featuredFinding ? `WATCH POINT · ${findingCount} ${findingCount === 1 ? 'FINDING' : 'FINDINGS'}` : 'NO WATCH POINTS', bold: true, color: featuredFinding ? '#80520B' : cedar, fontSize: 8, characterSpacing: 0.4, margin: [0, 0, 0, 6] },
+      { text: featuredFinding ? wrapLongWords(featuredFinding.message) : 'No backend findings for this period.', color: ink, lineHeight: 1.3 },
+      ...(featuredFinding?.record_ids.length ? [{ text: `Records: ${featuredFinding.record_ids.slice(0, 3).join(', ')}`, color: muted, fontSize: 8, margin: [0, 5, 0, 0] } as Content] : []),
+    ],
+  }
 
   return {
     pageSize: 'A4',
@@ -73,52 +117,66 @@ function documentDefinition(report: EmployeeReportData): TDocumentDefinitions {
     content: [
       { text: employeeName, style: 'title' },
       { text: `${report.employee_id}  |  ${report.team || 'Team not provided'}${report.role ? `  |  ${report.role}` : ''}`, color: muted },
-      { text: period, margin: [0, 4, 0, scorePeriod ? 3 : 18], color: muted },
-      ...(scorePeriod ? [{ text: scorePeriod, margin: [0, 0, 0, 14], color: muted } as Content] : []),
+      { text: period, margin: [0, 4, 0, scorePeriod ? 3 : 14], color: muted },
+      ...(scorePeriod ? [{ text: scorePeriod, margin: [0, 0, 0, 12], color: muted } as Content] : []),
       {
         table: {
-          widths: ['*', '*', '*'],
+          widths: ['*', '*', '*', '*', '*'],
           body: [[
-            metricCell('Overall result', overall, status),
-            metricCell('Data confidence', score(report.data_confidence), `Required: ${score(report.confidence_threshold)}`),
-            metricCell('Change vs prior period', change(report.overall_score_change), priorPeriodLabel(report)),
+            metricCell('Overall score', overall, status, cedarLight),
+            ...report.kpis.map(kpi => metricCell(kpi.name, score(kpi.score), `${kpi.weight}% of overall`, kpi.name === 'Compliance' ? warningLight : kpi.name === 'Quality' ? '#F3F5F5' : cedarLight)),
+            metricCell('Data confidence', score(report.data_confidence), `${score(report.confidence_threshold)} required`, cedarLight),
           ]],
         },
         layout: cardLayout(),
       },
-      report.overall_score === null
-        ? {
-            text: 'Overall performance and tier are withheld because data confidence is below the required threshold. Data confidence measures required evidence completeness, not employee ability. Component KPI values are shown for auditability only.',
-            style: 'notice',
-            margin: [0, 14, 0, 14],
-          }
-        : { text: '', margin: [0, 6] },
-      { text: 'KPI overview', style: 'sectionTitle' },
+      ...(report.overall_score_change !== null
+        ? [{ text: `Change vs prior period: ${change(report.overall_score_change)} (${priorPeriodLabel(report)})`, color: muted, fontSize: 8, margin: [0, 6, 0, 0] } as Content]
+        : []),
+      { text: 'Performance explained', style: 'sectionTitle', margin: [0, 16, 0, 6] },
       {
-        columns: report.kpis.map(kpi => ({
-          width: '*',
-          stack: [
-            { text: kpi.name, bold: true, color: cedar },
-            { text: score(kpi.score), fontSize: 19, bold: true, margin: [0, 5, 0, 3] },
-            { text: `${kpi.weight}% of overall`, color: muted, fontSize: 8 },
+        table: {
+          widths: ['*', 86, 86],
+          body: [
+            ['KPI', 'Employee', 'Overall weight'],
+            ...report.kpis.map(kpi => [kpi.name, score(kpi.score), `${kpi.weight}%`]),
+            ['Overall result', overall, '100%'],
           ],
-          margin: [10, 10, 10, 10],
-        })) as ContentColumns['columns'],
-        columnGap: 8,
-        margin: [0, 6, 0, 16],
+        },
+        layout: simpleTableLayout(),
+        margin: [0, 0, 0, 4],
       },
-      ...attentionBlocks,
+      { text: 'Manager summary', style: 'sectionTitle', margin: [0, 13, 0, 6] },
+      {
+        table: {
+          widths: ['*', '*'],
+          body: [[highlightCell, watchCell]],
+        },
+        layout: summaryCardLayout(),
+      },
+      {
+        table: {
+          widths: ['*'],
+          body: [[{
+            fillColor: '#F0F8F8',
+            stack: [
+              { text: 'NEXT REVIEW STEP', color: cedar, bold: true, fontSize: 8, characterSpacing: 0.4, margin: [0, 0, 0, 5] },
+              { text: wrapLongWords(featuredFinding?.action ?? 'Review the supporting records before discussing this result with the employee.'), lineHeight: 1.3 },
+            ],
+          }]],
+        },
+        layout: summaryCardLayout(),
+        margin: [0, 7, 0, 10],
+      },
       trendChart(report.trends),
-      trendTable(report),
-      { text: report.manager_review_notice, style: 'notice', margin: [0, 12, 0, 0] },
+      ...attentionBlocks,
       { text: 'Employee performance records', style: 'title', pageBreak: 'before' },
       { text: 'All selected-period records are included. Excluded records are labeled for auditability; source statuses do not replace calculated results.', color: muted, margin: [0, 4, 0, 12] },
       ...(['productivity', 'compliance', 'quality'] as EvidenceKpi[]).flatMap(kpi => evidenceSection(report, kpi)),
     ],
     styles: {
-      title: { fontSize: 22, bold: true, color: cedar, margin: [0, 0, 0, 4] },
-      sectionTitle: { fontSize: 12, bold: true, color: cedar },
-      notice: { fillColor: cedarLight, color: ink, margin: [9, 8, 9, 8] },
+      title: { fontSize: 22, bold: true, color: ink, margin: [0, 0, 0, 4] },
+      sectionTitle: { fontSize: 12, bold: true, color: ink },
     },
   }
 }
@@ -159,13 +217,14 @@ function evidenceSection(report: EmployeeReportData, kpi: EvidenceKpi): Content[
   const headers = kpi === 'productivity'
     ? ['Work record', 'Assigned / due / completed', 'Source status', 'Actual hours', 'Verification / evidence / notes']
     : kpi === 'compliance'
-      ? ['Type / record ID', 'Date / period', 'Source outcome', 'Record details', 'Findings / exclusion notes']
+      ? ['Type / record ID', 'Date / period', 'Source outcome', 'Record details / findings']
       : ['Review / work IDs', 'Review date', 'Accuracy / first pass', 'Rework hours', 'Verification / notes']
+  const columnCount = headers.length
   const body: TableCell[][] = [
-    [{ colSpan: 5, stack: [
+    [{ colSpan: columnCount, stack: [
       { text: `${evidenceLabels[kpi]} evidence - ${score(metric.score)} | ${metric.weight}% of overall`, style: 'sectionTitle' },
       { text: `${section.total_count} records | ${evidenceDescriptions[kpi]}`, color: muted, fontSize: 8, margin: [0, 4, 0, 2] },
-    ] }, {}, {}, {}, {}],
+    ] }, ...Array.from({ length: columnCount - 1 }, () => ({}))],
     headers.map(text => ({ text, bold: true, color: ink })),
   ]
   for (const row of section.rows) {
@@ -181,7 +240,12 @@ function evidenceSection(report: EmployeeReportData, kpi: EvidenceKpi): Content[
     }
     else {
       const details = evidenceDetails(row).filter(([label]) => !['Type', 'Date / period', 'Record ID', 'Source outcome'].includes(label))
-      values = [`${cells[0]}\n${row.record_id}`, cells[1]!, cells[3]!, details.map(([label, value]) => `${label}: ${value}`).join('\n'), evidenceNotes(row)]
+      values = [`${cells[0]}\n${row.record_id}`, cells[1]!, cells[3]!, {
+        stack: [
+          { text: wrapLongWords(details.map(([label, value]) => `${label}: ${value}`).join('\n')) },
+          evidenceNotes(row),
+        ],
+      }]
     }
     body.push(values.map(value => typeof value === 'string' ? { text: wrapLongWords(value) } : value))
   }
@@ -193,7 +257,7 @@ function evidenceSection(report: EmployeeReportData, kpi: EvidenceKpi): Content[
       // Ordinary records stay intact; unusually long source text/notes may flow across pages.
       dontBreakRows: ordinaryRows,
       widths: kpi === 'productivity' ? [70, 100, 65, 45, '*']
-        : kpi === 'compliance' ? [80, 65, 55, 170, '*'] : [95, 70, 95, 45, '*'],
+        : kpi === 'compliance' ? [80, 65, 70, '*'] : [95, 70, 95, 45, '*'],
       body,
     },
     layout: {
@@ -206,73 +270,60 @@ function evidenceSection(report: EmployeeReportData, kpi: EvidenceKpi): Content[
   }]
 }
 
-function metricCell(label: string, value: string, detail: string): Content {
+function metricCell(label: string, value: string, detail: string, fillColor: string): TableCell {
   return {
+    fillColor,
     stack: [
-      { text: label, color: muted, fontSize: 8 },
-      { text: value, bold: true, fontSize: 17, margin: [0, 5, 0, 3] },
-      { text: detail, color: muted, fontSize: 8 },
+      { text: label, color: muted, fontSize: 7 },
+      { text: value, bold: true, fontSize: 15, margin: [0, 5, 0, 3] },
+      { text: detail, color: muted, fontSize: 7 },
     ],
-    margin: [10, 9, 10, 9],
+    margin: [5, 7, 5, 7],
   }
 }
 
-function trendTable(report: EmployeeReportData): Content {
-  if (!report.trends.length)
-    return { text: 'No trend data is available for this period.', color: muted, margin: [0, 5, 0, 0] }
-
+function simpleTableLayout() {
   return {
-    table: {
-      headerRows: 1,
-      widths: ['*', 'auto', 'auto', 'auto', 'auto'],
-      body: [
-        ['Week ending', 'Productivity', 'Compliance', 'Quality', 'Data confidence'],
-        ...report.trends.map(point => [
-          formatDate(point.period_end),
-          optionalScore(point.productivity_score),
-          optionalScore(point.compliance_score),
-          optionalScore(point.quality_score),
-          optionalScore(point.data_confidence),
-        ]),
-      ],
-    },
-    layout: {
-      fillColor: (rowIndex: number) => rowIndex === 0 ? cedarLight : null,
-      hLineColor: () => line,
-      vLineColor: () => line,
-      paddingLeft: () => 5,
-      paddingRight: () => 5,
-      paddingTop: () => 2,
-      paddingBottom: () => 2,
-    },
-    fontSize: 7,
-    margin: [0, 5, 0, 0],
+    fillColor: (rowIndex: number) => rowIndex === 0 ? cedarLight : null,
+    hLineColor: () => line,
+    vLineWidth: () => 0,
+    paddingLeft: () => 8,
+    paddingRight: () => 8,
+    paddingTop: () => 6,
+    paddingBottom: () => 6,
   }
 }
 
 function trendChart(trends: KpiTrendPoint[]): Content {
   if (!trends.length)
-    return { text: 'Weekly KPI trend', style: 'sectionTitle' }
+    return { stack: [
+      { text: 'Weekly KPI trend', style: 'sectionTitle' },
+      { text: 'No weekly scores are available for this period.', color: muted, margin: [0, 6, 0, 0] },
+    ] }
 
-  const left = 8
-  const right = 450
-  const top = 8
-  const bottom = 98
+  const measured = trends.flatMap(point => [point.productivity_score, point.compliance_score, point.quality_score])
+    .filter((value): value is number => value !== null && Number.isFinite(value))
+  const lowerBound = measured.length && Math.min(...measured) >= 60 ? 60 : 0
+  const left = 4
+  const right = 370
+  const top = 4
+  const bottom = 30
   const x = (index: number) => trends.length === 1 ? (left + right) / 2
     : left + (right - left) * index / (trends.length - 1)
-  const y = (value: number) => bottom - Math.max(0, Math.min(100, value)) * (bottom - top) / 100
-  const canvas: CanvasElement[] = [
-    ...[top, (top + bottom) / 2, bottom].map(position => ({
-      type: 'line' as const, x1: left, y1: position, x2: right, y2: position,
-      lineColor: line, lineWidth: 0.5,
-    })),
+  const y = (value: number) => bottom - (Math.max(lowerBound, Math.min(100, value)) - lowerBound) * (bottom - top) / (100 - lowerBound)
+  const series: { label: string, field: 'productivity_score' | 'compliance_score' | 'quality_score', color: string, dash?: { length: number, space: number } }[] = [
+    { label: 'Productivity', field: 'productivity_score', color: cedar },
+    { label: 'Compliance', field: 'compliance_score', color: compliance, dash: { length: 6, space: 3 } },
+    { label: 'Quality', field: 'quality_score', color: ink, dash: { length: 2, space: 3 } },
   ]
-  const series: { field: 'productivity_score' | 'compliance_score' | 'quality_score', color: string, dash?: { length: number, space: number } }[] = [
-    { field: 'productivity_score', color: cedar },
-    { field: 'compliance_score', color: compliance, dash: { length: 6, space: 3 } },
-    { field: 'quality_score', color: ink, dash: { length: 2, space: 3 } },
-  ]
-  for (const item of series) {
+  const tracks = series.map<Content>(item => {
+    const available = trends.filter(point => point[item.field] !== null).length
+    const canvas: CanvasElement[] = [
+      ...[top, (top + bottom) / 2, bottom].map(position => ({
+        type: 'line' as const, x1: left, y1: position, x2: right, y2: position,
+        lineColor: line, lineWidth: 0.55,
+      })),
+    ]
     for (let index = 0; index < trends.length; index++) {
       const value = trends[index]![item.field]
       if (value === null) continue
@@ -281,46 +332,50 @@ function trendChart(trends: KpiTrendPoint[]): Content {
         if (previous !== null) {
           canvas.push({
             type: 'line', x1: x(index - 1), y1: y(previous), x2: x(index), y2: y(value),
-            lineColor: item.color, lineWidth: 1.8, dash: item.dash,
+            lineColor: item.color, lineWidth: 2, dash: item.dash,
           })
         }
       }
-      canvas.push({ type: 'ellipse', x: x(index), y: y(value), r1: 1.7, color: item.color })
+      canvas.push({ type: 'ellipse', x: x(index), y: y(value), r1: 3.4, color: '#FFFFFF' })
+      canvas.push({ type: 'ellipse', x: x(index), y: y(value), r1: 2.5, color: item.color })
     }
-  }
+    return {
+      columns: [
+        { width: 87, stack: [
+          { text: item.label, bold: true, color: item.color },
+          { text: `${available} / ${trends.length} weeks`, color: muted, fontSize: 7, margin: [0, 4, 0, 0] },
+        ], margin: [0, 6, 0, 0] },
+        { width: 26, stack: [
+          { text: '100%', margin: [0, 0, 0, 4] },
+          { text: `${(100 + lowerBound) / 2}%`, margin: [0, 0, 0, 4] },
+          { text: `${lowerBound}%` },
+        ], fontSize: 7, color: muted },
+        { width: '*', canvas },
+      ],
+      columnGap: 4,
+      margin: [0, 0, 0, 4],
+    }
+  })
+  const dateIndexes = [...new Set([0, Math.round((trends.length - 1) / 3), Math.round(2 * (trends.length - 1) / 3), trends.length - 1])]
 
   return {
     unbreakable: true,
     stack: [
       { text: 'Weekly KPI trend', style: 'sectionTitle', margin: [0, 0, 0, 5] },
-      { text: 'Employee scores by week. Gaps mean no score is available.', color: muted, fontSize: 8, margin: [0, 0, 0, 5] },
+      { text: `Each row shows measured weeks. Gaps mean no score is available. ${lowerBound}-100% scale.`, color: muted, fontSize: 8, margin: [0, 0, 0, 7] },
+      ...tracks,
       {
         columns: [
-          { text: 'Productivity · solid', color: cedar },
-          { text: 'Compliance · dashed', color: muted },
-          { text: 'Quality · dotted', color: ink },
-        ],
-        fontSize: 8,
-        margin: [0, 0, 0, 5],
-      },
-      {
-        columns: [
-          { width: 27, stack: [
-            { text: '100%', margin: [0, 4, 0, 37] },
-            { text: '50%', margin: [0, 0, 0, 37] },
-            { text: '0%' },
-          ], fontSize: 7, color: muted },
-          { width: '*', canvas },
-        ],
-      },
-      {
-        columns: [
-          { text: formatDate(trends[0]!.period_end) },
-          { text: formatDate(trends[trends.length - 1]!.period_end), alignment: 'right' },
+          { width: 121, text: '' },
+          { width: '*', columns: dateIndexes.map((index, position) => ({
+            width: '*', text: formatDate(trends[index]!.period_end),
+            alignment: position === 0 ? 'left' : position === dateIndexes.length - 1 ? 'right' : 'center',
+          })), columnGap: 0 },
         ],
         color: muted,
         fontSize: 7,
-        margin: [27, 1, 0, 7],
+        columnGap: 0,
+        margin: [0, 0, 0, 4],
       },
     ],
   }
@@ -348,19 +403,26 @@ function findingBlock(finding: ReportFinding): Content {
 
 function cardLayout() {
   return {
-    fillColor: () => cedarLight,
-    hLineColor: () => cedarLight,
+    hLineColor: () => line,
     vLineColor: () => '#FFFFFF',
     vLineWidth: () => 4,
   }
 }
 
-function score(value: number): string {
-  return `${value.toFixed(1)}%`
+function summaryCardLayout() {
+  return {
+    hLineWidth: () => 0,
+    vLineWidth: (index: number) => index === 1 ? 8 : 0,
+    vLineColor: () => '#FFFFFF',
+    paddingLeft: () => 8,
+    paddingRight: () => 8,
+    paddingTop: () => 8,
+    paddingBottom: () => 8,
+  }
 }
 
-function optionalScore(value: number | null): string {
-  return value === null ? '-' : score(value)
+function score(value: number): string {
+  return `${value.toFixed(1)}%`
 }
 
 function change(value: number | null): string {

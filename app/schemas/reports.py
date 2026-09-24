@@ -4,7 +4,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.employee_evidence import EmployeeEvidenceTables
-from app.schemas.performance import FindingSeverity, KpiTrendPoint, ScoringImpact
+from app.schemas.performance import FindingSeverity, KpiComponentScore, KpiTrendPoint, ScoringImpact
 
 
 class EmployeeReportRequest(BaseModel):
@@ -85,13 +85,13 @@ class EmployeeReportData(BaseModel):
     confidence_threshold: float
     confidence_explanation: str
     kpis: list[ReportKpiSection] = Field(min_length=3, max_length=3)
+    components: dict[str, list[KpiComponentScore]]
     trends: list[KpiTrendPoint]
     prior_overall_score: float | None = None
     overall_score_change: float | None = None
     findings: list[ReportFinding]
     supporting_record_ids: list[str]
     metric_definitions: list[str]
-    manager_review_notice: str
 
 
 class EmployeeReportPreviewResponse(BaseModel):

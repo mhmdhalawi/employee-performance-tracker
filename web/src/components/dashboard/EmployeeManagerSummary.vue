@@ -4,12 +4,17 @@ import { ArrowRightIcon, CircleCheckIcon, ClipboardListIcon, StarIcon, TriangleA
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { needsAttention } from '@/lib/employee-presentation'
-import type { EmployeeKpiResult, PerformanceAlert } from '@/types/analysis'
+import { needsAttention, type AttentionItem } from '@/lib/employee-presentation'
+import type { EmployeeKpiResult } from '@/types/analysis'
 
 type Kpi = 'productivity' | 'compliance' | 'quality'
 
-const props = defineProps<{ employee: EmployeeKpiResult, alerts: PerformanceAlert[] }>()
+const props = withDefaults(defineProps<{
+  employee: Pick<EmployeeKpiResult, 'components' | 'overall_score'>
+  alerts: AttentionItem[]
+  evidenceHref?: string
+  showEvidenceLink?: boolean
+}>(), { evidenceHref: '#employee-evidence', showEvidenceLink: true })
 
 const kpiLabels: Record<Kpi, string> = {
   productivity: 'Productivity',
@@ -93,8 +98,8 @@ function score(value: number | null): string {
           </div>
         </div>
         <p class="mt-3 text-sm">{{ featuredFinding?.action ?? 'Review the supporting records before discussing this result with the employee.' }}</p>
-        <Button as-child variant="default" size="sm" class="mt-3">
-          <a href="#employee-evidence">Review evidence <ArrowRightIcon data-icon="inline-end" /></a>
+        <Button v-if="showEvidenceLink" as-child variant="default" size="sm" class="mt-3">
+          <a :href="evidenceHref">Review evidence <ArrowRightIcon data-icon="inline-end" /></a>
         </Button>
       </section>
     </CardContent>

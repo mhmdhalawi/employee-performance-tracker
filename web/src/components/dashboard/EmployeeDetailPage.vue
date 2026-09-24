@@ -1,16 +1,10 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import {
-  CalendarDaysIcon,
   CircleAlertIcon,
   CircleHelpIcon,
   DownloadIcon,
   FileTextIcon,
-  MinusIcon,
-  ShieldCheckIcon,
-  TrendingDownIcon,
-  TrendingUpIcon,
-  TriangleAlertIcon,
 } from '@lucide/vue'
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -20,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldLabel } from '@/components/ui/field'
 import ReportPreviewContent from '@/components/dashboard/ReportPreviewContent.vue'
+import EmployeeReportOverview from '@/components/dashboard/EmployeeReportOverview.vue'
 import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
 import ReportingPeriodPicker from '@/components/dashboard/ReportingPeriodPicker.vue'
 import EmployeePerformanceBreakdown from '@/components/dashboard/EmployeePerformanceBreakdown.vue'
@@ -28,7 +23,7 @@ import EmployeeManagerSummary from '@/components/dashboard/EmployeeManagerSummar
 import EmployeeEvidenceTable from '@/components/dashboard/EmployeeEvidenceTable.vue'
 import EmployeeAttentionSummary from '@/components/dashboard/EmployeeAttentionSummary.vue'
 import WeeklyKpiTrend from '@/components/dashboard/WeeklyKpiTrend.vue'
-import { evidenceCalculations, evidenceDescriptions } from '@/lib/employee-evidence'
+import { evidenceCalculations } from '@/lib/employee-evidence'
 import { formatDate as formatReportDate } from '@/lib/date-format'
 import { attentionOutsideRecords } from '@/lib/employee-presentation'
 import { useEmployeeEvidence } from '@/composables/useEmployeeEvidence'
@@ -102,21 +97,18 @@ const kpiSections = computed(() => [
     kpi: 'productivity' as EvidenceKpi,
     label: 'Productivity',
     score: props.employee.productivity_score,
-    reason: props.employee.productivity_reason,
     weight: 35,
   },
   {
     kpi: 'compliance' as EvidenceKpi,
     label: 'Compliance',
     score: props.employee.compliance_score,
-    reason: props.employee.compliance_reason,
     weight: 30,
   },
   {
     kpi: 'quality' as EvidenceKpi,
     label: 'Quality',
     score: props.employee.quality_score,
-    reason: props.employee.quality_reason,
     weight: 35,
   },
 ])
@@ -269,11 +261,6 @@ async function downloadReport(): Promise<void> {
   }
 }
 
-function scoreChange(value: number | null): string {
-  if (value === null)
-    return 'Earlier-period data is unavailable'
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)} pts`
-}
 </script>
 
 <template>
@@ -373,7 +360,7 @@ function scoreChange(value: number | null): string {
       <EmployeeAttentionSummary :items="generalAttention" />
       <section id="employee-evidence" aria-label="KPI evidence" class="flex min-w-0 scroll-mt-4 flex-col gap-6">
         <EmployeeEvidenceTable v-for="item in kpiSections" :id="`${item.kpi}-evidence`" :key="item.kpi"
-          :kpi="item.kpi" :score="item.score" :weight="item.weight" :explanation="evidenceDescriptions[item.kpi]"
+          :kpi="item.kpi"
           :rows="evidenceStates[item.kpi].data?.rows ?? []" :total="evidenceStates[item.kpi].data?.total_count ?? 0"
           :all-records-count="evidenceStates[item.kpi].data?.all_records_count" :needs-review-count="evidenceStates[item.kpi].data?.needs_review_count"
           :review-only="evidenceStates[item.kpi].data?.review_only ?? false"
@@ -395,7 +382,7 @@ function scoreChange(value: number | null): string {
             <div class="flex flex-col gap-1">
               <DialogTitle>Employee performance report</DialogTitle>
               <DialogDescription>
-                Review the report snapshot before creating the PDF in your browser.
+                Review the snapshot before creating the PDF. All selected-period records are included.
               </DialogDescription>
             </div>
           </div>
@@ -419,87 +406,14 @@ function scoreChange(value: number | null): string {
               <AlertTitle>PDF could not be created</AlertTitle>
               <AlertDescription>{{ reportDownloadError }}</AlertDescription>
             </Alert>
-            <Alert v-if="reportPreview.overall_score === null" variant="warning">
-              <TriangleAlertIcon aria-hidden="true" />
-              <AlertTitle>Overall result withheld</AlertTitle>
-              <AlertDescription>
-                Data confidence is below the required threshold. Component KPI values remain
-                visible for auditability only.
-              </AlertDescription>
-            </Alert>
-
-            <Card>
-              <CardHeader class="gap-4 sm:flex sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex flex-col gap-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <p class="text-sm font-medium text-muted-foreground">CEDAR PERFORMANCE</p>
-                    <Badge :variant="reportPreview.overall_score === null ? 'warning' : 'success'">
-                      {{ reportPreview.performance_tier ?? reportPreview.result_status }}
-                    </Badge>
-                  </div>
-                  <CardTitle class="text-3xl">
-                    {{ reportPreview.employee_name || reportPreview.employee_id }}
-                  </CardTitle>
-                  <CardDescription>
-                    {{ reportPreview.employee_id }} · {{ reportPreview.team ?? 'Team not provided' }}<template v-if="reportPreview.role"> · {{ reportPreview.role }}</template>
-                  </CardDescription>
-                  <CardDescription v-if="reportPreview.period.score_period_start_date && reportPreview.period.score_period_end_date && (reportPreview.period.score_period_start_date !== reportPreview.period.start_date || reportPreview.period.score_period_end_date !== reportPreview.period.end_date)">
-                    Scores use available evidence: {{ formatReportDate(reportPreview.period.score_period_start_date) }} – {{ formatReportDate(reportPreview.period.score_period_end_date) }}.
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" class="w-fit whitespace-normal">
-                  <CalendarDaysIcon data-icon="inline-start" />
-                  {{ formatReportDate(reportPreview.period.start_date) }} – {{ formatReportDate(reportPreview.period.end_date) }}
-                </Badge>
-              </CardHeader>
-              <CardContent class="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-                <section class="flex flex-col justify-between gap-6 rounded-lg bg-primary p-5 text-primary-foreground">
-                  <div class="flex flex-col gap-1">
-                    <p class="text-sm text-primary-foreground">Overall performance</p>
-                    <p class="text-5xl font-semibold tracking-tight tabular-nums">
-                      {{ score(reportPreview.overall_score) }}
-                    </p>
-                  </div>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <Badge v-if="reportPreview.overall_score_change !== null" variant="secondary">
-                      <TrendingUpIcon v-if="reportPreview.overall_score_change !== null && reportPreview.overall_score_change > 0" data-icon="inline-start" />
-                      <TrendingDownIcon v-else-if="reportPreview.overall_score_change !== null && reportPreview.overall_score_change < 0" data-icon="inline-start" />
-                      <MinusIcon v-else data-icon="inline-start" />
-                      {{ scoreChange(reportPreview.overall_score_change) }}
-                    </Badge>
-                    <span class="text-xs text-primary-foreground">
-                      {{ reportPreview.overall_score_change === null ? scoreChange(null) : 'versus prior comparable period' }}
-                    </span>
-                  </div>
-                </section>
-
-                <section class="flex flex-col justify-center gap-4">
-                  <div class="flex items-end justify-between gap-4">
-                    <div class="flex flex-col gap-1">
-                      <p class="text-sm text-muted-foreground">Data confidence</p>
-                      <p class="text-3xl font-semibold tabular-nums">{{ score(reportPreview.data_confidence) }}</p>
-                    </div>
-                    <Badge variant="secondary">Required {{ score(reportPreview.confidence_threshold) }}</Badge>
-                  </div>
-                  <Progress :model-value="reportPreview.data_confidence" :tone="reportPreview.overall_score === null ? 'warning' : 'default'" aria-label="Report data confidence" />
-                  <p class="text-xs text-muted-foreground">Required evidence completeness, not an employee performance score.</p>
-
-                </section>
-              </CardContent>
-            </Card>
-
-            <WeeklyKpiTrend :trends="reportPreview.trends" scale="detail"
-              description="This employee and the report period apply. Gaps mean no score is available." />
+            <EmployeeReportOverview :report="reportPreview" />
             <EmployeeAttentionSummary :items="reportGeneralAttention" />
-            <EmployeeEvidenceTable v-for="kpi in reportPreview.kpis" :key="kpi.name"
-              :kpi="kpi.name.toLowerCase() as EvidenceKpi" :score="kpi.score" :weight="kpi.weight" :explanation="evidenceDescriptions[kpi.name.toLowerCase() as EvidenceKpi]"
-              :rows="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].rows"
-              :total="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].total_count" report />
-            <Alert>
-              <ShieldCheckIcon aria-hidden="true" />
-              <AlertTitle>Manager review required</AlertTitle>
-              <AlertDescription>{{ reportPreview.manager_review_notice }}</AlertDescription>
-            </Alert>
+            <section id="report-evidence" aria-label="Report KPI evidence" class="flex min-w-0 scroll-mt-4 flex-col gap-5">
+              <EmployeeEvidenceTable v-for="kpi in reportPreview.kpis" :id="`report-${kpi.name.toLowerCase()}-evidence`" :key="kpi.name"
+                :kpi="kpi.name.toLowerCase() as EvidenceKpi"
+                :rows="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].rows"
+                :total="reportPreview.evidence_tables[kpi.name.toLowerCase() as EvidenceKpi].total_count" report />
+            </section>
           </template>
         <template #footer>
         <DialogFooter v-if="reportPreview" class="m-0 rounded-none">

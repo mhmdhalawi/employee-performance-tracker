@@ -1,4 +1,4 @@
-import type { FindingCategory, KpiTrendPoint } from '@/types/analysis'
+import type { FindingCategory, KpiComponentScore, KpiTrendPoint } from '@/types/analysis'
 import type { EmployeeEvidenceTables } from '@/types/employee-evidence'
 
 export interface EmployeeReportRequest {
@@ -51,13 +51,13 @@ export interface EmployeeReportData {
   confidence_threshold: number
   confidence_explanation: string
   kpis: ReportKpiSection[]
+  components: Record<'productivity' | 'compliance' | 'quality', KpiComponentScore[]>
   trends: KpiTrendPoint[]
   prior_overall_score: number | null
   overall_score_change: number | null
   findings: ReportFinding[]
   supporting_record_ids: string[]
   metric_definitions: string[]
-  manager_review_notice: string
 }
 
 export interface EmployeeReportPreviewResponse {
