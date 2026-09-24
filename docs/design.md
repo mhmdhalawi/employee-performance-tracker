@@ -124,6 +124,23 @@ Filter changes continue to retain the last successful response during loading an
 Employee Results now presents Campaign / Queue in place of Team on the main dashboard;
 the existing team and employee API filters remain available for compatibility and reports.
 
+## Employee Details reference alignment — 2026-09-24
+
+Employee Details uses the supplied page reference for its visual hierarchy while retaining the
+current Cedar white surfaces, Geist text, teal actions, and restrained warning treatment. An
+initials identity marker, available canonical profile fields, and an editable shared reporting
+period sit above five compact score cards. The cards keep the 100% data-confidence gate and
+withheld overall result visible. The shared picker uses the dashboard's committed filter path.
+
+The Performance explained panel shows employee KPI scores and documented overall weights next
+to backend-calculated averages for the current dashboard scope. It labels that comparison as a
+scope average, never a team target. A tabbed KPI breakdown presents the employee's existing
+backend component scores and within-KPI weights. The weekly chart keeps its three actual KPI
+series and exact-values disclosure; a manager-review card summarizes backend findings and
+review actions without inventing strengths or assignment status. Three record-count links lead
+to the unchanged, independently paginated evidence sections. The PDF preview and download flow
+retain their own snapshot and layout.
+
 ## KPI summary and breakdown — 2026-09-23
 
 The four summary cards retain the compact two-column phone and four-column desktop layout.

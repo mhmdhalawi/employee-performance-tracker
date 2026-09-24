@@ -83,6 +83,7 @@ export interface EmployeeKpiResult {
   result_status: string
   performance_tier: string | null
   supporting_record_ids: string[]
+  components: Record<'productivity' | 'compliance' | 'quality', KpiComponentScore[]>
   evidence_links: string[]
   validation_findings: ValidationFinding[]
 }

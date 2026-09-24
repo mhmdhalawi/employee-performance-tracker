@@ -30,7 +30,7 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 - While a filter request runs, selectors and exports are disabled. Failure preserves both old controls and old results and offers Retry filters. Retry repeats the last attempted request. Clear filters requests the full dashboard.
 - `KeepAlive` in `App.vue` preserves the dashboard's page, page size, sort, and local disclosure state while visiting employee and interpretation routes. A new successful dataset or page-size change resets the page. Name and overall sorting reset the page and keep missing overall scores last.
 - Filter and view state intentionally remain in application memory for this employee-data dashboard; they are not copied into URLs or persistent browser storage. Reload starts with the full scope. This follows the existing response-in-memory architecture and avoids adding operational employee dimensions to shareable URLs in this pass.
-- `useDashboardBack.ts` owns back navigation. Dashboard data is still supplied by the backend; frontend cards, counts, and weekly values do not recalculate KPI values.
+- `useDashboardBack.ts` sends Back to dashboard directly to the named dashboard route, regardless of browser history. Dashboard data is still supplied by the backend; frontend cards, counts, and weekly values do not recalculate KPI values.
 
 ## Canonical UI map
 
@@ -67,6 +67,14 @@ Reports remain transient browser downloads with existing manager-review notices.
 Build with `pnpm build` in `web/`. Browser regression coverage must include trailing/interior null chart points versus real zero, call-center facet combinations, page/sort return, failed filter/retry, employee preview failure/retry, open Select popups at phone widths, long labels, and no-results display. Completed checks and verification limits are recorded in [the test handover](handover.md#frontend-verification--2026-09-05).
 
 ## Employee evidence and report snapshots — 2026-09-14
+
+Employee Details now offers the shared `ReportingPeriodPicker.vue` beside the employee identity.
+It preserves non-period dashboard filters, commits the selected range only after a successful
+dashboard response, and retries the last attempted range after failure. Its Performance explained
+table uses backend scores, component breakdowns, and scoped averages; the separate manager-review
+card previews backend finding counts and review actions while record-specific details remain in
+their evidence tables. In-page evidence links use the full selected-period record counts. The
+page retains natural scrolling, and report previews still export their complete snapshot.
 
 - `useEmployeeEvidence.ts` owns per-KPI fetching, cancellation, request sequences, pagination, and retry state. Each page contains five records. Scope changes clear old rows; a failed page request retains its last successful page and retries the attempted page.
 - Evidence uses the dashboard's resolved dates. A differing `latest_submission_at` triggers a shared dashboard refresh; mismatched evidence is discarded. Successful refreshes reload all three tables even if dates and timestamp are unchanged.

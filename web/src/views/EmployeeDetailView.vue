@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import EmployeeDetailPage from '@/components/dashboard/EmployeeDetailPage.vue'
 import { useDashboardBack } from '@/composables/useDashboardBack'
@@ -14,18 +14,25 @@ const props = defineProps<{
   filterError: string
 }>()
 const emit = defineEmits<{ filtersChange: [filters: DashboardFilters] }>()
+const lastPeriodAttempt = ref<DashboardFilters | null>(null)
 
 function refresh(): void {
-  const filters = props.analysis.applied_filters
-  emit('filtersChange', {
-    employee_id: filters.employee_id ?? undefined,
-    team: filters.team ?? undefined,
-    period_weeks: props.requestedFilters.period_weeks,
-    period_preset: props.requestedFilters.period_preset,
-    start_date: props.requestedFilters.start_date,
-    end_date: props.requestedFilters.end_date,
-  })
+  emit('filtersChange', props.filterError && lastPeriodAttempt.value
+    ? { ...lastPeriodAttempt.value }
+    : { ...props.requestedFilters })
 }
+
+function changePeriod(selection: Pick<DashboardFilters, 'period_preset' | 'start_date' | 'end_date'>): void {
+  const filters = { ...props.requestedFilters }
+  delete filters.period_weeks
+  delete filters.period_preset
+  delete filters.start_date
+  delete filters.end_date
+  lastPeriodAttempt.value = { ...filters, ...selection }
+  emit('filtersChange', lastPeriodAttempt.value)
+}
+
+watch(() => props.requestedFilters, () => { lastPeriodAttempt.value = null })
 
 const route = useRoute()
 const router = useRouter()
@@ -47,10 +54,15 @@ watch(employee, (currentEmployee) => {
     :employee="employee"
     :alerts="alerts"
     :reporting-period="analysis.applied_filters"
+    :requested-filters="requestedFilters"
+    :summary="analysis.summary"
+    :coverage-start="analysis.coverage_start"
+    :coverage-end="analysis.coverage_end"
     :latest-submission-at="analysis.latest_submission_at"
     :is-refreshing="isFiltering"
     :refresh-error="filterError"
     @refresh="refresh"
+    @period-change="changePeriod"
     @back="returnToDashboard"
   />
 </template>
