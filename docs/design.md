@@ -9,7 +9,7 @@ The frontend review and browser reassessment were approved for implementation. T
 
 - Keep white headers and surfaces, Geist interface text, Cedar teal primary actions, and restrained gold attention treatment. A shared `PerformanceHeader.vue` repeats the existing Cedar artwork and back navigation across dashboard, employee, and interpretation routes. All product routes and their headers share the 1920px maximum content width in `web/src/style.css`. Header actions use their own row on phones. No new artwork or full teal header is introduced.
 - The dashboard uses two compact summary columns on phones and four on wide screens. Detailed source interpretation remains on its separate route, without a card on the main dashboard. Below the `2xl` table breakpoint, employee cards preserve every KPI plus overall/status, data confidence, separate Data Issues and Performance Alerts counts, and the details action without horizontal scrolling. On wider screens, the dashboard expands to the shared 1920px maximum and the fixed-width table keeps both finding columns visible without horizontal scrolling. Multiword table headers stay on one line, and the Employee sort label aligns with the employee values. The reporting-period filter reserves enough width for its date picker and quick-range buttons before the five operational filters.
-- Null chart scores appear as gaps. A visible legend and distinct dash patterns identify series; an expandable table exposes exact backend weekly values and explicit missing-data labels. Chart scope follows backend operational and period filters.
+- Null chart scores appear as gaps. A visible legend and distinct dash patterns identify series; the browser chart omits the weekly-values disclosure. Chart scope follows backend operational and period filters.
 - Employee Details and its shared header align with the dashboard's content width. Report previews use `ReportPreviewContent.vue`: a viewport-bounded modal up to 1400px wide, fixed header/footer regions, and one scrolling content body with non-shrinking cards. The application page itself keeps natural document scrolling.
 - Runtime CSS variables in `web/src/style.css` remain the canonical web token source (runtime-owned mapping). The Tailwind `@theme inline` adapter exposes semantic utility colors. `--compliance-foreground: #80520b` supplies readable small compliance labels on pale gold surfaces; `--chart-2: #c18426` remains the line color. The dark label value is `#f1bd64`.
 - `Progress.vue` owns the warning tone used for withheld employee data confidence. `style.css` owns global scrollbar colors and reduced-motion behavior. Explicit status text remains mandatory.
@@ -30,7 +30,7 @@ Remaining follow-ups include sign-in refinements, official compact/reversed logo
 
 ## Employee evidence tables — 2026-09-14
 
-Employee Details replaces its three standalone KPI score cards with three full-width evidence sections, ordered Productivity, Compliance, and Quality. Each header retains the backend score and overall weight with a short performance-record description. On Employee Details, a small help icon beside “evidence” in each KPI heading opens that KPI's calculation sentence in a floating panel; the report preview omits these icons. There is no separate calculation card. Overall result and data confidence retain their existing sections.
+Employee Details places three full-width evidence sections below the compact KPI score cards, ordered Productivity, Compliance, and Quality. Each page section header identifies the evidence table; score, overall weight, and the calculation help icon live in the corresponding compact KPI card above. The help icon opens that KPI's calculation sentence in a floating panel. Report preview keeps its score, weight, and record description in each evidence heading because it does not have the same compact KPI cards. There is no separate calculation card.
 
 Desktop uses semantic tables; phones use labeled record cards showing the same independently paginated records. Shared `EmployeeEvidenceTable.vue` and `EvidenceRecordDetails.vue` own both Employee Details and report preview presentation. IDs and text wrap, and shared Collapsible controls reveal full values, findings, scoring impacts, and safe evidence links.
 
@@ -38,6 +38,13 @@ The evidence sections reuse the main dashboard table's white card, compact table
 muted range-and-page-size footer, and outline page controls. Each KPI defaults to five
 rows and offers 15, 30, or All. The report preview uses those display options while
 retaining the complete employee/KPI record set for PDF export.
+Each evidence header uses a restrained KPI tint and marker. The All records and Needs review
+controls sit beside its title on wide screens and wrap beneath it on phones. Desktop tables have
+subtle alternating rows and a distinct review-row edge, without a second nested border or
+unused status row. Short captions
+remain available to screen readers without repeating explanatory text beneath the records.
+The Needs review toggle retains the affected count, so the duplicate header link
+is omitted. Mobile record-card headers use the same muted and warning treatment.
 
 The approved table simplification combines related dates/IDs and first-pass/rework fields,
 moves secondary source values into View record, and gives backend findings and exclusions
@@ -51,8 +58,8 @@ emphasis. Attendance disclosures expose scheduled/actual times individually and 
 missing fields identified by backend findings. Shared table and record components own
 the same behavior on page, mobile cards, and report preview; PDF layout stays unchanged.
 
-Background evidence requests preserve the existing record surface. A reserved small
-status line and delayed spinner communicate longer updates without moving table rows.
+Background evidence requests preserve the existing record surface. A reserved space in the
+filter toolbar and delayed spinner communicate longer updates without moving table rows.
 Shared controls expose an opt-in busy presentation that keeps opacity stable while
 preserving disabled behavior; ordinary disabled states retain their existing treatment.
 
@@ -67,7 +74,8 @@ The home dashboard, Employee Details, and employee report preview share one week
 component. Employee Details loads the backend's existing dashboard trend contract with the
 employee ID and active resolved dates; the report preview uses the employee-scoped trend points
 in its snapshot. All three views retain Cedar's teal Productivity, gold Compliance, and dark
-Quality series, the visible legend, missing-score gaps, and an expandable exact-values table.
+Quality series, the visible legend, and missing-score gaps. The browser chart has no weekly-values
+disclosure.
 
 The browser-generated employee PDF draws those same snapshot points as a compact vector chart
 above its weekly-values table. It labels the score scale and series patterns, shows isolated
@@ -132,14 +140,23 @@ initials identity marker, available canonical profile fields, and an editable sh
 period sit above five compact score cards. The cards keep the 100% data-confidence gate and
 withheld overall result visible. The shared picker uses the dashboard's committed filter path.
 
-The Performance explained panel shows employee KPI scores and documented overall weights next
+The compact Performance explained panel shows employee KPI scores and documented overall weights next
 to backend-calculated averages for the current dashboard scope. It labels that comparison as a
-scope average, never a team target. A tabbed KPI breakdown presents the employee's existing
-backend component scores and within-KPI weights. The weekly chart keeps its three actual KPI
-series and exact-values disclosure; a manager-review card summarizes backend findings and
-review actions without inventing strengths or assignment status. Three record-count links lead
-to the unchanged, independently paginated evidence sections. The PDF preview and download flow
+scope average, never a team target. A separate full-width tabbed KPI breakdown presents the employee's existing
+backend component scores and within-KPI weights. On wide screens Performance explained sits above
+the weekly chart in the left column, with the manager summary beside them. The weekly chart keeps its three actual KPI
+series and visible points for isolated measured weeks. Employee Details and
+its report preview use a labeled 60–100% scale when every measured value fits, otherwise the full
+0–100% scale; the dashboard keeps its full scale. The manager summary uses three distinct Cedar-tinted sections:
+highest measured component scores, a backend finding or honest no-finding state, and the
+corresponding review step. It keeps exact values and source record IDs visible without
+inventing employment judgments or assignment status. Links in Performance explained and the
+manager summary lead to the unchanged, independently paginated evidence sections. The PDF preview and download flow
 retain their own snapshot and layout.
+On wide screens the Employee Details chart uses a compact 240px height, reduced to 192px at
+larger widths. The trend card can stretch if the manager summary is taller; the summary's
+three panels share extra height when the left column is taller. Both columns finish together.
+Stacked layouts and the report preview keep the regular chart height.
 
 ## KPI summary and breakdown — 2026-09-23
 
@@ -169,9 +186,8 @@ actions, record IDs, and safe HTTPS evidence links, with a route to the affected
 The sheet scrolls within the viewport and fills the phone width. A scope with no alerts
 shows a clear empty state.
 
-The dashboard trend omits its explanatory subtitle and weekly-values disclosure to keep
-this row compact. Employee Details and report preview retain the shared chart's exact-values
-disclosure.
+The dashboard trend omits its explanatory subtitle to keep this row compact. The shared browser
+chart omits the weekly-values disclosure in the dashboard, Employee Details, and report preview.
 
 ## Original brand proposal and unresolved assets
 

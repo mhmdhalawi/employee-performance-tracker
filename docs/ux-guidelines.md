@@ -45,7 +45,7 @@ The domain rules in [AGENTS.md](../AGENTS.md), [benchmark.md](benchmark.md), and
 | Report overlay | `ReportPreviewContent.vue`, shared Dialog | Accessible dialog title/description, viewport-bounded width up to 1400px, contained body scroll, complete cards, reachable footer, Escape; verify desktop, phone, and short height |
 | Employee evidence | `EmployeeEvidenceTable.vue`, `EvidenceRecordDetails.vue`, shared Table/Collapsible | Three independently paginated tables; identical mobile records; keyboard disclosures; full source values and backend exclusion labels |
 | Confidence | `components/ui/progress/Progress.vue` | Warning tone for withheld employee results plus percentage and explicit status; no tier inference |
-| Charts | Dashboard Unovis lines and weekly-values table | Map null to a non-numeric line gap, preserve real zero, no interpolated missing data; distinct series patterns and textual values |
+| Charts | Shared Unovis chart | Map null to a non-numeric line gap, preserve real zero, no interpolated missing data; distinct series patterns and legend labels |
 | Failure feedback | Shared Alert/Button/Spinner | Inline recoverable errors and named Retry action; no native browser dialogs; retain last successful dashboard |
 | Scrollbar/motion | `style.css` | Global semantic scrollbar colors, engine fallback, forced-colors default, reduced-motion override |
 
@@ -71,8 +71,9 @@ Build with `pnpm build` in `web/`. Browser regression coverage must include trai
 Employee Details now offers the shared `ReportingPeriodPicker.vue` beside the employee identity.
 It preserves non-period dashboard filters, commits the selected range only after a successful
 dashboard response, and retries the last attempted range after failure. Its Performance explained
-table uses backend scores, component breakdowns, and scoped averages; the separate manager-review
-card previews backend finding counts and review actions while record-specific details remain in
+table uses backend scores, component breakdowns, and scoped averages; `EmployeeManagerSummary.vue`
+shows the two highest measured component scores and only actionable backend findings, with their
+source record IDs and review action. Record-specific details remain in
 their evidence tables. In-page evidence links use the full selected-period record counts. The
 page retains natural scrolling, and report previews still export their complete snapshot.
 
@@ -100,18 +101,24 @@ overdue work, late submissions, and low accuracy. Each finding retains its reaso
 record IDs, and scoring impact. Employee list counts, record labels, summary cards, and PDF
 sections use the backend category. Unverified outcomes do not create performance alerts.
 
-`EmployeeEvidenceTable.vue` owns a help icon beside “evidence” in each KPI heading on Employee Details; report preview omits it. Its floating, initially closed calculation panel opens by click, tap, or keyboard and shows only the matching Productivity, Compliance, or Quality sentence; Escape closes it. The separate Calculation details card has been removed. Main table descriptions still label work, attendance/report/leave, and quality data without formulas. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. Report payload values and download snapshot handling remain unchanged.
+`EmployeeDetailPage.vue` owns a help icon in each compact Productivity, Compliance, and Quality score card. Its floating, initially closed calculation panel opens by click, tap, or keyboard and shows only the matching sentence; Escape closes it. On-page evidence headers show only the table name; report preview retains score, weight, and record description in its evidence headings because it has no compact KPI cards. The separate Calculation details card remains removed. PDF exports retain all performance records and relevant issues while omitting calculation explanations and metric definitions. Report payload values and download snapshot handling remain unchanged.
 
-Each table calculation panel uses one short sentence for its documented component
+Each KPI-card calculation panel uses one short sentence for its documented component
 weights. The Data confidence explanation, detailed arithmetic, and the
 required-evidence checklist are omitted from this disclosure;
 backend explanations, evidence, scores, and report payloads remain unchanged.
 
-`WeeklyKpiTrend.vue` owns the shared chart, legend, missing-score gaps, and exact weekly-values
-disclosure on the dashboard, Employee Details, and employee report preview. Employee Details
+`WeeklyKpiTrend.vue` owns the shared chart, legend, and missing-score gaps on the dashboard,
+Employee Details, and employee report preview. It has no weekly-values disclosure. Employee Details
 requests employee-scoped trends with its current resolved dates and refreshes when the canonical
 submission timestamp differs. Report preview and PDF use the report snapshot's own trends, so
 the generated file cannot drift from the preview.
+The chart plots a point for each measured week, including isolated values. Employee Details and
+report preview use its labeled detail scale (60–100%) only when all measured values are at least
+60%; a lower score retains the 0–100% scale. The dashboard always uses 0–100%, and missing weeks
+remain gaps. On Employee Details, Performance explained links directly to the matching evidence
+section; the manager summary links to the evidence region. KPI component tabs follow the chart
+and manager summary, before the independently paginated evidence sections.
 
 ## Employee table content
 
@@ -126,8 +133,8 @@ View record / Hide record controls; Compliance IDs remain in the disclosure, acc
 button names, and mobile card titles. Mobile cards expose the same summary
 fields and issues. `EvidenceRecordIssues.vue` shows plain labels for backend findings,
 explicit exclusion reasons, or No findings; it does not infer new issues from dates or
-source statuses. The caption explains that No findings does not imply perfect performance
-or scoring eligibility and that approved annual/sick leave are neutral.
+source statuses. Each desktop table has a concise screen-reader caption; the repeated visible
+explanatory note beneath the table and phone cards is omitted.
 
 Assigned dates, verification, detailed attendance times, submission completeness, leave
 documentation, full finding messages, and safe evidence links remain in View record.
@@ -137,8 +144,8 @@ for the existing PDF generator. `evidenceDisclosureDetails` exposes individual a
 times on page/preview; missing fields identified by backend findings receive a warning
 surface and explicit Needs review text. Storage and calculation contracts are unchanged.
 
-Every KPI table has All records / Needs review controls and a clickable affected-record
-count in its header. The initial mode is All records. Server counts cover the complete
+Every KPI table has All records / Needs review controls, with the affected-record count on
+the Needs review toggle. The initial mode is All records. Server counts cover the complete
 employee/period scope; switching modes requests page 1, with chronological ordering in
 either mode. Each table has independent mode and pagination state. Mode changes are
 committed only on successful fetch; failure retains the previous page/mode and Retry
@@ -158,8 +165,8 @@ committed only after a successful live fetch. All loads successive API pages of 
 report preview uses the same sizes locally against its complete snapshot; choosing a
 preview size never changes which records the PDF exports.
 
-Evidence updates keep the last successful rows and empty state visible. A reserved
-status line shows Updating records only after 180 ms, so fast responses do not flash a
+Evidence updates keep the last successful rows and empty state visible. A reserved space
+beside the filters in the evidence header shows Updating records only after 180 ms, so fast responses do not flash a
 spinner or insert a large loading block. Open disclosures survive updates when their
 record remains in the returned page. Controls remain disabled while fetching, with
 `data-busy` preserving their opacity through shared Button/Toggle styles; genuinely

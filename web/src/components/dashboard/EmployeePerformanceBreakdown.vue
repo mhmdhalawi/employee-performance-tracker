@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { AnalysisSummary, EmployeeKpiResult } from '@/types/analysis'
 
-type Kpi = 'productivity' | 'compliance' | 'quality'
-
 const props = defineProps<{ employee: EmployeeKpiResult, summary: AnalysisSummary }>()
-const selected = ref<Kpi>('productivity')
 const rows = computed(() => [
   { key: 'productivity' as const, label: 'Productivity', score: props.employee.productivity_score, average: props.summary.average_productivity_score, weight: 35 },
   { key: 'compliance' as const, label: 'Compliance', score: props.employee.compliance_score, average: props.summary.average_compliance_score, weight: 30 },
@@ -19,10 +15,6 @@ function formatScore(value: number | null): string {
   return value === null ? '—' : `${value.toFixed(1)}%`
 }
 
-function select(value: string | number): void {
-  if (value === 'productivity' || value === 'compliance' || value === 'quality')
-    selected.value = value
-}
 </script>
 
 <template>
@@ -31,7 +23,7 @@ function select(value: string | number): void {
       <CardTitle><h2>Performance explained</h2></CardTitle>
       <CardDescription>Current KPI scores and their share of the overall result. Scope averages include only employees eligible for an overall score.</CardDescription>
     </CardHeader>
-    <CardContent class="flex flex-col gap-5">
+    <CardContent class="flex flex-col gap-3">
       <div class="overflow-x-auto">
         <Table class="min-w-xl">
           <TableHeader><TableRow><TableHead>KPI</TableHead><TableHead class="text-right">Employee</TableHead><TableHead class="text-right">Scope average</TableHead><TableHead class="text-right">Overall weight</TableHead><TableHead class="text-right">Records</TableHead></TableRow></TableHeader>
@@ -54,30 +46,6 @@ function select(value: string | number): void {
         </Table>
       </div>
       <p class="text-xs text-muted-foreground">Scope average: {{ summary.scored_employee_count }} scored {{ summary.scored_employee_count === 1 ? 'employee' : 'employees' }} in the current dashboard filters. A missing score is shown as —.</p>
-      <Tabs :model-value="selected" @update:model-value="select">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 class="font-semibold">KPI breakdown</h3>
-          <TabsList aria-label="Employee KPI breakdown" class="w-full sm:w-auto">
-            <TabsTrigger v-for="row in rows" :key="row.key" :value="row.key">{{ row.label }}</TabsTrigger>
-          </TabsList>
-        </div>
-        <TabsContent v-for="row in rows" :key="row.key" :value="row.key" class="mt-4">
-          <div class="overflow-x-auto">
-            <Table class="min-w-md">
-              <TableHeader><TableRow><TableHead>Component</TableHead><TableHead class="text-right">Score</TableHead><TableHead class="text-right">Within-KPI weight</TableHead></TableRow></TableHeader>
-              <TableBody>
-                <TableRow v-for="component in employee.components[row.key] ?? []" :key="component.key">
-                  <TableCell>{{ component.label }}</TableCell>
-                  <TableCell class="text-right tabular-nums">{{ formatScore(component.score) }}</TableCell>
-                  <TableCell class="text-right tabular-nums">{{ component.weight }}%</TableCell>
-                </TableRow>
-                <TableRow v-if="!employee.components[row.key]?.length"><TableCell colspan="3" class="text-muted-foreground">No component breakdown is available.</TableCell></TableRow>
-                <TableRow><TableCell class="font-semibold">{{ row.label }} score</TableCell><TableCell class="text-right font-semibold tabular-nums">{{ formatScore(row.score) }}</TableCell><TableCell class="text-right text-muted-foreground">—</TableCell></TableRow>
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-      </Tabs>
     </CardContent>
   </Card>
 </template>

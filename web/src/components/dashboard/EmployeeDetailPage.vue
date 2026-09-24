@@ -3,6 +3,7 @@ import { computed, onScopeDispose, ref, watch } from 'vue'
 import {
   CalendarDaysIcon,
   CircleAlertIcon,
+  CircleHelpIcon,
   DownloadIcon,
   FileTextIcon,
   MinusIcon,
@@ -11,6 +12,7 @@ import {
   TrendingUpIcon,
   TriangleAlertIcon,
 } from '@lucide/vue'
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,10 +23,12 @@ import ReportPreviewContent from '@/components/dashboard/ReportPreviewContent.vu
 import PerformanceHeader from '@/components/dashboard/PerformanceHeader.vue'
 import ReportingPeriodPicker from '@/components/dashboard/ReportingPeriodPicker.vue'
 import EmployeePerformanceBreakdown from '@/components/dashboard/EmployeePerformanceBreakdown.vue'
+import EmployeeKpiComponents from '@/components/dashboard/EmployeeKpiComponents.vue'
+import EmployeeManagerSummary from '@/components/dashboard/EmployeeManagerSummary.vue'
 import EmployeeEvidenceTable from '@/components/dashboard/EmployeeEvidenceTable.vue'
 import EmployeeAttentionSummary from '@/components/dashboard/EmployeeAttentionSummary.vue'
 import WeeklyKpiTrend from '@/components/dashboard/WeeklyKpiTrend.vue'
-import { evidenceDescriptions } from '@/lib/employee-evidence'
+import { evidenceCalculations, evidenceDescriptions } from '@/lib/employee-evidence'
 import { formatDate as formatReportDate } from '@/lib/date-format'
 import { attentionOutsideRecords } from '@/lib/employee-presentation'
 import { useEmployeeEvidence } from '@/composables/useEmployeeEvidence'
@@ -137,12 +141,17 @@ const periodMode = computed<'full' | 'month' | 'six-months' | 'year' | 'range'>(
     return 'range'
   return 'full'
 })
-const scoreCards = computed(() => [
-  { label: 'Overall score', score: props.employee.overall_score, detail: props.employee.overall_score === null ? props.employee.result_status : props.employee.performance_tier ?? props.employee.result_status, tone: 'bg-primary' },
-  ...kpiSections.value.map(item => ({ label: item.label, score: item.score, detail: `${item.weight}% of overall`, tone: item.kpi === 'compliance' ? 'bg-chart-2' : item.kpi === 'quality' ? 'bg-chart-3' : 'bg-chart-1' })),
+interface ScoreCard {
+  label: string
+  score: number | null
+  detail: string
+  tone: string
+  kpi: EvidenceKpi | null
+}
+const scoreCards = computed<ScoreCard[]>(() => [
+  { label: 'Overall score', score: props.employee.overall_score, detail: props.employee.overall_score === null ? props.employee.result_status : props.employee.performance_tier ?? props.employee.result_status, tone: 'bg-primary', kpi: null },
+  ...kpiSections.value.map(item => ({ label: item.label, score: item.score, detail: `${item.weight}% of overall`, tone: item.kpi === 'compliance' ? 'bg-chart-2' : item.kpi === 'quality' ? 'bg-chart-3' : 'bg-chart-1', kpi: item.kpi })),
 ])
-const reviewCount = computed(() => props.alerts.reduce((total, alert) => total + alert.occurrence_count, 0))
-
 const generalAttention = computed(() => attentionOutsideRecords(props.alerts,
   props.employee.validation_findings.filter(finding => ['productivity_evidence', 'attendance', 'submission_evidence', 'leave_evidence', 'quality_evidence', 'source_records'].includes(finding.source_type ?? ''))))
 const reportGeneralAttention = computed(() => reportPreview.value ? attentionOutsideRecords(reportPreview.value.findings,
@@ -305,7 +314,24 @@ function scoreChange(value: number | null): string {
       <section aria-label="Employee score summary" class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <Card v-for="item in scoreCards" :key="item.label" class="min-w-0 justify-between">
           <CardHeader class="gap-2">
-            <CardDescription class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-full" :class="item.tone" />{{ item.label }}</CardDescription>
+            <CardDescription class="flex items-center gap-2">
+              <span class="size-2 shrink-0 rounded-full" :class="item.tone" aria-hidden="true" />
+              <span class="min-w-0">{{ item.label }}</span>
+              <PopoverRoot v-if="item.kpi">
+                <PopoverTrigger as-child>
+                  <Button variant="ghost" size="icon-sm" class="ml-auto size-6 shrink-0 rounded-full"
+                    :aria-label="`How ${item.label} score is calculated`">
+                    <CircleHelpIcon aria-hidden="true" class="size-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverPortal>
+                  <PopoverContent side="bottom" align="start" :side-offset="6" class="z-60 w-56 max-w-[calc(100vw-2rem)] rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md outline-none"
+                    :aria-label="`${item.label} calculation`">
+                    {{ evidenceCalculations[item.kpi] }}
+                  </PopoverContent>
+                </PopoverPortal>
+              </PopoverRoot>
+            </CardDescription>
             <CardTitle class="text-2xl tabular-nums sm:text-3xl">{{ score(item.score) }}</CardTitle>
           </CardHeader>
           <CardContent class="text-xs text-muted-foreground">{{ item.detail }}</CardContent>
@@ -318,63 +344,33 @@ function scoreChange(value: number | null): string {
           </CardContent>
         </Card>
       </section>
-      <p class="text-xs text-muted-foreground">Data confidence measures required evidence completeness, not employee ability.</p>
-
-      <Alert v-if="employee.overall_score === null" variant="warning">
-        <TriangleAlertIcon aria-hidden="true" />
-        <AlertTitle>Insufficient evidence for an overall result</AlertTitle>
-        <AlertDescription>
-          Overall performance and tier were withheld because data confidence is below the
-          required threshold. Component KPI values remain visible for auditability and should
-          not be treated as a complete performance assessment.
-        </AlertDescription>
-      </Alert>
-
       <Alert v-if="refreshError" variant="destructive">
         <AlertTitle>Employee results could not refresh</AlertTitle>
         <AlertDescription class="flex flex-col gap-2"><p>{{ refreshError }}</p><Button variant="outline" class="w-fit" :disabled="isRefreshing" @click="emit('refresh')">Retry results</Button></AlertDescription>
       </Alert>
       <p v-if="isRefreshing" role="status" class="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Refreshing employee results and evidence…</p>
-      <EmployeePerformanceBreakdown :employee="employee" :summary="summary" />
+      <div class="grid items-start gap-3 xl:items-stretch xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]">
+        <div class="flex min-w-0 flex-col gap-3 xl:h-full">
+          <EmployeePerformanceBreakdown :employee="employee" :summary="summary" />
+          <div v-if="trendsLoading && employeeTrends === null" role="status" class="flex min-h-96 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Spinner />Loading employee trends…
+          </div>
+          <Alert v-else-if="trendsError" :variant="trendsStale ? 'warning' : 'destructive'">
+            <AlertTitle>Weekly trend unavailable</AlertTitle>
+            <AlertDescription class="flex flex-col gap-2">
+              <p>{{ trendsError }}</p>
+              <Button variant="outline" class="w-fit" :disabled="trendsLoading || isRefreshing" @click="trendsStale ? emit('refresh') : loadEmployeeTrends()">
+                {{ trendsStale ? 'Retry results' : 'Retry trend' }}
+              </Button>
+            </AlertDescription>
+          </Alert>
+          <WeeklyKpiTrend v-else-if="employeeTrends !== null" :trends="employeeTrends" scale="detail" compact-on-desktop
+            description="This employee and the selected reporting period apply. Gaps mean no score is available." />
+        </div>
+        <EmployeeManagerSummary :employee="employee" :alerts="alerts" />
+      </div>
+      <EmployeeKpiComponents :employee="employee" />
       <EmployeeAttentionSummary :items="generalAttention" />
-      <div class="grid items-start gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] xl:items-stretch">
-      <div v-if="trendsLoading && employeeTrends === null" role="status" class="flex min-h-96 items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Spinner />Loading employee trends…
-      </div>
-      <Alert v-else-if="trendsError" :variant="trendsStale ? 'warning' : 'destructive'">
-        <AlertTitle>Weekly trend unavailable</AlertTitle>
-        <AlertDescription class="flex flex-col gap-2">
-          <p>{{ trendsError }}</p>
-          <Button variant="outline" class="w-fit" :disabled="trendsLoading || isRefreshing" @click="trendsStale ? emit('refresh') : loadEmployeeTrends()">
-            {{ trendsStale ? 'Retry results' : 'Retry trend' }}
-          </Button>
-        </AlertDescription>
-      </Alert>
-      <WeeklyKpiTrend v-else-if="employeeTrends !== null" :trends="employeeTrends"
-        description="This employee and the selected reporting period apply. Gaps mean no score is available." />
-      <Card aria-label="Manager review" class="min-w-0">
-        <CardHeader><CardTitle><h2>Manager review</h2></CardTitle><CardDescription>Backend findings for this employee and reporting period.</CardDescription></CardHeader>
-        <CardContent class="flex flex-col gap-4">
-          <p v-if="!reviewCount" class="text-sm text-muted-foreground">No findings require review in this reporting period. Check the evidence tables for the underlying records.</p>
-          <template v-else>
-            <p class="text-sm"><strong class="tabular-nums">{{ reviewCount }}</strong> {{ reviewCount === 1 ? 'finding' : 'findings' }} across performance records</p>
-            <div v-for="alert in alerts.slice(0, 3)" :key="`${alert.code}-${alert.record_ids.join(',')}`" class="flex flex-col gap-1 border-t pt-3 text-sm">
-              <p class="font-medium">{{ alert.category === 'data_issue' ? 'Data issue' : 'Performance alert' }} · {{ alert.code.replaceAll('_', ' ') }}</p>
-              <p class="text-muted-foreground">{{ alert.message }}</p>
-              <p><span class="font-medium">Review:</span> {{ alert.action }}</p>
-              <p v-if="alert.record_ids.length" class="wrap-break-word text-xs text-muted-foreground">Records: {{ alert.record_ids.join(', ') }}</p>
-            </div>
-            <p v-if="alerts.length > 3" class="text-xs text-muted-foreground">{{ alerts.length - 3 }} more finding groups are detailed in the evidence sections.</p>
-          </template>
-          <a href="#employee-evidence" class="w-fit text-sm font-medium text-primary underline underline-offset-4 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring">Review performance records</a>
-        </CardContent>
-      </Card>
-      </div>
-      <nav aria-label="Evidence sections" class="grid gap-3 sm:grid-cols-3">
-        <a v-for="item in kpiSections" :key="item.kpi" :href="`#${item.kpi}-evidence`" class="flex items-center justify-between rounded-xl border bg-card px-4 py-3 text-sm font-medium hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring">
-          <span>{{ item.label }} evidence</span><span class="text-muted-foreground">{{ evidenceStates[item.kpi].data?.all_records_count ?? '…' }} {{ evidenceStates[item.kpi].data?.all_records_count === 1 ? 'record' : 'records' }} →</span>
-        </a>
-      </nav>
       <section id="employee-evidence" aria-label="KPI evidence" class="flex min-w-0 scroll-mt-4 flex-col gap-6">
         <EmployeeEvidenceTable v-for="item in kpiSections" :id="`${item.kpi}-evidence`" :key="item.kpi"
           :kpi="item.kpi" :score="item.score" :weight="item.weight" :explanation="evidenceDescriptions[item.kpi]"
@@ -492,7 +488,7 @@ function scoreChange(value: number | null): string {
               </CardContent>
             </Card>
 
-            <WeeklyKpiTrend :trends="reportPreview.trends"
+            <WeeklyKpiTrend :trends="reportPreview.trends" scale="detail"
               description="This employee and the report period apply. Gaps mean no score is available." />
             <EmployeeAttentionSummary :items="reportGeneralAttention" />
             <EmployeeEvidenceTable v-for="kpi in reportPreview.kpis" :key="kpi.name"

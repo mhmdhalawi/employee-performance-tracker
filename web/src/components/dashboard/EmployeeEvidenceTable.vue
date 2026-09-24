@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, ref, watch } from 'vue'
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CircleHelpIcon, TriangleAlertIcon } from '@lucide/vue'
-import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, TriangleAlertIcon } from '@lucide/vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import EvidenceRecordDetails from '@/components/dashboard/EvidenceRecordDetails.vue'
 import EvidenceRecordIssues from '@/components/dashboard/EvidenceRecordIssues.vue'
-import { evidenceSummaryCells, evidenceSummaryColumns, evidenceLabels, evidenceNeedsReview, evidenceCalculations } from '@/lib/employee-evidence'
+import { evidenceSummaryCells, evidenceSummaryColumns, evidenceLabels, evidenceNeedsReview } from '@/lib/employee-evidence'
 import { cn } from '@/lib/utils'
 import type { EmployeeEvidenceRow, EvidenceKpi, EvidencePageSize } from '@/types/employee-evidence'
 
@@ -35,7 +34,6 @@ const props = withDefaults(defineProps<{
 }>(), { page: 1, pageSize: 5, loading: false, error: '', report: false, disabled: false, reviewOnly: false })
 const emit = defineEmits<{ pageChange: [page: number], reviewChange: [reviewOnly: boolean], pageSizeChange: [pageSize: EvidencePageSize], retry: [] }>()
 const openRows = ref<Record<string, boolean>>({})
-const calculationOpen = ref(false)
 const previewPage = ref(1)
 const previewReviewOnly = ref(false)
 const previewPageSize = ref<EvidencePageSize>(5)
@@ -48,6 +46,12 @@ watch(() => props.loading, loading => {
 }, { immediate: true })
 onScopeDispose(() => clearTimeout(indicatorTimer))
 const columns = computed(() => evidenceSummaryColumns(props.kpi))
+const sectionTones: Record<EvidenceKpi, { header: string, marker: string, score: string }> = {
+  productivity: { header: 'bg-primary/5', marker: 'bg-primary', score: 'text-primary' },
+  compliance: { header: 'bg-warning/8', marker: 'bg-chart-2', score: 'text-warning-foreground' },
+  quality: { header: 'bg-muted/40', marker: 'bg-foreground', score: 'text-foreground' },
+}
+const sectionTone = computed(() => sectionTones[props.kpi])
 const issuesLabel = computed(() => props.kpi === 'compliance' ? 'Issues / scoring note' : 'Issues')
 const activePage = computed(() => props.report ? previewPage.value : props.page)
 const activePageSize = computed(() => props.report ? previewPageSize.value : props.pageSize)
@@ -91,86 +95,71 @@ watch(() => props.rows, rows => {
 </script>
 
 <template>
-  <Card class="min-w-0" :aria-label="`${evidenceLabels[kpi]} evidence`">
-    <CardHeader>
-      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-        <div class="flex min-w-0 flex-col gap-1">
-          <CardTitle>
-            <h2 :aria-label="`${evidenceLabels[kpi]} evidence`">
-              {{ evidenceLabels[kpi] }}
-              <span class="inline-flex items-center gap-0.5 align-middle">
-                evidence
-                <PopoverRoot v-if="!report" v-model:open="calculationOpen">
-                  <PopoverTrigger as-child>
-                    <Button variant="ghost" size="icon-sm" class="size-7 rounded-full"
-                      :aria-label="`How ${evidenceLabels[kpi]} score is calculated`">
-                      <CircleHelpIcon aria-hidden="true" class="size-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverPortal>
-                    <PopoverContent side="bottom" align="start" :side-offset="6" class="z-60 w-56 max-w-[calc(100vw-2rem)] rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md outline-none"
-                      :aria-label="`${evidenceLabels[kpi]} calculation`">
-                      {{ evidenceCalculations[kpi] }}
-                    </PopoverContent>
-                  </PopoverPortal>
-                </PopoverRoot>
-              </span>
-            </h2>
-          </CardTitle>
-          <CardDescription>{{ weight }}% of overall</CardDescription>
+  <Card class="min-w-0 gap-0 py-0" :aria-label="`${evidenceLabels[kpi]} evidence`">
+    <CardHeader :class="cn('gap-2 border-b py-3', sectionTone.header)">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div :class="report ? 'grid min-w-0 grow grid-cols-[minmax(0,1fr)_auto] items-start gap-3' : 'min-w-0'">
+          <div class="flex min-w-0 flex-col gap-1">
+            <CardTitle>
+              <h2 :aria-label="`${evidenceLabels[kpi]} evidence`" class="flex flex-wrap items-center gap-2">
+                <span class="size-2.5 shrink-0 rounded-full" :class="sectionTone.marker" aria-hidden="true" />
+                {{ evidenceLabels[kpi] }} evidence
+              </h2>
+            </CardTitle>
+            <CardDescription v-if="report">{{ weight }}% of overall</CardDescription>
+          </div>
+          <strong v-if="report" class="text-3xl tabular-nums" :class="sectionTone.score" :aria-label="`${evidenceLabels[kpi]} score`">{{ score === null ? '—' : `${score.toFixed(1)}%` }}</strong>
         </div>
-        <strong class="text-3xl tabular-nums" :aria-label="`${evidenceLabels[kpi]} score`">{{ score === null ? '—' : `${score.toFixed(1)}%` }}</strong>
+        <div class="flex flex-wrap items-center gap-3">
+          <ToggleGroup type="single" variant="outline" tone="brand" class="order-1 sm:order-2" :model-value="activeReviewOnly ? 'review' : 'all'" :data-busy="loading && !disabled && reviewCount !== undefined" :disabled="loading || disabled || reviewCount === undefined" :aria-label="`${evidenceLabels[kpi]} record filter`" @update:model-value="changeFilter">
+            <ToggleGroupItem value="all">All records ({{ reviewCount === undefined ? '…' : allCount }})</ToggleGroupItem>
+            <ToggleGroupItem value="review"><TriangleAlertIcon v-if="reviewCount" data-icon="inline-start" />Needs review ({{ reviewCount ?? '…' }})</ToggleGroupItem>
+          </ToggleGroup>
+          <div class="order-2 flex min-h-4 w-4 items-center gap-2 text-xs text-muted-foreground sm:order-1 sm:w-36" role="status" aria-live="polite">
+            <template v-if="showUpdating && reviewCount !== undefined"><Spinner /><span class="sr-only sm:not-sr-only">Updating records…</span></template>
+          </div>
+        </div>
       </div>
-      <CardDescription class="whitespace-normal wrap-break-word">{{ explanation }}</CardDescription>
-      <Button v-if="reviewCount" variant="link" size="sm" class="h-auto w-fit max-w-full whitespace-normal" :data-busy="loading && !disabled" :disabled="loading || disabled" @click="changeFilter('review')">
-        <TriangleAlertIcon data-icon="inline-start" />{{ reviewCount }} {{ reviewCount === 1 ? 'record needs' : 'records need' }} review
-      </Button>
+      <CardDescription v-if="report" class="whitespace-normal wrap-break-word">{{ explanation }}</CardDescription>
+      <p v-if="report" class="text-xs text-muted-foreground">All {{ total }} records are included in the PDF. Choose how many to show in this preview.</p>
     </CardHeader>
-    <CardContent class="flex min-w-0 flex-col gap-4" :aria-busy="loading">
-      <p v-if="report" class="text-sm text-muted-foreground">All {{ total }} records are included in the PDF. Choose how many to show in this preview.</p>
-      <ToggleGroup type="single" variant="outline" :model-value="activeReviewOnly ? 'review' : 'all'" :data-busy="loading && !disabled && reviewCount !== undefined" :disabled="loading || disabled || reviewCount === undefined" :aria-label="`${evidenceLabels[kpi]} record filter`" @update:model-value="changeFilter">
-        <ToggleGroupItem value="all">All records ({{ reviewCount === undefined ? '…' : allCount }})</ToggleGroupItem>
-        <ToggleGroupItem value="review">Needs review ({{ reviewCount ?? '…' }})</ToggleGroupItem>
-      </ToggleGroup>
-      <div class="flex min-h-5 items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
-        <template v-if="showUpdating && reviewCount !== undefined"><Spinner />Updating records…</template>
-      </div>
-      <Alert v-if="error" variant="destructive">
+    <CardContent class="min-w-0 px-0" :aria-busy="loading">
+      <Alert v-if="error" variant="destructive" class="m-4">
         <AlertTitle>{{ evidenceLabels[kpi] }} evidence unavailable</AlertTitle>
         <AlertDescription class="flex flex-col gap-2">
           <p>{{ error }}</p>
           <Button variant="outline" class="w-fit" :disabled="loading || disabled" @click="emit('retry')">Retry evidence</Button>
         </AlertDescription>
       </Alert>
-      <div v-if="loading && reviewCount === undefined" class="flex min-h-24 items-center gap-3 text-sm text-muted-foreground" role="status"><Spinner />Loading {{ evidenceLabels[kpi].toLowerCase() }} evidence…</div>
-      <p v-if="reviewCount !== undefined && !error && !selectedTotal" class="py-8 text-sm text-muted-foreground">{{ activeReviewOnly ? 'No records need review for this reporting period.' : `No ${evidenceLabels[kpi].toLowerCase()} evidence records for this reporting period.` }}</p>
+      <div v-if="loading && reviewCount === undefined" class="flex min-h-24 items-center gap-3 px-4 py-6 text-sm text-muted-foreground" role="status"><Spinner />Loading {{ evidenceLabels[kpi].toLowerCase() }} evidence…</div>
+      <p v-if="reviewCount !== undefined && !error && !selectedTotal" class="px-4 py-8 text-sm text-muted-foreground">{{ activeReviewOnly ? 'No records need review for this reporting period.' : `No ${evidenceLabels[kpi].toLowerCase()} evidence records for this reporting period.` }}</p>
       <template v-if="visibleRows.length && !disabled">
         <div class="hidden md:block">
           <Table class="table-fixed">
-            <TableCaption>{{ evidenceLabels[kpi] }} records for the active reporting period. No findings does not imply perfect performance or scoring eligibility. Source statuses do not replace calculated results.<template v-if="kpi === 'compliance'"> Approved annual and sick leave are neutral.</template></TableCaption>
-            <TableHeader><TableRow>
-              <TableHead v-for="column in columns" :key="column" class="whitespace-normal">{{ column }}</TableHead>
-              <TableHead class="w-1/4 whitespace-normal">{{ issuesLabel }}</TableHead>
-              <TableHead class="w-36">Details</TableHead>
+            <TableCaption class="sr-only">{{ evidenceLabels[kpi] }} records</TableCaption>
+            <TableHeader class="bg-muted/30"><TableRow>
+              <TableHead v-for="column in columns" :key="column" class="px-4 whitespace-normal">{{ column }}</TableHead>
+              <TableHead class="w-1/4 px-4 whitespace-normal">{{ issuesLabel }}</TableHead>
+              <TableHead class="w-36 px-4">Details</TableHead>
             </TableRow></TableHeader>
-            <Collapsible v-for="row in visibleRows" :key="rowKey(row)" v-model:open="openRows[rowKey(row)]" as-child>
+            <Collapsible v-for="(row, rowIndex) in visibleRows" :key="rowKey(row)" v-model:open="openRows[rowKey(row)]" as-child>
               <TableBody>
-                <TableRow :class="cn(evidenceNeedsReview(row) && 'bg-warning/10 hover:bg-warning/15')">
-                  <TableCell v-for="(cell, index) in evidenceSummaryCells(row)" :key="index" class="align-top whitespace-normal wrap-break-word">
+                <TableRow :class="cn(rowIndex % 2 === 1 && 'bg-muted/15', evidenceNeedsReview(row) && 'bg-warning/10 hover:bg-warning/15')">
+                  <TableCell v-for="(cell, index) in evidenceSummaryCells(row)" :key="index" :class="cn('px-4 py-2.5 align-top whitespace-normal wrap-break-word', index === 0 && 'font-medium', index === 0 && evidenceNeedsReview(row) && 'border-l-2 border-l-warning')">
                     {{ cell }}
                   </TableCell>
-                  <TableCell class="align-top whitespace-normal"><EvidenceRecordIssues :row="row" /></TableCell>
-                  <TableCell class="align-top"><CollapsibleTrigger as-child><Button variant="ghost" size="sm" class="h-auto max-w-full whitespace-normal wrap-break-word" :aria-label="`${openRows[rowKey(row)] ? 'Hide' : 'View'} record ${row.record_type} ${row.record_id}`">{{ recordLabel(row) }}<ChevronDownIcon data-icon="inline-end" /></Button></CollapsibleTrigger></TableCell>
+                  <TableCell class="px-4 py-2.5 align-top whitespace-normal"><EvidenceRecordIssues :row="row" /></TableCell>
+                  <TableCell class="px-4 py-2.5 align-top"><CollapsibleTrigger as-child><Button variant="ghost" size="sm" class="h-auto max-w-full whitespace-normal wrap-break-word" :aria-label="`${openRows[rowKey(row)] ? 'Hide' : 'View'} record ${row.record_type} ${row.record_id}`">{{ recordLabel(row) }}<ChevronDownIcon data-icon="inline-end" /></Button></CollapsibleTrigger></TableCell>
                 </TableRow>
                 <CollapsibleContent as-child><TableRow><TableCell :colspan="columns.length + 2" class="bg-muted/30 p-4"><EvidenceRecordDetails :row="row" /></TableCell></TableRow></CollapsibleContent>
               </TableBody>
             </Collapsible>
           </Table>
         </div>
-        <div class="flex flex-col gap-3 md:hidden">
+        <div class="flex flex-col gap-3 px-4 py-4 md:hidden">
           <Collapsible v-for="row in visibleRows" :key="rowKey(row)" v-model:open="openRows[rowKey(row)]" as-child>
             <Card :class="cn('min-w-0', evidenceNeedsReview(row) && 'bg-warning/10')">
-              <CardHeader><CardTitle class="wrap-break-words">{{ row.record_id }}</CardTitle></CardHeader>
+              <CardHeader :class="cn('border-b', evidenceNeedsReview(row) ? 'bg-warning/15' : 'bg-muted/30')"><CardTitle class="wrap-break-words">{{ row.record_id }}</CardTitle></CardHeader>
               <CardContent class="flex min-w-0 flex-col gap-4">
                 <dl class="grid grid-cols-2 gap-3 text-sm"><div v-for="(cell, index) in evidenceSummaryCells(row)" :key="index" class="min-w-0"><dt class="text-muted-foreground">{{ columns[index] }}</dt><dd class="wrap-break-word">{{ cell }}</dd></div><div class="col-span-2 min-w-0"><dt class="text-muted-foreground">{{ issuesLabel }}</dt><dd><EvidenceRecordIssues :row="row" /></dd></div></dl>
                 <CollapsibleTrigger as-child><Button variant="outline" class="h-auto w-fit max-w-full whitespace-normal wrap-break-word" :aria-label="`${openRows[rowKey(row)] ? 'Hide' : 'View'} record ${row.record_type} ${row.record_id}`">{{ recordLabel(row) }}<ChevronDownIcon data-icon="inline-end" /></Button></CollapsibleTrigger>
@@ -179,10 +168,9 @@ watch(() => props.rows, rows => {
             </Card>
           </Collapsible>
         </div>
-        <p class="text-xs text-muted-foreground md:hidden">No findings does not imply perfect performance or scoring eligibility. Source statuses do not replace calculated results.<template v-if="kpi === 'compliance'"> Approved annual and sick leave are neutral.</template></p>
       </template>
     </CardContent>
-    <CardFooter class="flex flex-col gap-4 sm:flex-row sm:justify-between">
+    <CardFooter class="flex flex-col gap-3 py-3 sm:flex-row sm:justify-between">
       <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground" aria-live="polite">
         <span>{{ range }}</span>
         <Select :model-value="String(activePageSize)" :disabled="loading || disabled" @update:model-value="changePageSize">

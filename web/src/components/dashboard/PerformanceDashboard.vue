@@ -304,7 +304,7 @@ function requestFilters(filters: DashboardFilters): void {
       <KpiBreakdownPanel v-if="activeBreakdown" :selected="activeBreakdown" :breakdowns="analysis.kpi_breakdowns" :disabled="isFiltering" @select="activeBreakdown = $event" />
 
       <section aria-label="Trends and actions" class="grid items-start gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] xl:items-stretch">
-        <WeeklyKpiTrend :trends="analysis.trends" description="" :show-weekly-values="false" />
+        <WeeklyKpiTrend :trends="analysis.trends" description="" />
         <DashboardActionCenter :alerts="analysis.alerts" :disabled="isFiltering" />
       </section>
 
