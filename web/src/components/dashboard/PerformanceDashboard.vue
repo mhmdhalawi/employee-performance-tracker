@@ -243,7 +243,7 @@ function requestFilters(filters: DashboardFilters): void {
     <PerformanceHeader>
         <Button :disabled="isFiltering || !filteredRows.length" @click="teamReportPreviewOpen = true">
           <FileTextIcon data-icon="inline-start" />
-          Generate team report
+          Generate report
         </Button>
     </PerformanceHeader>
 

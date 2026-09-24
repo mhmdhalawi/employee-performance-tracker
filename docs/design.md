@@ -205,6 +205,12 @@ shows a clear empty state.
 The dashboard trend omits its explanatory subtitle to keep this row compact. The shared browser
 chart omits the weekly-values disclosure in the dashboard, Employee Details, and report preview.
 
+The dashboard report preview follows the current call-center dashboard hierarchy: applied
+period and operational filters, four compact score cards, the scoped weekly trend, then the
+complete employee result table. Its Campaign / Queue and data-confidence columns match the
+dashboard. The landscape PDF uses the same filtered employee set, scope labels, and Campaign /
+Queue values; its weekly trend remains a complete data table.
+
 ## Original brand proposal and unresolved assets
 
 ## Goal

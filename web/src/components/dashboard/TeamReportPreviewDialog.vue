@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   CalendarDaysIcon,
   CircleAlertIcon,
@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import ReportPreviewContent from '@/components/dashboard/ReportPreviewContent.vue'
-import { Progress } from '@/components/ui/progress'
+import WeeklyKpiTrend from '@/components/dashboard/WeeklyKpiTrend.vue'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { downloadTeamReportPdf } from '@/lib/dashboard-report-pdf'
@@ -34,10 +34,20 @@ const downloading = ref(false)
 const error = ref('')
 
 const kpis = [
-  { key: 'average_productivity_score', label: 'Productivity', weight: '35% of overall' },
-  { key: 'average_compliance_score', label: 'Compliance', weight: '30% of overall' },
-  { key: 'average_quality_score', label: 'Quality', weight: '35% of overall' },
+  { key: 'average_productivity_score', label: 'Productivity', weight: '35% of overall', tone: 'bg-chart-1' },
+  { key: 'average_compliance_score', label: 'Compliance', weight: '30% of overall', tone: 'bg-chart-2' },
+  { key: 'average_quality_score', label: 'Quality', weight: '35% of overall', tone: 'bg-chart-3' },
 ] as const
+const activeScope = computed(() => (
+  [
+    ['Team', props.analysis.applied_filters.team],
+    ['Campaign', props.analysis.applied_filters.campaign],
+    ['Queue', props.analysis.applied_filters.queue],
+    ['Shift', props.analysis.applied_filters.shift],
+    ['Supervisor', props.analysis.applied_filters.supervisor],
+    ['Location', props.analysis.applied_filters.location],
+  ] as const
+).filter(([, value]) => Boolean(value)))
 
 watch(() => props.open, (open) => {
   if (open)
@@ -80,7 +90,7 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
             <FileTextIcon aria-hidden="true" />
           </div>
           <div class="flex flex-col gap-1">
-            <DialogTitle>Team performance report</DialogTitle>
+            <DialogTitle>Call-center performance report</DialogTitle>
             <DialogDescription>Review the current filtered dashboard snapshot before downloading.</DialogDescription>
           </div>
         </div>
@@ -103,71 +113,61 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
         </Alert>
 
         <Card>
-          <CardHeader class="gap-4 sm:flex sm:flex-row sm:items-start sm:justify-between">
-            <div class="flex flex-col gap-1">
+          <CardHeader class="gap-3 sm:flex sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex min-w-0 flex-col gap-2">
               <div class="flex flex-wrap items-center gap-2">
-                <p class="text-sm font-medium text-muted-foreground">CEDAR PERFORMANCE</p>
-                <Badge variant="secondary">
-                  <UsersIcon data-icon="inline-start" />
-                  {{ analysis.summary.total_employee_count }} employees
-                </Badge>
+                <CardTitle class="text-2xl">{{ analysis.applied_filters.team || 'Call-center performance' }}</CardTitle>
+                <Badge variant="secondary"><UsersIcon data-icon="inline-start" />{{ analysis.summary.total_employee_count }} employees</Badge>
               </div>
-              <CardTitle class="text-3xl">{{ analysis.applied_filters.team || 'All teams' }}</CardTitle>
-              <CardDescription>Current dashboard filters are applied to every value in this preview.</CardDescription>
+              <CardDescription>{{ analysis.summary.scored_employee_count }} scored · {{ analysis.summary.insufficient_data_count }} withheld · Current dashboard snapshot</CardDescription>
+              <div v-if="activeScope.length" class="flex flex-wrap gap-2" aria-label="Applied report filters">
+                <Badge v-for="[label, value] in activeScope" :key="label" variant="outline" class="max-w-full whitespace-normal wrap-break-word">{{ label }}: {{ value }}</Badge>
+              </div>
               <CardDescription v-if="analysis.applied_filters.score_period_start_date && analysis.applied_filters.score_period_end_date && (analysis.applied_filters.score_period_start_date !== analysis.applied_filters.start_date || analysis.applied_filters.score_period_end_date !== analysis.applied_filters.end_date)">
                 Scores use available evidence: {{ formatDate(analysis.applied_filters.score_period_start_date) }} – {{ formatDate(analysis.applied_filters.score_period_end_date) }}.
               </CardDescription>
             </div>
-            <Badge v-if="analysis.applied_filters.start_date && analysis.applied_filters.end_date" variant="outline" class="w-fit whitespace-normal">
+            <Badge v-if="analysis.applied_filters.start_date && analysis.applied_filters.end_date" variant="outline" class="w-fit shrink-0 whitespace-normal">
               <CalendarDaysIcon data-icon="inline-start" />
               {{ formatDate(analysis.applied_filters.start_date) }} – {{ formatDate(analysis.applied_filters.end_date) }}
             </Badge>
           </CardHeader>
-          <CardContent class="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_repeat(2,minmax(0,0.7fr))]">
-            <section class="flex flex-col justify-between gap-5 rounded-lg bg-primary p-5 text-primary-foreground">
-              <div class="flex flex-col gap-1">
-                <p class="text-sm text-primary-foreground">Average overall score</p>
-                <p class="text-5xl font-semibold tracking-tight tabular-nums">{{ score(analysis.summary.average_overall_score) }}</p>
-              </div>
-              <p class="text-xs text-primary-foreground">{{ analysis.summary.scored_employee_count }} scored employee{{ analysis.summary.scored_employee_count === 1 ? '' : 's' }}</p>
-            </section>
-            <section class="flex flex-col justify-center gap-2 rounded-lg border p-5">
-              <p class="text-sm text-muted-foreground">Scored results</p>
-              <p class="text-3xl font-semibold tabular-nums">{{ analysis.summary.scored_employee_count }}</p>
-              <Progress :model-value="analysis.summary.total_employee_count ? analysis.summary.scored_employee_count / analysis.summary.total_employee_count * 100 : 0" />
-            </section>
-            <section class="flex flex-col justify-center gap-2 rounded-lg border p-5">
-              <p class="text-sm text-muted-foreground">Withheld results</p>
-              <p class="text-3xl font-semibold tabular-nums">{{ analysis.summary.insufficient_data_count }}</p>
-              <p class="text-xs text-muted-foreground">Insufficient evidence</p>
-            </section>
-          </CardContent>
         </Card>
 
-        <section aria-label="Team KPI averages" class="grid gap-4 md:grid-cols-3">
-          <Card v-for="kpi in kpis" :key="kpi.key">
-            <CardHeader>
-              <CardDescription>{{ kpi.label }}</CardDescription>
-              <CardTitle class="text-3xl tabular-nums">{{ score(analysis.summary[kpi.key]) }}</CardTitle>
+        <section aria-label="Team KPI averages" class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <Card class="min-w-0 justify-between">
+            <CardHeader class="gap-2">
+              <CardDescription class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />Overall score</CardDescription>
+              <CardTitle class="text-2xl tabular-nums sm:text-3xl">{{ score(analysis.summary.average_overall_score) }}</CardTitle>
             </CardHeader>
-            <CardContent class="text-xs text-muted-foreground">{{ analysis.summary.scored_employee_count }} scored employee{{ analysis.summary.scored_employee_count === 1 ? '' : 's' }} · {{ kpi.weight }}</CardContent>
+            <CardContent class="text-xs text-muted-foreground">{{ analysis.summary.scored_employee_count }} scored · {{ analysis.summary.insufficient_data_count }} withheld</CardContent>
+          </Card>
+          <Card v-for="kpi in kpis" :key="kpi.key" class="min-w-0 justify-between">
+            <CardHeader class="gap-2">
+              <CardDescription class="flex items-center gap-2"><span class="size-2 shrink-0 rounded-full" :class="kpi.tone" aria-hidden="true" />{{ kpi.label }}</CardDescription>
+              <CardTitle class="text-2xl tabular-nums sm:text-3xl">{{ score(analysis.summary[kpi.key]) }}</CardTitle>
+            </CardHeader>
+            <CardContent class="text-xs text-muted-foreground">{{ analysis.summary.scored_employee_count }} scored · {{ kpi.weight }}</CardContent>
           </Card>
         </section>
+
+        <WeeklyKpiTrend :trends="analysis.trends" description="Scores across the selected employees and reporting period. Gaps mean no score is available." />
 
         <Card>
           <CardHeader>
             <CardTitle>Employee results</CardTitle>
-            <CardDescription>The downloaded report also includes the complete weekly KPI trend.</CardDescription>
+            <CardDescription>All employees in the current dashboard filters are included in the download.</CardDescription>
           </CardHeader>
           <CardContent class="overflow-x-auto">
-            <Table>
+            <Table class="min-w-220">
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
-                  <TableHead>Team</TableHead>
+                  <TableHead>Campaign / Queue</TableHead>
                   <TableHead class="text-right">Productivity</TableHead>
                   <TableHead class="text-right">Compliance</TableHead>
                   <TableHead class="text-right">Quality</TableHead>
+                  <TableHead>Data confidence</TableHead>
                   <TableHead class="text-right">Overall</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -175,10 +175,11 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
               <TableBody>
                 <TableRow v-for="employee in analysis.results" :key="employee.employee_id">
                   <TableCell><p class="font-medium">{{ employeeLabel(employee.employee_name, employee.employee_id) }}</p><p class="text-xs text-muted-foreground">{{ employee.employee_id }}</p></TableCell>
-                  <TableCell>{{ employee.team || 'Not provided' }}</TableCell>
+                  <TableCell class="whitespace-normal wrap-break-word"><span>{{ employee.campaign || 'Campaign not provided' }}</span><span class="block text-xs text-muted-foreground">{{ employee.queue || 'Queue not provided' }}</span></TableCell>
                   <TableCell class="text-right tabular-nums">{{ score(employee.productivity_score) }}</TableCell>
                   <TableCell class="text-right tabular-nums">{{ score(employee.compliance_score) }}</TableCell>
                   <TableCell class="text-right tabular-nums">{{ score(employee.quality_score) }}</TableCell>
+                  <TableCell class="tabular-nums">{{ score(employee.data_confidence) }}</TableCell>
                   <TableCell class="text-right font-medium tabular-nums">{{ score(employee.overall_score) }}</TableCell>
                   <TableCell><Badge :variant="employee.overall_score === null ? 'warning' : 'success'">{{ employee.performance_tier || employee.result_status }}</Badge></TableCell>
                 </TableRow>
@@ -187,13 +188,6 @@ function employeeLabel(employeeName: string | null, employeeId: string): string 
           </CardContent>
         </Card>
 
-        <Alert>
-          <ShieldCheckIcon aria-hidden="true" />
-          <AlertTitle>Manager review required</AlertTitle>
-          <AlertDescription>
-            This report supports coaching and manager review. It must not be used alone for hiring, termination, promotion, compensation, or disciplinary decisions.
-          </AlertDescription>
-        </Alert>
       <template #footer>
       <DialogFooter class="m-0 rounded-none">
         <Button :disabled="downloading" @click="downloadReport">

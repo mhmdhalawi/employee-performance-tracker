@@ -34,7 +34,7 @@ const kpiDetails: Record<DashboardKpi, { label: string, weight: number, descript
 
 export async function downloadTeamReportPdf(analysis: DashboardResponse): Promise<void> {
   const bytes = await createTeamReportPdfBytes(analysis)
-  downloadPdf(bytes, reportFilename(analysis, 'team-performance'))
+  downloadPdf(bytes, reportFilename(analysis, 'call-center-performance'))
 }
 
 export async function downloadKpiReportPdf(analysis: DashboardResponse, kpi: DashboardKpi): Promise<void> {
@@ -75,10 +75,10 @@ function downloadPdf(bytes: Uint8Array, filename: string): void {
 }
 
 function teamDocumentDefinition(analysis: DashboardResponse): TDocumentDefinitions {
-  const team = analysis.applied_filters.team || 'All teams'
+  const team = analysis.applied_filters.team || 'All employees'
   const population = scoredPopulation(analysis.summary.scored_employee_count)
   const content: Content[] = [
-    reportHeading('Team performance', team, analysis),
+    reportHeading('Call-center performance', team, analysis),
     {
       table: {
         widths: ['*', '*', '*', '*'],
@@ -100,11 +100,10 @@ function teamDocumentDefinition(analysis: DashboardResponse): TDocumentDefinitio
     },
     { text: 'Employee results', style: 'sectionTitle' },
     employeeResultsTable(analysis.results),
-    { text: 'Weekly KPI trend', style: 'sectionTitle', margin: [0, 16, 0, 4] },
     teamTrendTable(analysis.trends),
     managerNotice(),
   ]
-  return baseDocument('TEAM PERFORMANCE REPORT', content)
+  return baseDocument('CALL-CENTER PERFORMANCE REPORT', content)
 }
 
 function kpiDocumentDefinition(analysis: DashboardResponse, kpi: DashboardKpi): TDocumentDefinitions {
@@ -167,6 +166,13 @@ function baseDocument(reportLabel: string, content: Content[]): TDocumentDefinit
 
 function reportHeading(title: string, team: string, analysis: DashboardResponse): Content {
   const filters = analysis.applied_filters
+  const scope = ([
+    ['Campaign', filters.campaign],
+    ['Queue', filters.queue],
+    ['Shift', filters.shift],
+    ['Supervisor', filters.supervisor],
+    ['Location', filters.location],
+  ] as const).filter(([, value]) => Boolean(value)).map(([label, value]) => `${label}: ${value}`).join('  |  ')
   const scorePeriod = filters.score_period_start_date && filters.score_period_end_date
     && (filters.score_period_start_date !== filters.start_date || filters.score_period_end_date !== filters.end_date)
     ? `Scores use available evidence: ${formatDate(filters.score_period_start_date)} - ${formatDate(filters.score_period_end_date)}.`
@@ -175,6 +181,7 @@ function reportHeading(title: string, team: string, analysis: DashboardResponse)
     stack: [
       { text: title, style: 'title' },
       { text: `${team} · ${formatPeriod(analysis)} · Current filtered dashboard`, color: muted },
+      ...(scope ? [{ text: scope, color: muted, margin: [0, 4, 0, 0] } as Content] : []),
       ...(scorePeriod ? [{ text: scorePeriod, color: muted, margin: [0, 4, 0, 0] } as Content] : []),
     ],
     margin: [0, 0, 0, 12],
@@ -186,10 +193,10 @@ function employeeResultsTable(results: EmployeeKpiResult[]): Content {
     return emptyState('No employees match the current filters.')
 
   return dataTable(
-    ['Employee', 'Team', 'Productivity', 'Compliance', 'Quality', 'Data confidence', 'Overall', 'Status'],
+    ['Employee', 'Campaign / Queue', 'Productivity', 'Compliance', 'Quality', 'Data confidence', 'Overall', 'Status'],
     results.map(row => [
       `${row.employee_name || row.employee_id}\n${row.employee_id}`,
-      row.team || 'Not provided',
+      `${row.campaign || 'Campaign not provided'}\n${row.queue || 'Queue not provided'}`,
       optionalScore(row.productivity_score),
       optionalScore(row.compliance_score),
       optionalScore(row.quality_score),
@@ -197,7 +204,7 @@ function employeeResultsTable(results: EmployeeKpiResult[]): Content {
       row.overall_score === null ? 'Withheld' : score(row.overall_score),
       row.performance_tier || row.result_status,
     ]),
-    ['*', 70, 57, 57, 57, 54, 54, 70],
+    ['*', 115, 57, 57, 57, 54, 54, 70],
   )
 }
 
@@ -220,7 +227,10 @@ function kpiEmployeeTable(results: EmployeeKpiResult[], kpi: DashboardKpi): Cont
 
 function teamTrendTable(trends: KpiTrendPoint[]): Content {
   if (!trends.length)
-    return emptyState('No trend data is available for this period.')
+    return { stack: [
+      { text: 'Weekly KPI trend', style: 'sectionTitle' },
+      emptyState('No trend data is available for this period.'),
+    ], margin: [0, 16, 0, 0] }
 
   return dataTable(
     ['Week ending', 'Employees', 'Productivity', 'Compliance', 'Quality', 'Overall', 'Data confidence'],
@@ -234,6 +244,7 @@ function teamTrendTable(trends: KpiTrendPoint[]): Content {
       optionalScore(point.data_confidence),
     ]),
     ['*', 55, 65, 65, 65, 60, 65],
+    'Weekly KPI trend',
   )
 }
 
@@ -253,20 +264,24 @@ function kpiTrendTable(trends: KpiTrendPoint[], kpi: DashboardKpi): Content {
   )
 }
 
-function dataTable(headers: string[], rows: string[][], widths: (string | number)[]): Content {
+function dataTable(headers: string[], rows: string[][], widths: (string | number)[], sectionTitle?: string): Content {
+  const titleRow: TableCell[] = sectionTitle
+    ? [{ text: sectionTitle, style: 'sectionTitle', colSpan: headers.length }, ...Array.from({ length: headers.length - 1 }, () => ({}))]
+    : []
   return {
     table: {
-      headerRows: 1,
+      headerRows: sectionTitle ? 2 : 1,
       dontBreakRows: true,
       widths,
       body: [
+        ...(titleRow.length ? [titleRow] : []),
         headers.map<TableCell>(header => ({ text: header, bold: true, color: cedar })),
         ...rows,
       ],
     },
-    layout: tableLayout(),
+    layout: tableLayout(sectionTitle ? 1 : 0),
     fontSize: 7,
-    margin: [0, 5, 0, 0],
+    margin: [0, sectionTitle ? 16 : 5, 0, 0],
   }
 }
 
@@ -302,9 +317,9 @@ function cardLayout() {
   }
 }
 
-function tableLayout() {
+function tableLayout(headerRow = 0) {
   return {
-    fillColor: (rowIndex: number) => rowIndex === 0 ? cedarLight : null,
+    fillColor: (rowIndex: number) => rowIndex === headerRow ? cedarLight : null,
     hLineColor: () => line,
     vLineColor: () => line,
     paddingLeft: () => 5,
@@ -328,8 +343,8 @@ function formatPeriod(analysis: DashboardResponse): string {
 }
 
 function reportFilename(analysis: DashboardResponse, report: string): string {
-  const team = (analysis.applied_filters.team || 'all-teams').replaceAll(/[^a-zA-Z0-9_-]/g, '-')
+  const scope = (analysis.applied_filters.team || analysis.applied_filters.campaign || 'all-employees').replaceAll(/[^a-zA-Z0-9_-]/g, '-')
   const start = analysis.applied_filters.start_date || 'full'
   const end = analysis.applied_filters.end_date || 'period'
-  return `cedar-${report}-${team}-${start}-to-${end}.pdf`
+  return `cedar-${report}-${scope}-${start}-to-${end}.pdf`
 }
